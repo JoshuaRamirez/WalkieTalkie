@@ -1,0 +1,21 @@
+{
+  "version": "v0",
+  "message_id": "123e4567-e89b-12d3-a456-426614174000",
+  "sender_spiffe_id": "spiffe://mesh/ns-a/service-a",
+  "recipient_spiffe_id": "spiffe://mesh/ns-b/service-b",
+  "issued_at": "2026-04-14T12:00:00Z",
+  "expires_at": "2026-04-14T12:05:00Z",
+  "nonce": "nonce-000000000001",
+  "capability_token": "cap-token-1",
+  "purpose_of_use": "invoke_tool",
+  "kid": "dev-kid-1",
+  "alg": "HS256",
+  "payload": {
+    "tool": "ping",
+    "args": {
+      "target": "node-1"
+    }
+  },
+  "payload_digest": "94fabd33a2221b6d3986e8d5ba98d75a91dcdad9b978ac7ea70bbc996fb2bb45",
+  "signature": "hjV3Rtu6TT4_9HlbufqWBj4G4TBpCmAM-YTtThQV6So"
+}

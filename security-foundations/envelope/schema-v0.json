@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://walkietalkie.local/security/envelope/v0/schema.json",
+  "title": "Signed MCP Envelope v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "message_id",
+    "sender_spiffe_id",
+    "recipient_spiffe_id",
+    "issued_at",
+    "expires_at",
+    "nonce",
+    "capability_token",
+    "purpose_of_use",
+    "kid",
+    "alg",
+    "payload",
+    "payload_digest",
+    "signature"
+  ],
+  "properties": {
+    "version": { "const": "v0" },
+    "message_id": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F-]{36}$"
+    },
+    "sender_spiffe_id": {
+      "type": "string",
+      "pattern": "^spiffe://[a-zA-Z0-9._/-]+$"
+    },
+    "recipient_spiffe_id": {
+      "type": "string",
+      "pattern": "^spiffe://[a-zA-Z0-9._/-]+$"
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "nonce": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 256
+    },
+    "capability_token": {
+      "type": "string",
+      "minLength": 1
+    },
+    "purpose_of_use": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128
+    },
+    "kid": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "alg": {
+      "type": "string",
+      "enum": ["HS256"]
+    },
+    "payload": {
+      "type": ["object", "array", "string", "number", "boolean", "null"]
+    },
+    "payload_digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "signature": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$"
+    }
+  }
+}
