@@ -24,7 +24,7 @@
     "version": { "const": "v0" },
     "message_id": {
       "type": "string",
-      "pattern": "^[0-9a-fA-F-]{36}$"
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
     },
     "sender_spiffe_id": {
       "type": "string",
@@ -44,8 +44,7 @@
     },
     "nonce": {
       "type": "string",
-      "minLength": 16,
-      "maxLength": 256
+      "pattern": "^[A-Za-z0-9._:-]{16,256}$"
     },
     "capability_token": {
       "type": "string",
@@ -63,7 +62,7 @@
     },
     "alg": {
       "type": "string",
-      "enum": ["HS256"]
+      "enum": ["Ed25519"]
     },
     "payload": {
       "type": ["object", "array", "string", "number", "boolean", "null"]

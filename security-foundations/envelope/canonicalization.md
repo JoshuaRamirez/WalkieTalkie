@@ -14,8 +14,9 @@ The verifier computes signature input from a canonical JSON representation of al
 ## Signature input
 - Build canonical JSON for the envelope without `signature`.
 - Sign bytes directly.
+- Base64url encode the detached signature without padding.
 
 ## Security notes
 - `alg` is policy-pinned and downgrade attempts are fatal.
-- Current bootstrap reference verifier only allows `HS256` for local development/testing.
-- Planned production profile upgrades to asymmetric signatures (Ed25519).
+- This implementation now enforces `Ed25519` for signature verification.
+- OpenSSL-backed verification is used as a portable bootstrap path until a dedicated crypto library is adopted.

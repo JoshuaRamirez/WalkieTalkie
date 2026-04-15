@@ -10,7 +10,7 @@ This directory starts implementation of **Phase 0 — Security Foundations** fro
   - timestamp validity checks,
   - nonce replay rejection,
   - payload digest verification,
-  - key-id based signature verification interface.
+  - key-id based Ed25519 signature verification.
 - Test vectors and unit tests for baseline negative/positive paths.
 
 ## Out of scope for this bootstrap
@@ -23,4 +23,4 @@ This directory starts implementation of **Phase 0 — Security Foundations** fro
 1. Wire verifier into network ingress middleware.
 2. Replace in-memory replay cache with shared low-latency backend.
 3. Swap local key lookup interface with workload identity-bound trust store.
-4. Add algorithm downgrade resistance tests and cross-language canonicalization fixtures.
+4. Replace OpenSSL subprocess verification with a dedicated in-process crypto provider.
