@@ -288,12 +288,6 @@ def verify_envelope(
     if expires_at - issued_at > config.max_envelope_ttl:
         raise EnvelopeVerificationError("envelope ttl exceeds maximum")
 
-    sender = envelope["sender_spiffe_id"]
-    nonce = envelope["nonce"]
-    ttl = max(expires_at - current, timedelta(seconds=0))
-    if not replay_cache.mark_if_new(sender, nonce, ttl):
-        raise EnvelopeVerificationError("replay detected")
-
     computed_digest = _digest_payload(envelope["payload"])
     if computed_digest != envelope["payload_digest"]:
         raise EnvelopeVerificationError("payload digest mismatch")
@@ -307,3 +301,9 @@ def verify_envelope(
         public_key_pem,
     ):
         raise EnvelopeVerificationError("signature invalid")
+
+    sender = envelope["sender_spiffe_id"]
+    nonce = envelope["nonce"]
+    ttl = max(expires_at - current, timedelta(seconds=0))
+    if not replay_cache.mark_if_new(sender, nonce, ttl):
+        raise EnvelopeVerificationError("replay detected")

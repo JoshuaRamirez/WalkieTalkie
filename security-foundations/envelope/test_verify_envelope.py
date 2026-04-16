@@ -156,6 +156,28 @@ class VerifyEnvelopeTests(unittest.TestCase):
                     now=now,
                 )
 
+    def test_invalid_signature_does_not_reserve_nonce(self):
+        envelope, now = self._valid_envelope()
+        replay_cache = InMemoryReplayCache()
+
+        invalid = dict(envelope)
+        invalid["signature"] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+
+        with self.assertRaises(EnvelopeVerificationError):
+            verify_envelope(
+                invalid,
+                key_lookup=lambda kid: self.public_key_pem,
+                replay_cache=replay_cache,
+                now=now,
+            )
+
+        verify_envelope(
+            envelope,
+            key_lookup=lambda kid: self.public_key_pem,
+            replay_cache=replay_cache,
+            now=now,
+        )
+
     def test_disallowed_algorithm_fails(self):
         envelope, now = self._valid_envelope()
         envelope["alg"] = "HS256"
