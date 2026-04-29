@@ -11,6 +11,9 @@ This directory starts implementation of **Phase 0 — Security Foundations** fro
   - nonce replay rejection,
   - payload digest verification,
   - key-id based Ed25519 signature verification.
+- Replay cache implementations:
+  - `InMemoryReplayCache` for local use,
+  - `SQLiteReplayCache` for cross-process replay protection.
 - Test vectors and unit tests for baseline negative/positive paths.
 
 ## Out of scope for this bootstrap
@@ -21,6 +24,6 @@ This directory starts implementation of **Phase 0 — Security Foundations** fro
 
 ## Next implementation targets
 1. Wire verifier into network ingress middleware.
-2. Replace in-memory replay cache with shared low-latency backend.
+2. Add external distributed replay backend option (e.g., Redis) for multi-node deployments.
 3. Swap local key lookup interface with workload identity-bound trust store.
 4. Replace OpenSSL subprocess verification with a dedicated in-process crypto provider.

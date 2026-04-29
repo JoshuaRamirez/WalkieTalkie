@@ -13,6 +13,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from verify_envelope import (
     EnvelopeVerificationError,
     InMemoryReplayCache,
+    SQLiteReplayCache,
     canonicalize_envelope_for_signing,
     verify_envelope,
 )
@@ -132,6 +133,50 @@ class VerifyEnvelopeTests(unittest.TestCase):
                 replay_cache=replay_cache,
                 now=now,
             )
+
+    def test_sqlite_replay_cache_detects_replay_across_instances(self):
+        envelope, now = self._valid_envelope()
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = str(pathlib.Path(tmp) / "replay.db")
+            cache_a = SQLiteReplayCache(db_path)
+            cache_b = SQLiteReplayCache(db_path)
+
+            verify_envelope(
+                envelope,
+                key_lookup=lambda kid: self.public_key_pem,
+                replay_cache=cache_a,
+                now=now,
+            )
+
+            with self.assertRaises(EnvelopeVerificationError):
+                verify_envelope(
+                    envelope,
+                    key_lookup=lambda kid: self.public_key_pem,
+                    replay_cache=cache_b,
+                    now=now,
+                )
+
+    def test_invalid_signature_does_not_reserve_nonce(self):
+        envelope, now = self._valid_envelope()
+        replay_cache = InMemoryReplayCache()
+
+        invalid = dict(envelope)
+        invalid["signature"] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+
+        with self.assertRaises(EnvelopeVerificationError):
+            verify_envelope(
+                invalid,
+                key_lookup=lambda kid: self.public_key_pem,
+                replay_cache=replay_cache,
+                now=now,
+            )
+
+        verify_envelope(
+            envelope,
+            key_lookup=lambda kid: self.public_key_pem,
+            replay_cache=replay_cache,
+            now=now,
+        )
 
     def test_disallowed_algorithm_fails(self):
         envelope, now = self._valid_envelope()
