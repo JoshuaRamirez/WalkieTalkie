@@ -1,68 +1,44 @@
 import base64
-import hashlib
-import json
 import pathlib
-import subprocess
 import sys
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+)
+from cryptography.hazmat.primitives.asymmetric.rsa import generate_private_key as generate_rsa_private_key
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from verify_envelope import (
     EnvelopeVerificationError,
     InMemoryReplayCache,
+    _digest_payload,
     canonicalize_envelope_for_signing,
     verify_envelope,
 )
 
 
-def digest_payload(payload):
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-    ).hexdigest()
-
-
 def generate_ed25519_keypair():
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_path = pathlib.Path(tmp)
-        priv = tmp_path / "private.pem"
-        pub = tmp_path / "public.pem"
-
-        subprocess.run(["openssl", "genpkey", "-algorithm", "ED25519", "-out", str(priv)], check=True)
-        subprocess.run(["openssl", "pkey", "-in", str(priv), "-pubout", "-out", str(pub)], check=True)
-
-        return priv.read_bytes(), pub.read_bytes()
+    private_key = Ed25519PrivateKey.generate()
+    priv_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    pub_pem = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    return priv_pem, pub_pem
 
 
 def sign(signing_input: bytes, private_key_pem: bytes):
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_path = pathlib.Path(tmp)
-        message = tmp_path / "message.bin"
-        signature = tmp_path / "signature.bin"
-        priv = tmp_path / "private.pem"
-
-        message.write_bytes(signing_input)
-        priv.write_bytes(private_key_pem)
-
-        subprocess.run(
-            [
-                "openssl",
-                "pkeyutl",
-                "-sign",
-                "-inkey",
-                str(priv),
-                "-rawin",
-                "-in",
-                str(message),
-                "-out",
-                str(signature),
-            ],
-            check=True,
-        )
-
-        return base64.urlsafe_b64encode(signature.read_bytes()).rstrip(b"=").decode("ascii")
+    private_key = serialization.load_pem_private_key(private_key_pem, password=None)
+    assert isinstance(private_key, Ed25519PrivateKey)
+    return base64.urlsafe_b64encode(private_key.sign(signing_input)).rstrip(b"=").decode("ascii")
 
 
 class VerifyEnvelopeTests(unittest.TestCase):
@@ -86,7 +62,7 @@ class VerifyEnvelopeTests(unittest.TestCase):
             "alg": "Ed25519",
             "payload": {"tool": "ping", "args": {"target": "node-1"}},
         }
-        envelope["payload_digest"] = digest_payload(envelope["payload"])
+        envelope["payload_digest"] = _digest_payload(envelope["payload"])
         envelope["signature"] = ""
         signing_input = canonicalize_envelope_for_signing(envelope)
         envelope["signature"] = sign(signing_input, self.private_key_pem)
@@ -141,6 +117,22 @@ class VerifyEnvelopeTests(unittest.TestCase):
             verify_envelope(
                 envelope,
                 key_lookup=lambda kid: self.public_key_pem,
+                replay_cache=InMemoryReplayCache(),
+                now=now,
+            )
+
+    def test_non_ed25519_key_rejected(self):
+        envelope, now = self._valid_envelope()
+        rsa_key = generate_rsa_private_key(public_exponent=65537, key_size=2048)
+        rsa_pub_pem = rsa_key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+
+        with self.assertRaises(EnvelopeVerificationError):
+            verify_envelope(
+                envelope,
+                key_lookup=lambda kid: rsa_pub_pem,
                 replay_cache=InMemoryReplayCache(),
                 now=now,
             )

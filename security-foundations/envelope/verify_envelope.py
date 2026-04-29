@@ -6,13 +6,13 @@ import base64
 import hashlib
 import json
 import re
-import subprocess
-import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any, Callable
 
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 UUID_V7_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
@@ -100,39 +100,24 @@ def _decode_base64url(signature: str) -> bytes:
         raise EnvelopeVerificationError("invalid signature encoding") from exc
 
 
+def _load_ed25519_public_key(public_key_pem: bytes) -> Ed25519PublicKey:
+    try:
+        key = serialization.load_pem_public_key(public_key_pem)
+    except (ValueError, TypeError) as exc:
+        raise EnvelopeVerificationError("invalid public key") from exc
+    if not isinstance(key, Ed25519PublicKey):
+        raise EnvelopeVerificationError("invalid public key")
+    return key
+
+
 def _verify_ed25519_signature(signing_input: bytes, signature: str, public_key_pem: bytes) -> bool:
     sig_bytes = _decode_base64url(signature)
-
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        tmp = Path(tmp_dir)
-        message_path = tmp / "message.bin"
-        sig_path = tmp / "signature.bin"
-        key_path = tmp / "public.pem"
-
-        message_path.write_bytes(signing_input)
-        sig_path.write_bytes(sig_bytes)
-        key_path.write_bytes(public_key_pem)
-
-        result = subprocess.run(
-            [
-                "openssl",
-                "pkeyutl",
-                "-verify",
-                "-pubin",
-                "-inkey",
-                str(key_path),
-                "-rawin",
-                "-in",
-                str(message_path),
-                "-sigfile",
-                str(sig_path),
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
-
-    return result.returncode == 0
+    key = _load_ed25519_public_key(public_key_pem)
+    try:
+        key.verify(sig_bytes, signing_input)
+    except InvalidSignature:
+        return False
+    return True
 
 
 def _validate_static_fields(envelope: dict[str, Any]) -> None:
