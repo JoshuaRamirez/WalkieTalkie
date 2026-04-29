@@ -15,13 +15,17 @@ the approved plan.
   - in-process Ed25519 signature verification via the `cryptography` library
     (no `openssl` subprocess),
   - key-id lookup behind a callable interface.
+- Replay cache implementations:
+  - `InMemoryReplayCache` for local use,
+  - `SQLiteReplayCache` for cross-process replay protection.
 - `FileSystemTrustStore` reference implementation (`envelope/trust_store.py`)
   that loads trusted keys from a directory or a JSON manifest with optional
   `not_after` expiry.
 - Test vectors regenerated under JCS by
   `envelope/_regen_vectors.py`, with the matching public key checked in.
-- Unit tests covering positive paths, tampering, replay, downgrade, non-Ed25519
-  key rejection, JCS semantics, and trust-store loading.
+- Unit tests covering positive paths, tampering, replay, downgrade,
+  non-Ed25519 key rejection, JCS semantics, cross-process replay, and
+  trust-store loading.
 
 ## Out of scope for this bootstrap
 - Production PKI and mTLS wiring.
@@ -45,5 +49,6 @@ unittest suite on Python 3.11 and 3.12 — see `.github/workflows/test.yml`.
 
 ## Next implementation targets
 1. Wire verifier into network ingress middleware.
-2. Replace in-memory replay cache with shared low-latency backend.
+2. Add an external distributed replay backend option (e.g., Redis) for
+   multi-node deployments.
 3. Swap `FileSystemTrustStore` for a workload-identity-bound trust store.

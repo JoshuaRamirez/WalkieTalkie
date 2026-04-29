@@ -5,6 +5,8 @@ from __future__ import annotations
 import base64
 import hashlib
 import re
+import sqlite3
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
@@ -44,10 +46,21 @@ class ReplayCache:
     def mark(self, sender: str, nonce: str, ttl: timedelta) -> None:
         raise NotImplementedError
 
+    def mark_if_new(self, sender: str, nonce: str, ttl: timedelta) -> bool:
+        """Atomically mark nonce as seen when possible.
+
+        Returns True if nonce was new and is now reserved, False if replayed.
+        """
+        if self.seen(sender, nonce):
+            return False
+        self.mark(sender, nonce, ttl)
+        return True
+
 
 class InMemoryReplayCache(ReplayCache):
     def __init__(self) -> None:
         self._entries: dict[tuple[str, str], datetime] = {}
+        self._lock = threading.Lock()
 
     def _purge(self, now: datetime) -> None:
         expired = [k for k, v in self._entries.items() if v <= now]
@@ -56,12 +69,85 @@ class InMemoryReplayCache(ReplayCache):
 
     def seen(self, sender: str, nonce: str) -> bool:
         now = datetime.now(timezone.utc)
-        self._purge(now)
-        return (sender, nonce) in self._entries
+        with self._lock:
+            self._purge(now)
+            return (sender, nonce) in self._entries
 
     def mark(self, sender: str, nonce: str, ttl: timedelta) -> None:
         now = datetime.now(timezone.utc)
-        self._entries[(sender, nonce)] = now + ttl
+        with self._lock:
+            self._entries[(sender, nonce)] = now + ttl
+
+    def mark_if_new(self, sender: str, nonce: str, ttl: timedelta) -> bool:
+        now = datetime.now(timezone.utc)
+        with self._lock:
+            self._purge(now)
+            key = (sender, nonce)
+            if key in self._entries:
+                return False
+            self._entries[key] = now + ttl
+            return True
+
+
+class SQLiteReplayCache(ReplayCache):
+    """SQLite-backed replay cache for cross-process nonce replay protection."""
+
+    def __init__(self, db_path: str) -> None:
+        self._db_path = db_path
+        self._init_db()
+
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self._db_path, timeout=5.0, isolation_level=None)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
+        return conn
+
+    def _init_db(self) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS replay_nonces (
+                    sender TEXT NOT NULL,
+                    nonce TEXT NOT NULL,
+                    expires_at INTEGER NOT NULL,
+                    PRIMARY KEY (sender, nonce)
+                )
+                """
+            )
+
+    @staticmethod
+    def _now_epoch() -> int:
+        return int(datetime.now(timezone.utc).timestamp())
+
+    def _purge(self, conn: sqlite3.Connection) -> None:
+        conn.execute("DELETE FROM replay_nonces WHERE expires_at <= ?", (self._now_epoch(),))
+
+    def seen(self, sender: str, nonce: str) -> bool:
+        with self._connect() as conn:
+            self._purge(conn)
+            row = conn.execute(
+                "SELECT 1 FROM replay_nonces WHERE sender = ? AND nonce = ?",
+                (sender, nonce),
+            ).fetchone()
+            return row is not None
+
+    def mark(self, sender: str, nonce: str, ttl: timedelta) -> None:
+        expires_at = self._now_epoch() + max(0, int(ttl.total_seconds()))
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO replay_nonces(sender, nonce, expires_at) VALUES (?, ?, ?)",
+                (sender, nonce, expires_at),
+            )
+
+    def mark_if_new(self, sender: str, nonce: str, ttl: timedelta) -> bool:
+        expires_at = self._now_epoch() + max(0, int(ttl.total_seconds()))
+        with self._connect() as conn:
+            self._purge(conn)
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO replay_nonces(sender, nonce, expires_at) VALUES (?, ?, ?)",
+                (sender, nonce, expires_at),
+            )
+            return cur.rowcount == 1
 
 
 def _parse_rfc3339(value: str) -> datetime:
@@ -187,11 +273,6 @@ def verify_envelope(
     if expires_at - issued_at > config.max_envelope_ttl:
         raise EnvelopeVerificationError("envelope ttl exceeds maximum")
 
-    sender = envelope["sender_spiffe_id"]
-    nonce = envelope["nonce"]
-    if replay_cache.seen(sender, nonce):
-        raise EnvelopeVerificationError("replay detected")
-
     computed_digest = _digest_payload(envelope["payload"])
     if computed_digest != envelope["payload_digest"]:
         raise EnvelopeVerificationError("payload digest mismatch")
@@ -206,5 +287,8 @@ def verify_envelope(
     ):
         raise EnvelopeVerificationError("signature invalid")
 
+    sender = envelope["sender_spiffe_id"]
+    nonce = envelope["nonce"]
     ttl = max(expires_at - current, timedelta(seconds=0))
-    replay_cache.mark(sender, nonce, ttl)
+    if not replay_cache.mark_if_new(sender, nonce, ttl):
+        raise EnvelopeVerificationError("replay detected")
