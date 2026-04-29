@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
+import jcs
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -76,7 +76,7 @@ def _parse_rfc3339(value: str) -> datetime:
 
 
 def _canonical_json(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return jcs.canonicalize(value)
 
 
 def _digest_payload(payload: Any) -> str:

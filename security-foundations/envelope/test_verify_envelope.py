@@ -150,5 +150,18 @@ class VerifyEnvelopeTests(unittest.TestCase):
             )
 
 
+class CanonicalizationSemanticsTests(unittest.TestCase):
+    def test_int_and_float_collide_under_jcs(self):
+        self.assertEqual(_digest_payload({"a": 1.0}), _digest_payload({"a": 1}))
+
+    def test_unicode_normalization_is_not_applied(self):
+        precomposed = "caf\u00e9"
+        decomposed = "cafe\u0301"
+        self.assertNotEqual(
+            _digest_payload({"k": precomposed}),
+            _digest_payload({"k": decomposed}),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
