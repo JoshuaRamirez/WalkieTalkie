@@ -125,14 +125,24 @@ A concise implementation-level document containing:
 - Expiry and issued-at semantics.
 
 ### B2. Canonicalization Contract
-- Deterministic field ordering and normalization.
+- Deterministic field ordering and normalization, defined as **RFC 8785 (JCS)**.
 - Reject non-canonical payloads before signature verify.
-- Publish test vectors and cross-language fixtures.
+- Publish test vectors and cross-language fixtures. Reference vectors are
+  generated from a deterministic Ed25519 seed in
+  `security-foundations/envelope/_regen_vectors.py` and the matching public
+  key is checked in alongside.
 
 ### B3. Signature and Digest Verification
-- Enforce approved algorithm set.
-- Fail hard on downgrade attempts.
-- Verify sender identity binding and key-id lookup path.
+- Enforce approved algorithm set (`Ed25519` only for v0).
+- Fail hard on downgrade attempts and on PEMs that load as a non-Ed25519 key.
+- Verify sender identity binding and key-id lookup path. The reference
+  trust store is `FileSystemTrustStore` in
+  `security-foundations/envelope/trust_store.py`, which loads keys from a
+  directory (`<kid>.pem` files) or a JSON manifest with optional `not_after`.
+  Production deployments will swap this for a workload-identity-bound store
+  in Phase 1+ (Track A2).
+- Verification is in-process via the `cryptography` Ed25519 binding; no
+  subprocess or tempfile path exists.
 
 ### B4. Replay Resistance
 - Nonce uniqueness cache.
@@ -262,6 +272,10 @@ Phase 0 can close only when all are true:
 4. Runtime profile and egress policy enforced in production-like env.
 5. Evidence chain exists and validates for all privileged actions.
 6. No unresolved critical findings in Phase 0 threat scenarios.
+7. CI workflow (`.github/workflows/test.yml`) is required-green on `main` —
+   `pip install -e .[dev]`, `python -m compileall security-foundations`,
+   `ruff check security-foundations`, and the envelope unittest suite all
+   pass on Python 3.11 and 3.12.
 
 ---
 
