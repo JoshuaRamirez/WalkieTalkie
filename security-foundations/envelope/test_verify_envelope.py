@@ -1,6 +1,7 @@
 import base64
 import pathlib
 import sys
+import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 
@@ -12,6 +13,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import generate_private_key a
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
+from trust_store import FileSystemTrustStore
 from verify_envelope import (
     EnvelopeVerificationError,
     InMemoryReplayCache,
@@ -133,6 +135,19 @@ class VerifyEnvelopeTests(unittest.TestCase):
             verify_envelope(
                 envelope,
                 key_lookup=lambda kid: rsa_pub_pem,
+                replay_cache=InMemoryReplayCache(),
+                now=now,
+            )
+
+    def test_verify_with_filesystem_trust_store(self):
+        envelope, now = self._valid_envelope()
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = pathlib.Path(tmp)
+            (tmp_path / "dev-kid-1.pem").write_bytes(self.public_key_pem)
+            store = FileSystemTrustStore.from_directory(tmp_path)
+            verify_envelope(
+                envelope,
+                key_lookup=store,
                 replay_cache=InMemoryReplayCache(),
                 now=now,
             )
