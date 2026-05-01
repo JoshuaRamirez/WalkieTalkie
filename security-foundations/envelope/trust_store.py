@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from verify_envelope import EnvelopeVerificationError, _parse_rfc3339
 
 
@@ -60,7 +61,7 @@ class FileSystemTrustStore:
         if not isinstance(entries, list):
             raise ValueError(f"manifest 'keys' must be an array: {manifest_path}")
 
-        base = manifest_path.parent
+        base = manifest_path.parent.resolve()
         keys: dict[str, TrustedKey] = {}
         for index, entry in enumerate(entries):
             if not isinstance(entry, dict):
@@ -70,6 +71,10 @@ class FileSystemTrustStore:
                     raise ValueError(f"manifest entry {index} missing field: {required}")
             kid = entry["kid"]
             pem_path = (base / entry["pem_path"]).resolve()
+            if not pem_path.is_relative_to(base):
+                raise ValueError(
+                    f"manifest entry {kid} pem_path escapes manifest directory: {entry['pem_path']}"
+                )
             if not pem_path.is_file():
                 raise ValueError(f"manifest entry {kid} pem_path not found: {pem_path}")
             pem_bytes = pem_path.read_bytes()
@@ -83,9 +88,11 @@ class FileSystemTrustStore:
     @staticmethod
     def _parse_or_raise(pem_bytes: bytes, *, source: str) -> None:
         try:
-            serialization.load_pem_public_key(pem_bytes)
+            key = serialization.load_pem_public_key(pem_bytes)
         except (ValueError, TypeError) as exc:
             raise ValueError(f"unparseable PEM in trust store: {source}") from exc
+        if not isinstance(key, Ed25519PublicKey):
+            raise ValueError(f"non-Ed25519 PEM in trust store: {source}")
 
     def __call__(self, kid: str) -> bytes:
         entry = self._keys.get(kid)
