@@ -22,8 +22,10 @@ import jcs
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-# Deterministic seed so regeneration is reproducible.
-_SEED = b"walkietalkie-phase0-test-vectors"
+# Deterministic 32-byte seed derived from a tag string so the tag can be edited
+# without breaking Ed25519PrivateKey.from_private_bytes' length requirement.
+_SEED_TAG = b"walkietalkie-phase0-test-vectors"
+_SEED = hashlib.sha256(_SEED_TAG).digest()
 
 
 def _build_envelope(target: str) -> dict:

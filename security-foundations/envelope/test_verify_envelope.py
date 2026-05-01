@@ -209,6 +209,19 @@ class VerifyEnvelopeTests(unittest.TestCase):
                 now=now,
             )
 
+    def test_invalid_kid_format_rejected(self):
+        for bad_kid in ("", "../etc/passwd", "kid with space", "a" * 200, "kid\n"):
+            with self.subTest(bad_kid=bad_kid):
+                envelope, now = self._valid_envelope()
+                envelope["kid"] = bad_kid
+                with self.assertRaises(EnvelopeVerificationError):
+                    verify_envelope(
+                        envelope,
+                        key_lookup=lambda kid: self.public_key_pem,
+                        replay_cache=InMemoryReplayCache(),
+                        now=now,
+                    )
+
 
 class CanonicalizationSemanticsTests(unittest.TestCase):
     def test_int_and_float_collide_under_jcs(self):

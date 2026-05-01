@@ -22,6 +22,7 @@ UUID_V7_RE = re.compile(
 )
 SPIFFE_ID_RE = re.compile(r"^spiffe://[a-zA-Z0-9._/-]+$")
 NONCE_RE = re.compile(r"^[A-Za-z0-9._:-]{16,256}$")
+KID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 HEX_SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 
 ALLOWED_ALGORITHMS = {"Ed25519"}
@@ -221,6 +222,9 @@ def _validate_static_fields(envelope: dict[str, Any]) -> None:
 
     if not NONCE_RE.match(envelope["nonce"]):
         raise EnvelopeVerificationError("invalid nonce format")
+
+    if not isinstance(envelope["kid"], str) or not KID_RE.match(envelope["kid"]):
+        raise EnvelopeVerificationError("invalid kid format")
 
     if not HEX_SHA256_RE.match(envelope["payload_digest"]):
         raise EnvelopeVerificationError("payload_digest must be hex sha256")
