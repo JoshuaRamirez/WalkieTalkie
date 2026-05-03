@@ -39,6 +39,9 @@ class VerificationConfig:
     max_envelope_ttl: timedelta = timedelta(minutes=5)
 
 
+DEFAULT_CONFIG = VerificationConfig()
+
+
 class ReplayCache:
     """Minimal replay cache interface."""
 
@@ -239,7 +242,7 @@ def verify_envelope(
     *,
     key_lookup: Callable[[str], bytes],
     replay_cache: ReplayCache,
-    config: VerificationConfig = VerificationConfig(),
+    config: VerificationConfig = DEFAULT_CONFIG,
     now: datetime | None = None,
 ) -> None:
     required = {
