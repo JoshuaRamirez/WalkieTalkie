@@ -37,6 +37,7 @@ class EnvelopeVerificationError(ValueError):
 class VerificationConfig:
     max_clock_skew: timedelta = timedelta(seconds=60)
     max_envelope_ttl: timedelta = timedelta(minutes=5)
+    max_capability_ttl: timedelta = timedelta(minutes=5)
 
 
 DEFAULT_CONFIG = VerificationConfig()
@@ -241,6 +242,7 @@ def verify_envelope(
     envelope: dict[str, Any],
     *,
     key_lookup: Callable[[str], bytes],
+    issuer_lookup: Callable[[str, str], bytes],
     replay_cache: ReplayCache,
     config: VerificationConfig = DEFAULT_CONFIG,
     now: datetime | None = None,
@@ -294,6 +296,19 @@ def verify_envelope(
         public_key_pem,
     ):
         raise EnvelopeVerificationError("signature invalid")
+
+    # Imported here to avoid the circular import at module load time
+    # (capability_token imports several names from this module).
+    from capability_token import verify_capability_token
+
+    verify_capability_token(
+        envelope["capability_token"],
+        envelope=envelope,
+        issuer_lookup=issuer_lookup,
+        current=current,
+        max_clock_skew=config.max_clock_skew,
+        max_capability_ttl=config.max_capability_ttl,
+    )
 
     sender = envelope["sender_spiffe_id"]
     nonce = envelope["nonce"]

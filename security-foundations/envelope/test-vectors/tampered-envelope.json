@@ -6,7 +6,7 @@
   "issued_at": "2026-04-14T12:00:00Z",
   "expires_at": "2026-04-14T12:05:00Z",
   "nonce": "nonce-000000000001",
-  "capability_token": "cap-token-1",
+  "capability_token": "eyJhbGciOiJFZERTQSIsInR5cCI6Ind0LWNhcCtqd3QiLCJraWQiOiJkZXYtaXNzdWVyLWtpZC0xIn0.eyJpc3MiOiJzcGlmZmU6Ly9tZXNoL2NhcC1pc3N1ZXItMSIsInN1YiI6InNwaWZmZTovL21lc2gvbnMtYS9zZXJ2aWNlLWEiLCJhdWQiOiJzcGlmZmU6Ly9tZXNoL25zLWIvc2VydmljZS1iIiwic2NvcGUiOiJpbnZva2VfdG9vbCIsImlhdCI6MTc3NjE2Nzk3MCwibmJmIjoxNzc2MTY3OTcwLCJleHAiOjE3NzYxNjgyNDAsImp0aSI6IjAxOTVmNjZhLTBlMTQtN2YwZi1hNWFhLTBkN2YzYjZmMDhjMiIsImNuZiI6eyJlbnZlbG9wZV9kaWdlc3QiOiI5NGZhYmQzM2EyMjIxYjZkMzk4NmU4ZDViYTk4ZDc1YTkxZGNkYWQ5Yjk3OGFjN2VhNzBiYmM5OTZmYjJiYjQ1In19.kRqv6U0QZEJAYAYisBc7g9BfF9wIwNbOFxecYFsOuyHe9qMSs__4sl8RDsl3KhPqmsRlZhMkkFBMSEUZ2XZLDw",
   "purpose_of_use": "invoke_tool",
   "kid": "dev-kid-1",
   "alg": "Ed25519",
@@ -17,5 +17,5 @@
     }
   },
   "payload_digest": "94fabd33a2221b6d3986e8d5ba98d75a91dcdad9b978ac7ea70bbc996fb2bb45",
-  "signature": "kr9Yr3ei5JPeUpnnwat8GYcWMbfsLZs4onOD0l-r1StV78FzFtLNxiMxHTb9rL8TI9-jIY2Mm7x9FdWDYIYfCg"
+  "signature": "hpDG1X1VNZPbY2AMcflEOUuLoCytRACf_mmLCIvFIZDk1BB0F9RTAvabm5NvnBMQ8atV-h5qEgbCltaUginVCg"
 }

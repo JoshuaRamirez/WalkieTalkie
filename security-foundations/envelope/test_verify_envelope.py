@@ -1,4 +1,5 @@
 import base64
+import json
 import pathlib
 import sys
 import tempfile
@@ -44,73 +45,117 @@ def sign(signing_input: bytes, private_key_pem: bytes):
     return base64.urlsafe_b64encode(private_key.sign(signing_input)).rstrip(b"=").decode("ascii")
 
 
+def _b64u(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def mint_capability_token(
+    *,
+    issuer_priv_pem: bytes,
+    issuer_kid: str,
+    iss: str,
+    sub: str,
+    aud: str,
+    scope: str,
+    payload_digest: str,
+    now: datetime,
+    ttl_seconds: int = 240,
+) -> str:
+    issuer_priv = serialization.load_pem_private_key(issuer_priv_pem, password=None)
+    assert isinstance(issuer_priv, Ed25519PrivateKey)
+    header = {"alg": "EdDSA", "typ": "wt-cap+jwt", "kid": issuer_kid}
+    now_epoch = int(now.timestamp())
+    payload = {
+        "iss": iss,
+        "sub": sub,
+        "aud": aud,
+        "scope": scope,
+        "iat": now_epoch - 30,
+        "nbf": now_epoch - 30,
+        "exp": now_epoch + ttl_seconds,
+        "jti": "0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c2",
+        "cnf": {"envelope_digest": payload_digest},
+    }
+    h = _b64u(json.dumps(header, separators=(",", ":")).encode("utf-8"))
+    p = _b64u(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    sig = _b64u(issuer_priv.sign((h + "." + p).encode("ascii")))
+    return f"{h}.{p}.{sig}"
+
+
+_ISSUER_IDENTITY = "spiffe://mesh/cap-issuer-1"
+_ISSUER_KID = "issuer-kid-1"
+_SENDER = "spiffe://mesh/ns-a/service-a"
+_RECIPIENT = "spiffe://mesh/ns-b/service-b"
+_PURPOSE = "invoke_tool"
+
+
 class VerifyEnvelopeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.private_key_pem, cls.public_key_pem = generate_ed25519_keypair()
+        cls.signer_priv_pem, cls.signer_pub_pem = generate_ed25519_keypair()
+        cls.issuer_priv_pem, cls.issuer_pub_pem = generate_ed25519_keypair()
+
+    def issuer_lookup(self, iss, kid):
+        if (iss, kid) != (_ISSUER_IDENTITY, _ISSUER_KID):
+            raise EnvelopeVerificationError(f"unknown issuer key: iss={iss}, kid={kid}")
+        return self.issuer_pub_pem
 
     def _valid_envelope(self):
         now = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
         envelope = {
             "version": "v0",
             "message_id": "0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c1",
-            "sender_spiffe_id": "spiffe://mesh/ns-a/service-a",
-            "recipient_spiffe_id": "spiffe://mesh/ns-b/service-b",
+            "sender_spiffe_id": _SENDER,
+            "recipient_spiffe_id": _RECIPIENT,
             "issued_at": now.isoformat().replace("+00:00", "Z"),
             "expires_at": (now + timedelta(minutes=5)).isoformat().replace("+00:00", "Z"),
             "nonce": "nonce-000000000001",
-            "capability_token": "cap-token-1",
-            "purpose_of_use": "invoke_tool",
+            "purpose_of_use": _PURPOSE,
             "kid": "dev-kid-1",
             "alg": "Ed25519",
             "payload": {"tool": "ping", "args": {"target": "node-1"}},
         }
         envelope["payload_digest"] = _digest_payload(envelope["payload"])
+        envelope["capability_token"] = mint_capability_token(
+            issuer_priv_pem=self.issuer_priv_pem,
+            issuer_kid=_ISSUER_KID,
+            iss=_ISSUER_IDENTITY,
+            sub=_SENDER,
+            aud=_RECIPIENT,
+            scope=_PURPOSE,
+            payload_digest=envelope["payload_digest"],
+            now=now,
+        )
         envelope["signature"] = ""
         signing_input = canonicalize_envelope_for_signing(envelope)
-        envelope["signature"] = sign(signing_input, self.private_key_pem)
+        envelope["signature"] = sign(signing_input, self.signer_priv_pem)
         return envelope, now
+
+    def _verify(self, envelope, now, *, replay_cache=None, key_lookup=None, issuer_lookup=None):
+        verify_envelope(
+            envelope,
+            key_lookup=key_lookup or (lambda kid: self.signer_pub_pem),
+            issuer_lookup=issuer_lookup or self.issuer_lookup,
+            replay_cache=replay_cache or InMemoryReplayCache(),
+            now=now,
+        )
 
     def test_valid_envelope_passes(self):
         envelope, now = self._valid_envelope()
-
-        verify_envelope(
-            envelope,
-            key_lookup=lambda kid: self.public_key_pem,
-            replay_cache=InMemoryReplayCache(),
-            now=now,
-        )
+        self._verify(envelope, now)
 
     def test_tampered_payload_fails(self):
         envelope, now = self._valid_envelope()
         envelope["payload"]["args"]["target"] = "node-2"
-
         with self.assertRaises(EnvelopeVerificationError):
-            verify_envelope(
-                envelope,
-                key_lookup=lambda kid: self.public_key_pem,
-                replay_cache=InMemoryReplayCache(),
-                now=now,
-            )
+            self._verify(envelope, now)
 
     def test_replay_fails(self):
         envelope, now = self._valid_envelope()
         replay_cache = InMemoryReplayCache()
-
-        verify_envelope(
-            envelope,
-            key_lookup=lambda kid: self.public_key_pem,
-            replay_cache=replay_cache,
-            now=now,
-        )
-
+        self._verify(envelope, now, replay_cache=replay_cache)
         with self.assertRaises(EnvelopeVerificationError):
-            verify_envelope(
-                envelope,
-                key_lookup=lambda kid: self.public_key_pem,
-                replay_cache=replay_cache,
-                now=now,
-            )
+            self._verify(envelope, now, replay_cache=replay_cache)
 
     def test_sqlite_replay_cache_detects_replay_across_instances(self):
         envelope, now = self._valid_envelope()
@@ -118,21 +163,9 @@ class VerifyEnvelopeTests(unittest.TestCase):
             db_path = str(pathlib.Path(tmp) / "replay.db")
             cache_a = SQLiteReplayCache(db_path)
             cache_b = SQLiteReplayCache(db_path)
-
-            verify_envelope(
-                envelope,
-                key_lookup=lambda kid: self.public_key_pem,
-                replay_cache=cache_a,
-                now=now,
-            )
-
+            self._verify(envelope, now, replay_cache=cache_a)
             with self.assertRaises(EnvelopeVerificationError):
-                verify_envelope(
-                    envelope,
-                    key_lookup=lambda kid: self.public_key_pem,
-                    replay_cache=cache_b,
-                    now=now,
-                )
+                self._verify(envelope, now, replay_cache=cache_b)
 
     def test_invalid_signature_does_not_reserve_nonce(self):
         envelope, now = self._valid_envelope()
@@ -142,31 +175,62 @@ class VerifyEnvelopeTests(unittest.TestCase):
         invalid["signature"] = "A" * 86
 
         with self.assertRaises(EnvelopeVerificationError):
-            verify_envelope(
-                invalid,
-                key_lookup=lambda kid: self.public_key_pem,
-                replay_cache=replay_cache,
-                now=now,
-            )
+            self._verify(invalid, now, replay_cache=replay_cache)
 
-        verify_envelope(
-            envelope,
-            key_lookup=lambda kid: self.public_key_pem,
-            replay_cache=replay_cache,
+        # Original valid envelope must still pass after the failed attempt;
+        # asserts the nonce was NOT reserved.
+        self._verify(envelope, now, replay_cache=replay_cache)
+
+    def test_capability_failure_does_not_reserve_nonce(self):
+        envelope, now = self._valid_envelope()
+        replay_cache = InMemoryReplayCache()
+
+        # Mutate the token after envelope is signed; envelope sig still
+        # valid but cap validation fails.
+        bad = dict(envelope)
+        bad["capability_token"] = bad["capability_token"][:-4] + "XXXX"
+        # Re-sign envelope with the mutated token (so envelope signature
+        # passes and we definitely fail at capability validation, not earlier).
+        unsigned = {k: v for k, v in bad.items() if k != "signature"}
+        bad["signature"] = sign(
+            canonicalize_envelope_for_signing({**unsigned, "signature": ""}),
+            self.signer_priv_pem,
+        )
+        with self.assertRaises(EnvelopeVerificationError):
+            self._verify(bad, now, replay_cache=replay_cache)
+
+        # Original valid envelope must still pass — nonce wasn't reserved.
+        self._verify(envelope, now, replay_cache=replay_cache)
+
+    def test_envelope_signing_key_cannot_sign_capability(self):
+        # Mint a token signed by the envelope-signing private key. The
+        # IssuerTrustStore (here: a stub) only knows the real issuer key,
+        # so the (iss=cap-issuer, kid=dev-kid-1) lookup must miss.
+        envelope, now = self._valid_envelope()
+        rogue_token = mint_capability_token(
+            issuer_priv_pem=self.signer_priv_pem,
+            issuer_kid="dev-kid-1",
+            iss=_ISSUER_IDENTITY,
+            sub=_SENDER,
+            aud=_RECIPIENT,
+            scope=_PURPOSE,
+            payload_digest=envelope["payload_digest"],
             now=now,
         )
+        envelope["capability_token"] = rogue_token
+        unsigned = {k: v for k, v in envelope.items() if k != "signature"}
+        envelope["signature"] = sign(
+            canonicalize_envelope_for_signing({**unsigned, "signature": ""}),
+            self.signer_priv_pem,
+        )
+        with self.assertRaisesRegex(EnvelopeVerificationError, "unknown issuer key"):
+            self._verify(envelope, now)
 
     def test_disallowed_algorithm_fails(self):
         envelope, now = self._valid_envelope()
         envelope["alg"] = "HS256"
-
         with self.assertRaises(EnvelopeVerificationError):
-            verify_envelope(
-                envelope,
-                key_lookup=lambda kid: self.public_key_pem,
-                replay_cache=InMemoryReplayCache(),
-                now=now,
-            )
+            self._verify(envelope, now)
 
     def test_non_ed25519_key_rejected(self):
         envelope, now = self._valid_envelope()
@@ -175,39 +239,22 @@ class VerifyEnvelopeTests(unittest.TestCase):
             encoding=serialization.Encoding.PEM,
             format=serialization.PublicFormat.SubjectPublicKeyInfo,
         )
-
         with self.assertRaises(EnvelopeVerificationError):
-            verify_envelope(
-                envelope,
-                key_lookup=lambda kid: rsa_pub_pem,
-                replay_cache=InMemoryReplayCache(),
-                now=now,
-            )
+            self._verify(envelope, now, key_lookup=lambda kid: rsa_pub_pem)
 
     def test_verify_with_filesystem_trust_store(self):
         envelope, now = self._valid_envelope()
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = pathlib.Path(tmp)
-            (tmp_path / "dev-kid-1.pem").write_bytes(self.public_key_pem)
+            (tmp_path / "dev-kid-1.pem").write_bytes(self.signer_pub_pem)
             store = FileSystemTrustStore.from_directory(tmp_path)
-            verify_envelope(
-                envelope,
-                key_lookup=store,
-                replay_cache=InMemoryReplayCache(),
-                now=now,
-            )
+            self._verify(envelope, now, key_lookup=store)
 
     def test_uuid_v7_required(self):
         envelope, now = self._valid_envelope()
         envelope["message_id"] = "123e4567-e89b-12d3-a456-426614174000"
-
         with self.assertRaises(EnvelopeVerificationError):
-            verify_envelope(
-                envelope,
-                key_lookup=lambda kid: self.public_key_pem,
-                replay_cache=InMemoryReplayCache(),
-                now=now,
-            )
+            self._verify(envelope, now)
 
     def test_invalid_kid_format_rejected(self):
         for bad_kid in ("", "../etc/passwd", "kid with space", "a" * 200, "kid\n"):
@@ -215,12 +262,47 @@ class VerifyEnvelopeTests(unittest.TestCase):
                 envelope, now = self._valid_envelope()
                 envelope["kid"] = bad_kid
                 with self.assertRaises(EnvelopeVerificationError):
-                    verify_envelope(
-                        envelope,
-                        key_lookup=lambda kid: self.public_key_pem,
-                        replay_cache=InMemoryReplayCache(),
-                        now=now,
-                    )
+                    self._verify(envelope, now)
+
+    def test_capability_wrong_sub_rejected(self):
+        envelope, now = self._valid_envelope()
+        envelope["capability_token"] = mint_capability_token(
+            issuer_priv_pem=self.issuer_priv_pem,
+            issuer_kid=_ISSUER_KID,
+            iss=_ISSUER_IDENTITY,
+            sub="spiffe://mesh/ns-x/service-x",
+            aud=_RECIPIENT,
+            scope=_PURPOSE,
+            payload_digest=envelope["payload_digest"],
+            now=now,
+        )
+        unsigned = {k: v for k, v in envelope.items() if k != "signature"}
+        envelope["signature"] = sign(
+            canonicalize_envelope_for_signing({**unsigned, "signature": ""}),
+            self.signer_priv_pem,
+        )
+        with self.assertRaisesRegex(EnvelopeVerificationError, "sub does not match"):
+            self._verify(envelope, now)
+
+    def test_capability_wrong_envelope_digest_rejected(self):
+        envelope, now = self._valid_envelope()
+        envelope["capability_token"] = mint_capability_token(
+            issuer_priv_pem=self.issuer_priv_pem,
+            issuer_kid=_ISSUER_KID,
+            iss=_ISSUER_IDENTITY,
+            sub=_SENDER,
+            aud=_RECIPIENT,
+            scope=_PURPOSE,
+            payload_digest="0" * 64,
+            now=now,
+        )
+        unsigned = {k: v for k, v in envelope.items() if k != "signature"}
+        envelope["signature"] = sign(
+            canonicalize_envelope_for_signing({**unsigned, "signature": ""}),
+            self.signer_priv_pem,
+        )
+        with self.assertRaisesRegex(EnvelopeVerificationError, "envelope_digest does not match"):
+            self._verify(envelope, now)
 
 
 class CanonicalizationSemanticsTests(unittest.TestCase):
@@ -228,8 +310,8 @@ class CanonicalizationSemanticsTests(unittest.TestCase):
         self.assertEqual(_digest_payload({"a": 1.0}), _digest_payload({"a": 1}))
 
     def test_unicode_normalization_is_not_applied(self):
-        precomposed = "caf\u00e9"
-        decomposed = "cafe\u0301"
+        precomposed = "café"
+        decomposed = "café"
         self.assertNotEqual(
             _digest_payload({"k": precomposed}),
             _digest_payload({"k": decomposed}),
