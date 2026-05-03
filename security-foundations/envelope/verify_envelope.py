@@ -151,7 +151,7 @@ class SQLiteReplayCache(ReplayCache):
             return cur.rowcount == 1
 
 
-def _parse_rfc3339(value: str) -> datetime:
+def parse_rfc3339(value: str) -> datetime:
     candidate = value.replace("Z", "+00:00")
     try:
         dt = datetime.fromisoformat(candidate)
@@ -264,8 +264,8 @@ def verify_envelope(
 
     _validate_static_fields(envelope)
 
-    issued_at = _parse_rfc3339(envelope["issued_at"])
-    expires_at = _parse_rfc3339(envelope["expires_at"])
+    issued_at = parse_rfc3339(envelope["issued_at"])
+    expires_at = parse_rfc3339(envelope["expires_at"])
     current = now.astimezone(timezone.utc) if now else datetime.now(timezone.utc)
 
     if issued_at - current > config.max_clock_skew:

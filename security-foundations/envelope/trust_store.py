@@ -22,7 +22,7 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from verify_envelope import EnvelopeVerificationError, _parse_rfc3339
+from verify_envelope import EnvelopeVerificationError, parse_rfc3339
 
 
 @dataclass(frozen=True)
@@ -82,7 +82,7 @@ class FileSystemTrustStore:
             not_after: datetime | None = None
             if "not_after" in entry:
                 try:
-                    not_after = _parse_rfc3339(entry["not_after"])
+                    not_after = parse_rfc3339(entry["not_after"])
                 except EnvelopeVerificationError as exc:
                     raise ValueError(
                         f"manifest entry {kid} has invalid not_after: {entry['not_after']}"
