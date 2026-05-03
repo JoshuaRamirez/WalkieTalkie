@@ -39,8 +39,11 @@ Enable authenticated peer discovery and request/response execution with anti-rep
 
 ### D1.3 Capability Service v1
 - Capability issuance API (short TTL, narrow scope, audience bound).
-- Capability validator middleware.
-- Capability revocation API + cache invalidation channel.
+- Capability validator middleware. **Landed (v0):** RFC 7519 JWT (EdDSA) with
+  `cnf.envelope_digest` binding, separate `IssuerTrustStore`, default 5-minute
+  TTL. See `security-foundations/envelope/capability_token.py`.
+- Capability revocation API + cache invalidation channel. **Not yet landed;**
+  v0 relies on TTL only.
 
 ### D1.4 Audit and Trace Enhancements
 - Complete request/response correlation.

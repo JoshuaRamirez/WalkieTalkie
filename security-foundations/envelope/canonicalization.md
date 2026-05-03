@@ -35,3 +35,31 @@ Canonicalization Scheme (JCS)**.
 - The reference verifier loads PEM public keys via `cryptography` and asserts
   they are `Ed25519PublicKey` instances; SubjectPublicKeyInfo PEMs declaring a
   different algorithm are rejected.
+
+## Capability token (envelope v0 / token v0)
+
+The `capability_token` field is a **RFC 7519 JWT** signed with **EdDSA**
+(RFC 8037). Wire form is the JWS Compact Serialization
+`<base64url(header)>.<base64url(payload)>.<base64url(signature)>` with no
+padding. The token is capped at 4096 bytes. Detailed format and validation
+rules live in `capability_token.py`; the contract for the verifier is:
+
+- **Header** MUST set `alg: "EdDSA"`, `typ: "wt-cap+jwt"`, and a `kid` matching
+  `KID_RE`. `alg=none`, `HS256`, etc. are fatal.
+- **Claims** (all required): `iss`, `sub`, `aud`, `scope`, `iat`, `nbf`, `exp`,
+  `jti`, `cnf.envelope_digest`. Times are NumericDate (seconds since epoch).
+- **Envelope binding** (the validator enforces all four):
+  - `sub == envelope.sender_spiffe_id`
+  - `aud == envelope.recipient_spiffe_id`
+  - `scope == envelope.purpose_of_use`
+  - `cnf.envelope_digest == envelope.payload_digest`
+- **Time window** uses `VerificationConfig.max_clock_skew` and a separate
+  `max_capability_ttl` (default 5 minutes). `iat <= nbf < exp`.
+- **Issuer trust** is a separate `IssuerTrustStore` keyed on `(iss, kid)`. The
+  envelope-signing trust store and the issuer trust store are deliberately
+  distinct types — a workload that signs envelopes physically cannot also mint
+  capability tokens.
+
+Validation happens **after** envelope signature verification and **before**
+the replay reservation. A capability failure raises `EnvelopeVerificationError`
+with a `"capability token: …"` reason and the nonce is not reserved.
