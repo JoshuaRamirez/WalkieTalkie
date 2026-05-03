@@ -17,12 +17,12 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from verify_envelope import EnvelopeVerificationError, _parse_rfc3339
+from verify_envelope import EnvelopeVerificationError, parse_rfc3339
 
 
 @dataclass(frozen=True)
@@ -82,7 +82,7 @@ class FileSystemTrustStore:
             not_after: datetime | None = None
             if "not_after" in entry:
                 try:
-                    not_after = _parse_rfc3339(entry["not_after"])
+                    not_after = parse_rfc3339(entry["not_after"])
                 except EnvelopeVerificationError as exc:
                     raise ValueError(
                         f"manifest entry {kid} has invalid not_after: {entry['not_after']}"
@@ -105,6 +105,6 @@ class FileSystemTrustStore:
         entry = self._keys.get(kid)
         if entry is None:
             raise EnvelopeVerificationError(f"unknown kid: {kid}")
-        if entry.not_after is not None and datetime.now(timezone.utc) > entry.not_after:
+        if entry.not_after is not None and datetime.now(UTC) > entry.not_after:
             raise EnvelopeVerificationError(f"key expired: {kid}")
         return entry.pem

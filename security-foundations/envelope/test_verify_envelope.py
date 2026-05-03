@@ -3,7 +3,7 @@ import pathlib
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
@@ -50,7 +50,7 @@ class VerifyEnvelopeTests(unittest.TestCase):
         cls.private_key_pem, cls.public_key_pem = generate_ed25519_keypair()
 
     def _valid_envelope(self):
-        now = datetime(2026, 4, 14, 12, 0, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
         envelope = {
             "version": "v0",
             "message_id": "0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c1",

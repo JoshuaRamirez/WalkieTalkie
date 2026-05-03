@@ -7,9 +7,10 @@ import hashlib
 import re
 import sqlite3
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Any, Callable
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import jcs
 from cryptography.exceptions import InvalidSignature
@@ -36,6 +37,9 @@ class EnvelopeVerificationError(ValueError):
 class VerificationConfig:
     max_clock_skew: timedelta = timedelta(seconds=60)
     max_envelope_ttl: timedelta = timedelta(minutes=5)
+
+
+DEFAULT_CONFIG = VerificationConfig()
 
 
 class ReplayCache:
@@ -69,18 +73,18 @@ class InMemoryReplayCache(ReplayCache):
             del self._entries[key]
 
     def seen(self, sender: str, nonce: str) -> bool:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         with self._lock:
             self._purge(now)
             return (sender, nonce) in self._entries
 
     def mark(self, sender: str, nonce: str, ttl: timedelta) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         with self._lock:
             self._entries[(sender, nonce)] = now + ttl
 
     def mark_if_new(self, sender: str, nonce: str, ttl: timedelta) -> bool:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         with self._lock:
             self._purge(now)
             key = (sender, nonce)
@@ -118,7 +122,7 @@ class SQLiteReplayCache(ReplayCache):
 
     @staticmethod
     def _now_epoch() -> int:
-        return int(datetime.now(timezone.utc).timestamp())
+        return int(datetime.now(UTC).timestamp())
 
     def _purge(self, conn: sqlite3.Connection) -> None:
         conn.execute("DELETE FROM replay_nonces WHERE expires_at <= ?", (self._now_epoch(),))
@@ -151,7 +155,7 @@ class SQLiteReplayCache(ReplayCache):
             return cur.rowcount == 1
 
 
-def _parse_rfc3339(value: str) -> datetime:
+def parse_rfc3339(value: str) -> datetime:
     candidate = value.replace("Z", "+00:00")
     try:
         dt = datetime.fromisoformat(candidate)
@@ -159,7 +163,7 @@ def _parse_rfc3339(value: str) -> datetime:
         raise EnvelopeVerificationError("invalid timestamp format") from exc
     if dt.tzinfo is None:
         raise EnvelopeVerificationError("timestamp must include timezone")
-    return dt.astimezone(timezone.utc)
+    return dt.astimezone(UTC)
 
 
 def _canonical_json(value: Any) -> bytes:
@@ -238,7 +242,7 @@ def verify_envelope(
     *,
     key_lookup: Callable[[str], bytes],
     replay_cache: ReplayCache,
-    config: VerificationConfig = VerificationConfig(),
+    config: VerificationConfig = DEFAULT_CONFIG,
     now: datetime | None = None,
 ) -> None:
     required = {
@@ -264,9 +268,9 @@ def verify_envelope(
 
     _validate_static_fields(envelope)
 
-    issued_at = _parse_rfc3339(envelope["issued_at"])
-    expires_at = _parse_rfc3339(envelope["expires_at"])
-    current = now.astimezone(timezone.utc) if now else datetime.now(timezone.utc)
+    issued_at = parse_rfc3339(envelope["issued_at"])
+    expires_at = parse_rfc3339(envelope["expires_at"])
+    current = now.astimezone(UTC) if now else datetime.now(UTC)
 
     if issued_at - current > config.max_clock_skew:
         raise EnvelopeVerificationError("issued_at in future beyond skew")
