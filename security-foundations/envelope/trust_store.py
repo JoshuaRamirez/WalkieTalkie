@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
@@ -105,6 +105,6 @@ class FileSystemTrustStore:
         entry = self._keys.get(kid)
         if entry is None:
             raise EnvelopeVerificationError(f"unknown kid: {kid}")
-        if entry.not_after is not None and datetime.now(timezone.utc) > entry.not_after:
+        if entry.not_after is not None and datetime.now(UTC) > entry.not_after:
             raise EnvelopeVerificationError(f"key expired: {kid}")
         return entry.pem
