@@ -14,7 +14,13 @@ the approved plan.
   - payload digest verification,
   - in-process Ed25519 signature verification via the `cryptography` library
     (no `openssl` subprocess),
-  - key-id lookup behind a callable interface.
+  - key-id lookup behind a callable interface,
+  - capability token validation (see below).
+- **Capability token v0** (`envelope/capability_token.py`): RFC 7519 JWT with
+  EdDSA, bound to the envelope via `cnf.envelope_digest` so a leaked or replayed
+  token only authorizes its specific payload. Issuer trust is a separate
+  `IssuerTrustStore` (`envelope/issuer_trust_store.py`) keyed on `(iss, kid)`,
+  so envelope-signing keys cannot be used to mint tokens.
 - Replay cache implementations:
   - `InMemoryReplayCache` for local use,
   - `SQLiteReplayCache` for cross-process replay protection.
