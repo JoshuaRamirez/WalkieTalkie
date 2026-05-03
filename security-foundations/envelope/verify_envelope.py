@@ -181,17 +181,17 @@ def canonicalize_envelope_for_signing(envelope: dict[str, Any]) -> bytes:
     return _canonical_json(unsigned)
 
 
-def _decode_base64url(signature: str) -> bytes:
-    if not isinstance(signature, str) or not signature:
+def decode_base64url(value: str) -> bytes:
+    if not isinstance(value, str) or not value:
         raise EnvelopeVerificationError("signature must be non-empty base64url")
-    padded = signature + ("=" * ((4 - len(signature) % 4) % 4))
+    padded = value + ("=" * ((4 - len(value) % 4) % 4))
     try:
         return base64.urlsafe_b64decode(padded.encode("ascii"))
     except Exception as exc:
         raise EnvelopeVerificationError("invalid signature encoding") from exc
 
 
-def _load_ed25519_public_key(public_key_pem: bytes) -> Ed25519PublicKey:
+def load_ed25519_public_key(public_key_pem: bytes) -> Ed25519PublicKey:
     try:
         key = serialization.load_pem_public_key(public_key_pem)
     except (ValueError, TypeError) as exc:
@@ -202,8 +202,8 @@ def _load_ed25519_public_key(public_key_pem: bytes) -> Ed25519PublicKey:
 
 
 def _verify_ed25519_signature(signing_input: bytes, signature: str, public_key_pem: bytes) -> bool:
-    sig_bytes = _decode_base64url(signature)
-    key = _load_ed25519_public_key(public_key_pem)
+    sig_bytes = decode_base64url(signature)
+    key = load_ed25519_public_key(public_key_pem)
     try:
         key.verify(sig_bytes, signing_input)
     except InvalidSignature:
