@@ -26,6 +26,12 @@ the approved plan.
   envelope identifiers and the rejection reason. `InMemoryAuditSink` and
   `JsonlAuditSink` ship; `verify_chain` re-derives the hash chain to detect
   insertion, deletion, or in-place mutation of past records.
+- **`Verifier` facade** (`envelope/verifier.py`): a frozen dataclass that holds
+  the trust stores, replay cache, audit sink, and config so callers don't pass
+  seven keyword arguments per request. `Verifier.verify(envelope)` raises and
+  returns the validated `CapabilityClaims`; `Verifier.try_verify(envelope)`
+  never raises and returns a `VerificationResult` with `ok`, `reason`, and
+  `claims`.
 - Replay cache implementations:
   - `InMemoryReplayCache` for local use,
   - `SQLiteReplayCache` for cross-process replay protection.
