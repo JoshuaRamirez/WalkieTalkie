@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jcs
+from audit import AuditSink
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -246,72 +247,100 @@ def verify_envelope(
     replay_cache: ReplayCache,
     config: VerificationConfig = DEFAULT_CONFIG,
     now: datetime | None = None,
+    audit_sink: AuditSink | None = None,
 ) -> None:
-    required = {
-        "version",
-        "message_id",
-        "sender_spiffe_id",
-        "recipient_spiffe_id",
-        "issued_at",
-        "expires_at",
-        "nonce",
-        "capability_token",
-        "purpose_of_use",
-        "kid",
-        "alg",
-        "payload",
-        "payload_digest",
-        "signature",
-    }
-
-    missing = sorted(required - set(envelope))
-    if missing:
-        raise EnvelopeVerificationError(f"missing required fields: {','.join(missing)}")
-
-    _validate_static_fields(envelope)
-
-    issued_at = parse_rfc3339(envelope["issued_at"])
-    expires_at = parse_rfc3339(envelope["expires_at"])
-    current = now.astimezone(UTC) if now else datetime.now(UTC)
-
-    if issued_at - current > config.max_clock_skew:
-        raise EnvelopeVerificationError("issued_at in future beyond skew")
-    if current - expires_at > config.max_clock_skew:
-        raise EnvelopeVerificationError("envelope expired")
-    if expires_at <= issued_at:
-        raise EnvelopeVerificationError("invalid validity window")
-    if expires_at - issued_at > config.max_envelope_ttl:
-        raise EnvelopeVerificationError("envelope ttl exceeds maximum")
-
-    computed_digest = _digest_payload(envelope["payload"])
-    if computed_digest != envelope["payload_digest"]:
-        raise EnvelopeVerificationError("payload digest mismatch")
-
-    signing_input = canonicalize_envelope_for_signing(envelope)
-    public_key_pem = key_lookup(envelope["kid"])
-
-    if envelope["alg"] == "Ed25519" and not _verify_ed25519_signature(
-        signing_input,
-        envelope["signature"],
-        public_key_pem,
-    ):
-        raise EnvelopeVerificationError("signature invalid")
-
-    # Imported here to avoid the circular import at module load time
-    # (capability_token imports several names from this module).
+    # Deferred to avoid circular import (capability_token imports from this module).
     from capability_token import verify_capability_token
 
-    verify_capability_token(
-        envelope["capability_token"],
-        envelope=envelope,
-        issuer_lookup=issuer_lookup,
-        current=current,
-        max_clock_skew=config.max_clock_skew,
-        max_capability_ttl=config.max_capability_ttl,
-    )
+    audit_ctx = {
+        "message_id": envelope.get("message_id", "") if isinstance(envelope, dict) else "",
+        "sender": envelope.get("sender_spiffe_id", "") if isinstance(envelope, dict) else "",
+        "recipient": envelope.get("recipient_spiffe_id", "") if isinstance(envelope, dict) else "",
+        "envelope_kid": envelope.get("kid", "") if isinstance(envelope, dict) else "",
+        "issuer_iss": "",
+        "issuer_kid": "",
+    }
 
-    sender = envelope["sender_spiffe_id"]
-    nonce = envelope["nonce"]
-    ttl = max(expires_at - current, timedelta(seconds=0))
-    if not replay_cache.mark_if_new(sender, nonce, ttl):
-        raise EnvelopeVerificationError("replay detected")
+    def _emit(outcome: str, reason: str) -> None:
+        if audit_sink is not None:
+            audit_sink.record(
+                event_type="envelope.verify",
+                outcome=outcome,
+                reason=reason,
+                **audit_ctx,
+            )
+
+    try:
+        required = {
+            "version",
+            "message_id",
+            "sender_spiffe_id",
+            "recipient_spiffe_id",
+            "issued_at",
+            "expires_at",
+            "nonce",
+            "capability_token",
+            "purpose_of_use",
+            "kid",
+            "alg",
+            "payload",
+            "payload_digest",
+            "signature",
+        }
+
+        missing = sorted(required - set(envelope))
+        if missing:
+            raise EnvelopeVerificationError(
+                f"missing required fields: {','.join(missing)}"
+            )
+
+        _validate_static_fields(envelope)
+
+        issued_at = parse_rfc3339(envelope["issued_at"])
+        expires_at = parse_rfc3339(envelope["expires_at"])
+        current = now.astimezone(UTC) if now else datetime.now(UTC)
+
+        if issued_at - current > config.max_clock_skew:
+            raise EnvelopeVerificationError("issued_at in future beyond skew")
+        if current - expires_at > config.max_clock_skew:
+            raise EnvelopeVerificationError("envelope expired")
+        if expires_at <= issued_at:
+            raise EnvelopeVerificationError("invalid validity window")
+        if expires_at - issued_at > config.max_envelope_ttl:
+            raise EnvelopeVerificationError("envelope ttl exceeds maximum")
+
+        computed_digest = _digest_payload(envelope["payload"])
+        if computed_digest != envelope["payload_digest"]:
+            raise EnvelopeVerificationError("payload digest mismatch")
+
+        signing_input = canonicalize_envelope_for_signing(envelope)
+        public_key_pem = key_lookup(envelope["kid"])
+
+        if envelope["alg"] == "Ed25519" and not _verify_ed25519_signature(
+            signing_input,
+            envelope["signature"],
+            public_key_pem,
+        ):
+            raise EnvelopeVerificationError("signature invalid")
+
+        claims = verify_capability_token(
+            envelope["capability_token"],
+            envelope=envelope,
+            issuer_lookup=issuer_lookup,
+            current=current,
+            max_clock_skew=config.max_clock_skew,
+            max_capability_ttl=config.max_capability_ttl,
+        )
+        audit_ctx["issuer_iss"] = claims.iss
+        audit_ctx["issuer_kid"] = claims.issuer_kid
+
+        sender = envelope["sender_spiffe_id"]
+        nonce = envelope["nonce"]
+        ttl = max(expires_at - current, timedelta(seconds=0))
+        if not replay_cache.mark_if_new(sender, nonce, ttl):
+            raise EnvelopeVerificationError("replay detected")
+    except EnvelopeVerificationError as exc:
+        _emit("deny", str(exc))
+        raise
+
+    _emit("allow", "ok")

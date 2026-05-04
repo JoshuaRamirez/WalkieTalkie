@@ -70,6 +70,7 @@ class CapabilityClaims:
     exp: int
     jti: str
     envelope_digest: str
+    issuer_kid: str
 
 
 def _err(reason: str) -> EnvelopeVerificationError:
@@ -127,7 +128,7 @@ def _check_header(header: dict[str, Any]) -> str:
     return kid
 
 
-def _extract_claims(payload: dict[str, Any]) -> CapabilityClaims:
+def _extract_claims(payload: dict[str, Any], *, issuer_kid: str) -> CapabilityClaims:
     missing = [c for c in _REQUIRED_CLAIMS if c not in payload]
     if missing:
         raise _err(f"missing required claims: {','.join(missing)}")
@@ -171,6 +172,7 @@ def _extract_claims(payload: dict[str, Any]) -> CapabilityClaims:
         exp=exp,
         jti=jti,
         envelope_digest=envelope_digest,
+        issuer_kid=issuer_kid,
     )
 
 
@@ -186,7 +188,7 @@ def verify_capability_token(
     """Full validation. Raises EnvelopeVerificationError on any failure."""
     header, payload, signing_input, signature_bytes = parse_jwt(token)
     issuer_kid = _check_header(header)
-    claims = _extract_claims(payload)
+    claims = _extract_claims(payload, issuer_kid=issuer_kid)
 
     if claims.sub != envelope["sender_spiffe_id"]:
         raise _err("sub does not match envelope sender")

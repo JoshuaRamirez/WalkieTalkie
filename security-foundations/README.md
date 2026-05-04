@@ -21,6 +21,11 @@ the approved plan.
   token only authorizes its specific payload. Issuer trust is a separate
   `IssuerTrustStore` (`envelope/issuer_trust_store.py`) keyed on `(iss, kid)`,
   so envelope-signing keys cannot be used to mint tokens.
+- **Hash-chained audit events v0** (`envelope/audit.py`): every
+  `verify_envelope` call records exactly one event (allow or deny) with the
+  envelope identifiers and the rejection reason. `InMemoryAuditSink` and
+  `JsonlAuditSink` ship; `verify_chain` re-derives the hash chain to detect
+  insertion, deletion, or in-place mutation of past records.
 - Replay cache implementations:
   - `InMemoryReplayCache` for local use,
   - `SQLiteReplayCache` for cross-process replay protection.

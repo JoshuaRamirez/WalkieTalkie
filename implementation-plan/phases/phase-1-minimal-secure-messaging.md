@@ -46,8 +46,13 @@ Enable authenticated peer discovery and request/response execution with anti-rep
   v0 relies on TTL only.
 
 ### D1.4 Audit and Trace Enhancements
-- Complete request/response correlation.
+- Complete request/response correlation. **Not yet landed.**
 - Explicit checkpoints for discovery, verification, policy, execution.
+  **Verification checkpoint landed (v0):** every `verify_envelope` call
+  emits exactly one hash-chained `AuditEvent` with outcome (allow/deny),
+  reason, message_id, sender, recipient, envelope_kid, and capability
+  issuer (iss, kid). See `security-foundations/envelope/audit.py`. Discovery,
+  policy, and execution checkpoints remain outstanding.
 
 ### D1.5 Operational Guardrails
 - Identity-aware rate limits.
