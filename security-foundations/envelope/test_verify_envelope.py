@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import generate_private_key a
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
+from audit import InMemoryAuditSink, verify_chain
 from trust_store import FileSystemTrustStore
 from verify_envelope import (
     EnvelopeVerificationError,
@@ -303,6 +304,106 @@ class VerifyEnvelopeTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(EnvelopeVerificationError, "envelope_digest does not match"):
             self._verify(envelope, now)
+
+    def test_audit_sink_records_allow_event_on_success(self):
+        envelope, now = self._valid_envelope()
+        sink = InMemoryAuditSink()
+        verify_envelope(
+            envelope,
+            key_lookup=lambda kid: self.signer_pub_pem,
+            issuer_lookup=self.issuer_lookup,
+            replay_cache=InMemoryReplayCache(),
+            now=now,
+            audit_sink=sink,
+        )
+        self.assertEqual(len(sink.events), 1)
+        event = sink.events[0]
+        self.assertEqual(event.event_type, "envelope.verify")
+        self.assertEqual(event.outcome, "allow")
+        self.assertEqual(event.reason, "ok")
+        self.assertEqual(event.message_id, envelope["message_id"])
+        self.assertEqual(event.sender, _SENDER)
+        self.assertEqual(event.recipient, _RECIPIENT)
+        self.assertEqual(event.envelope_kid, "dev-kid-1")
+        self.assertEqual(event.issuer_iss, _ISSUER_IDENTITY)
+        self.assertEqual(event.issuer_kid, _ISSUER_KID)
+
+    def test_audit_sink_records_deny_event_on_failure(self):
+        envelope, now = self._valid_envelope()
+        envelope["payload"]["args"]["target"] = "tampered"
+        sink = InMemoryAuditSink()
+        with self.assertRaises(EnvelopeVerificationError):
+            verify_envelope(
+                envelope,
+                key_lookup=lambda kid: self.signer_pub_pem,
+                issuer_lookup=self.issuer_lookup,
+                replay_cache=InMemoryReplayCache(),
+                now=now,
+                audit_sink=sink,
+            )
+        self.assertEqual(len(sink.events), 1)
+        event = sink.events[0]
+        self.assertEqual(event.outcome, "deny")
+        self.assertEqual(event.reason, "payload digest mismatch")
+        self.assertEqual(event.message_id, envelope["message_id"])
+
+    def test_audit_chain_holds_across_verifications(self):
+        envelope, now = self._valid_envelope()
+        sink = InMemoryAuditSink()
+
+        # One success, one tampered failure, one success — each must chain.
+        verify_envelope(
+            envelope,
+            key_lookup=lambda kid: self.signer_pub_pem,
+            issuer_lookup=self.issuer_lookup,
+            replay_cache=InMemoryReplayCache(),
+            now=now,
+            audit_sink=sink,
+        )
+
+        bad = dict(envelope)
+        bad["payload"] = {"tool": "ping", "args": {"target": "tampered"}}
+        with self.assertRaises(EnvelopeVerificationError):
+            verify_envelope(
+                bad,
+                key_lookup=lambda kid: self.signer_pub_pem,
+                issuer_lookup=self.issuer_lookup,
+                replay_cache=InMemoryReplayCache(),
+                now=now,
+                audit_sink=sink,
+            )
+
+        envelope2, _ = self._valid_envelope()
+        envelope2["nonce"] = "nonce-000000000002"
+        envelope2["message_id"] = "0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c3"
+        envelope2["payload_digest"] = _digest_payload(envelope2["payload"])
+        envelope2["capability_token"] = mint_capability_token(
+            issuer_priv_pem=self.issuer_priv_pem,
+            issuer_kid=_ISSUER_KID,
+            iss=_ISSUER_IDENTITY,
+            sub=_SENDER,
+            aud=_RECIPIENT,
+            scope=_PURPOSE,
+            payload_digest=envelope2["payload_digest"],
+            now=now,
+        )
+        unsigned = {k: v for k, v in envelope2.items() if k != "signature"}
+        envelope2["signature"] = sign(
+            canonicalize_envelope_for_signing({**unsigned, "signature": ""}),
+            self.signer_priv_pem,
+        )
+        verify_envelope(
+            envelope2,
+            key_lookup=lambda kid: self.signer_pub_pem,
+            issuer_lookup=self.issuer_lookup,
+            replay_cache=InMemoryReplayCache(),
+            now=now,
+            audit_sink=sink,
+        )
+
+        self.assertEqual(len(sink.events), 3)
+        self.assertEqual([e.outcome for e in sink.events], ["allow", "deny", "allow"])
+        verify_chain(sink.events)
 
 
 class CanonicalizationSemanticsTests(unittest.TestCase):
