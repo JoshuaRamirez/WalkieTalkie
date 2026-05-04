@@ -10,10 +10,13 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import jcs
 from audit import AuditSink
+
+if TYPE_CHECKING:
+    from capability_token import CapabilityClaims
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -248,7 +251,7 @@ def verify_envelope(
     config: VerificationConfig = DEFAULT_CONFIG,
     now: datetime | None = None,
     audit_sink: AuditSink | None = None,
-) -> None:
+) -> CapabilityClaims:
     # Deferred to avoid circular import (capability_token imports from this module).
     from capability_token import verify_capability_token
 
@@ -344,3 +347,4 @@ def verify_envelope(
         raise
 
     _emit("allow", "ok")
+    return claims
