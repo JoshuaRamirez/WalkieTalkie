@@ -150,8 +150,19 @@ Enable authenticated peer discovery and request/response execution with anti-rep
 
 ### C1. Capability Issuance Rules
 - Enforce least privilege at issuance.
-- Explicit purpose-of-use required.
-- Audience pinning and minimum viable TTL.
+  **Landed (v0):** `CapabilityIssuer` consults a pluggable
+  `IssuancePolicy` before minting. The default `AllowAllPolicy` preserves
+  pre-policy behavior for callers that haven't opted in;
+  `AllowlistPolicy` (in `security-foundations/envelope/issuance_policy.py`)
+  rejects any (sub, aud, scope) tuple not in its frozen allowlist.
+- Explicit purpose-of-use required. **Landed (v0):** `scope` is the third
+  tuple element of `AllowlistPolicy.allowed_grants` and must match exactly.
+  The token's `scope` is also bound to `envelope.purpose_of_use` at
+  validation time (Track C C2).
+- Audience pinning and minimum viable TTL. **Landed (v0):** `aud` is the
+  second tuple element of `AllowlistPolicy.allowed_grants`.
+  `AllowlistPolicy.max_ttl` (default 5 minutes) caps the maximum TTL the
+  policy will allow per call; callers may always request a smaller TTL.
 
 ### C2. Capability Validation Rules
 - Reject expired, out-of-scope, wrong-audience, or revoked tokens.
@@ -170,7 +181,15 @@ Enable authenticated peer discovery and request/response execution with anti-rep
 
 **Acceptance Criteria**
 - Policy error path is fail-closed.
+  **Landed:** policy denials raise `IssuancePolicyError` (subclass of
+  `ValueError`) and emit a `capability.issue` deny audit event when an
+  `audit_sink` is attached. `CapabilityIssuer.issue` does not mint when
+  the policy denies; the test
+  `test_allowlist_policy_denies_unlisted_grant` pins the invariant.
 - Issuance service cannot mint broader scope than policy permits.
+  **Landed:** `AllowlistPolicy` requires (sub, aud, scope) tuple
+  membership; tests cover wrong-sub, wrong-aud, wrong-scope, and
+  ttl-above-cap denial paths.
 
 ---
 

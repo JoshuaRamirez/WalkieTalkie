@@ -24,7 +24,7 @@ types.
 | Field | Type | Notes |
 |---|---|---|
 | `timestamp` | RFC 3339 string in UTC, ending in `Z` | Wall-clock time at event emission. |
-| `event_type` | string | v0 emits `"envelope.verify"` and `"capability.verify"`. Future checkpoints (`policy.evaluate`, `execution.dispatch`, `discovery.admit`) MUST use additional values; existing values are immutable. |
+| `event_type` | string | v0 emits `"envelope.verify"`, `"capability.verify"`, and `"capability.issue"`. Future checkpoints (`policy.evaluate`, `execution.dispatch`, `discovery.admit`) MUST use additional values; existing values are immutable. |
 | `outcome` | `"allow"` or `"deny"` | Closed enum. |
 | `reason` | string | Human-readable. May contain a colon-prefixed namespace (e.g., `"capability token: revoked"`). |
 | `reason_code` | string | Machine-readable. Either `"ok"`, `""` (legacy), or a `DenyReason` value (e.g., `"replay_detected"`). See deny-reason contract below. |
@@ -49,6 +49,14 @@ on where it fails:
 | Pre-cap deny (e.g., digest mismatch, expired envelope) | `envelope.verify` deny only |
 | Cap-level deny (e.g., revoked, sub mismatch) | `capability.verify` deny → `envelope.verify` deny (same `reason_code`) |
 | Post-cap deny (replay) | `capability.verify` allow → `envelope.verify` deny (`replay_detected`) |
+
+A single `CapabilityIssuer.issue` call emits exactly one
+`capability.issue` event when an `audit_sink` is attached:
+
+| Outcome | Event |
+|---|---|
+| Issuance allowed | `capability.issue` allow (`reason_code = "ok"`) |
+| Issuance policy denial | `capability.issue` deny (`reason_code = "issuance_policy_denied"`, `reason` echoes the `PolicyDecision.reason`) |
 
 ### Hash chain
 
