@@ -1,5 +1,4 @@
 import base64
-import json
 import pathlib
 import sys
 import tempfile
@@ -46,10 +45,6 @@ def sign(signing_input: bytes, private_key_pem: bytes):
     return base64.urlsafe_b64encode(private_key.sign(signing_input)).rstrip(b"=").decode("ascii")
 
 
-def _b64u(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
-
 def mint_capability_token(
     *,
     issuer_priv_pem: bytes,
@@ -62,25 +57,26 @@ def mint_capability_token(
     now: datetime,
     ttl_seconds: int = 240,
 ) -> str:
+    """Test helper that wraps CapabilityIssuer for fixture-style use."""
+    from capability_issuer import CapabilityIssuer
+
     issuer_priv = serialization.load_pem_private_key(issuer_priv_pem, password=None)
     assert isinstance(issuer_priv, Ed25519PrivateKey)
-    header = {"alg": "EdDSA", "typ": "wt-cap+jwt", "kid": issuer_kid}
-    now_epoch = int(now.timestamp())
-    payload = {
-        "iss": iss,
-        "sub": sub,
-        "aud": aud,
-        "scope": scope,
-        "iat": now_epoch - 30,
-        "nbf": now_epoch - 30,
-        "exp": now_epoch + ttl_seconds,
-        "jti": "0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c2",
-        "cnf": {"envelope_digest": payload_digest},
-    }
-    h = _b64u(json.dumps(header, separators=(",", ":")).encode("utf-8"))
-    p = _b64u(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
-    sig = _b64u(issuer_priv.sign((h + "." + p).encode("ascii")))
-    return f"{h}.{p}.{sig}"
+    issuer = CapabilityIssuer(
+        iss=iss,
+        kid=issuer_kid,
+        signing_key=issuer_priv,
+        default_ttl=timedelta(seconds=ttl_seconds),
+        clock_skew=timedelta(seconds=30),
+    )
+    return issuer.issue(
+        sub=sub,
+        aud=aud,
+        scope=scope,
+        envelope_digest=payload_digest,
+        jti="0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c2",
+        now=now,
+    )
 
 
 _ISSUER_IDENTITY = "spiffe://mesh/cap-issuer-1"

@@ -23,9 +23,10 @@ import base64
 import hashlib
 import json
 import pathlib
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import jcs
+from capability_issuer import CapabilityIssuer
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -42,29 +43,12 @@ _SENDER = "spiffe://mesh/ns-a/service-a"
 _RECIPIENT = "spiffe://mesh/ns-b/service-b"
 _PURPOSE = "invoke_tool"
 
+# Deterministic jti so the regenerated vectors are reproducible.
+_FIXED_JTI = "0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c2"
+
 
 def _b64u(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
-
-def _mint_capability_token(issuer_priv: Ed25519PrivateKey, payload_digest: str) -> str:
-    header = {"alg": "EdDSA", "typ": "wt-cap+jwt", "kid": _ISSUER_KID}
-    now_epoch = int(_ENVELOPE_NOW.timestamp())
-    payload = {
-        "iss": _ISSUER_IDENTITY,
-        "sub": _SENDER,
-        "aud": _RECIPIENT,
-        "scope": _PURPOSE,
-        "iat": now_epoch - 30,
-        "nbf": now_epoch - 30,
-        "exp": now_epoch + 240,
-        "jti": "0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c2",
-        "cnf": {"envelope_digest": payload_digest},
-    }
-    h = _b64u(json.dumps(header, separators=(",", ":")).encode("utf-8"))
-    p = _b64u(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
-    sig = _b64u(issuer_priv.sign((h + "." + p).encode("ascii")))
-    return f"{h}.{p}.{sig}"
 
 
 def _build_envelope(target: str, capability_token: str) -> dict:
@@ -89,6 +73,13 @@ def _build_envelope(target: str, capability_token: str) -> dict:
 def main() -> None:
     signer_priv = Ed25519PrivateKey.from_private_bytes(_SIGNER_SEED)
     issuer_priv = Ed25519PrivateKey.from_private_bytes(_ISSUER_SEED)
+    issuer = CapabilityIssuer(
+        iss=_ISSUER_IDENTITY,
+        kid=_ISSUER_KID,
+        signing_key=issuer_priv,
+        default_ttl=timedelta(minutes=4, seconds=30),
+        clock_skew=timedelta(seconds=30),
+    )
     here = pathlib.Path(__file__).parent
     out = here / "test-vectors"
 
@@ -96,7 +87,14 @@ def main() -> None:
     digest_for_token = hashlib.sha256(
         jcs.canonicalize({"tool": "ping", "args": {"target": "node-1"}})
     ).hexdigest()
-    capability_token = _mint_capability_token(issuer_priv, digest_for_token)
+    capability_token = issuer.issue(
+        sub=_SENDER,
+        aud=_RECIPIENT,
+        scope=_PURPOSE,
+        envelope_digest=digest_for_token,
+        jti=_FIXED_JTI,
+        now=_ENVELOPE_NOW,
+    )
 
     valid = _build_envelope("node-1", capability_token)
     unsigned = {k: v for k, v in valid.items()}
