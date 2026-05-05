@@ -29,6 +29,11 @@ the approved plan.
   for tamper detection). The validator consults the list *after* signature
   verification so an attacker forging a token with a guessed `jti` cannot
   probe the list. Distributed cache invalidation remains out of scope for v0.
+- **Deterministic error contract** (`envelope/deny_reason.py`): every
+  `EnvelopeVerificationError` carries a `DenyReason` enum value. `reason_code`
+  is exposed on the exception and embedded in audit events for machine-readable
+  matching. New deny paths get new identifiers; shipped values are never
+  renamed or repurposed.
 - **Hash-chained audit events v0** (`envelope/audit.py`): every
   `verify_envelope` call records exactly one event (allow or deny) with the
   envelope identifiers and the rejection reason. `InMemoryAuditSink` and

@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 import jcs
 from audit import AuditSink
+from deny_reason import DenyReason
 
 if TYPE_CHECKING:
     from capability_token import CapabilityClaims
@@ -35,7 +36,21 @@ ALLOWED_ALGORITHMS = {"Ed25519"}
 
 
 class EnvelopeVerificationError(ValueError):
-    """Raised when envelope verification fails."""
+    """Raised when envelope verification fails.
+
+    Carries an optional :class:`~deny_reason.DenyReason` for machine-readable
+    matching alongside the human message. Sites that pre-date the deny-reason
+    contract may construct without ``reason``; ``reason_code`` then returns
+    the empty string. New raise sites MUST pass a ``DenyReason``.
+    """
+
+    def __init__(self, message: str, *, reason: DenyReason | None = None) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+    @property
+    def reason_code(self) -> str:
+        return self.reason.value if self.reason is not None else ""
 
 
 @dataclass(frozen=True)
@@ -166,9 +181,13 @@ def parse_rfc3339(value: str) -> datetime:
     try:
         dt = datetime.fromisoformat(candidate)
     except ValueError as exc:
-        raise EnvelopeVerificationError("invalid timestamp format") from exc
+        raise EnvelopeVerificationError(
+            "invalid timestamp format", reason=DenyReason.INVALID_TIMESTAMP
+        ) from exc
     if dt.tzinfo is None:
-        raise EnvelopeVerificationError("timestamp must include timezone")
+        raise EnvelopeVerificationError(
+            "timestamp must include timezone", reason=DenyReason.INVALID_TIMESTAMP
+        )
     return dt.astimezone(UTC)
 
 
@@ -182,28 +201,39 @@ def _digest_payload(payload: Any) -> str:
 
 def canonicalize_envelope_for_signing(envelope: dict[str, Any]) -> bytes:
     if "signature" not in envelope:
-        raise EnvelopeVerificationError("missing signature")
+        raise EnvelopeVerificationError(
+            "missing signature", reason=DenyReason.MISSING_SIGNATURE
+        )
     unsigned = {k: v for k, v in envelope.items() if k != "signature"}
     return _canonical_json(unsigned)
 
 
 def decode_base64url(value: str) -> bytes:
     if not isinstance(value, str) or not value:
-        raise EnvelopeVerificationError("signature must be non-empty base64url")
+        raise EnvelopeVerificationError(
+            "signature must be non-empty base64url",
+            reason=DenyReason.SIGNATURE_ENCODING_INVALID,
+        )
     padded = value + ("=" * ((4 - len(value) % 4) % 4))
     try:
         return base64.urlsafe_b64decode(padded.encode("ascii"))
     except Exception as exc:
-        raise EnvelopeVerificationError("invalid signature encoding") from exc
+        raise EnvelopeVerificationError(
+            "invalid signature encoding", reason=DenyReason.SIGNATURE_ENCODING_INVALID
+        ) from exc
 
 
 def load_ed25519_public_key(public_key_pem: bytes) -> Ed25519PublicKey:
     try:
         key = serialization.load_pem_public_key(public_key_pem)
     except (ValueError, TypeError) as exc:
-        raise EnvelopeVerificationError("invalid public key") from exc
+        raise EnvelopeVerificationError(
+            "invalid public key", reason=DenyReason.INVALID_PUBLIC_KEY
+        ) from exc
     if not isinstance(key, Ed25519PublicKey):
-        raise EnvelopeVerificationError("invalid public key")
+        raise EnvelopeVerificationError(
+            "invalid public key", reason=DenyReason.INVALID_PUBLIC_KEY
+        )
     return key
 
 
@@ -219,28 +249,45 @@ def _verify_ed25519_signature(signing_input: bytes, signature: str, public_key_p
 
 def _validate_static_fields(envelope: dict[str, Any]) -> None:
     if envelope["version"] != "v0":
-        raise EnvelopeVerificationError("unsupported version")
+        raise EnvelopeVerificationError(
+            "unsupported version", reason=DenyReason.UNSUPPORTED_VERSION
+        )
 
     if not UUID_V7_RE.match(envelope["message_id"]):
-        raise EnvelopeVerificationError("message_id must be UUIDv7")
+        raise EnvelopeVerificationError(
+            "message_id must be UUIDv7", reason=DenyReason.INVALID_MESSAGE_ID
+        )
 
     if not SPIFFE_ID_RE.match(envelope["sender_spiffe_id"]):
-        raise EnvelopeVerificationError("invalid sender_spiffe_id")
+        raise EnvelopeVerificationError(
+            "invalid sender_spiffe_id", reason=DenyReason.INVALID_SENDER_SPIFFE_ID
+        )
 
     if not SPIFFE_ID_RE.match(envelope["recipient_spiffe_id"]):
-        raise EnvelopeVerificationError("invalid recipient_spiffe_id")
+        raise EnvelopeVerificationError(
+            "invalid recipient_spiffe_id", reason=DenyReason.INVALID_RECIPIENT_SPIFFE_ID
+        )
 
     if not NONCE_RE.match(envelope["nonce"]):
-        raise EnvelopeVerificationError("invalid nonce format")
+        raise EnvelopeVerificationError(
+            "invalid nonce format", reason=DenyReason.INVALID_NONCE
+        )
 
     if not isinstance(envelope["kid"], str) or not KID_RE.match(envelope["kid"]):
-        raise EnvelopeVerificationError("invalid kid format")
+        raise EnvelopeVerificationError(
+            "invalid kid format", reason=DenyReason.INVALID_KID
+        )
 
     if not HEX_SHA256_RE.match(envelope["payload_digest"]):
-        raise EnvelopeVerificationError("payload_digest must be hex sha256")
+        raise EnvelopeVerificationError(
+            "payload_digest must be hex sha256",
+            reason=DenyReason.INVALID_PAYLOAD_DIGEST,
+        )
 
     if envelope["alg"] not in ALLOWED_ALGORITHMS:
-        raise EnvelopeVerificationError("algorithm not allowed")
+        raise EnvelopeVerificationError(
+            "algorithm not allowed", reason=DenyReason.DISALLOWED_ALGORITHM
+        )
 
 
 def verify_envelope(
@@ -266,12 +313,13 @@ def verify_envelope(
         "issuer_kid": "",
     }
 
-    def _emit(outcome: str, reason: str) -> None:
+    def _emit(outcome: str, reason: str, *, reason_code: str = "") -> None:
         if audit_sink is not None:
             audit_sink.record(
                 event_type="envelope.verify",
                 outcome=outcome,
                 reason=reason,
+                reason_code=reason_code,
                 **audit_ctx,
             )
 
@@ -296,7 +344,8 @@ def verify_envelope(
         missing = sorted(required - set(envelope))
         if missing:
             raise EnvelopeVerificationError(
-                f"missing required fields: {','.join(missing)}"
+                f"missing required fields: {','.join(missing)}",
+                reason=DenyReason.MISSING_REQUIRED_FIELD,
             )
 
         _validate_static_fields(envelope)
@@ -306,17 +355,28 @@ def verify_envelope(
         current = now.astimezone(UTC) if now else datetime.now(UTC)
 
         if issued_at - current > config.max_clock_skew:
-            raise EnvelopeVerificationError("issued_at in future beyond skew")
+            raise EnvelopeVerificationError(
+                "issued_at in future beyond skew", reason=DenyReason.ISSUED_AT_IN_FUTURE
+            )
         if current - expires_at > config.max_clock_skew:
-            raise EnvelopeVerificationError("envelope expired")
+            raise EnvelopeVerificationError(
+                "envelope expired", reason=DenyReason.ENVELOPE_EXPIRED
+            )
         if expires_at <= issued_at:
-            raise EnvelopeVerificationError("invalid validity window")
+            raise EnvelopeVerificationError(
+                "invalid validity window", reason=DenyReason.INVALID_VALIDITY_WINDOW
+            )
         if expires_at - issued_at > config.max_envelope_ttl:
-            raise EnvelopeVerificationError("envelope ttl exceeds maximum")
+            raise EnvelopeVerificationError(
+                "envelope ttl exceeds maximum",
+                reason=DenyReason.ENVELOPE_TTL_EXCEEDED,
+            )
 
         computed_digest = _digest_payload(envelope["payload"])
         if computed_digest != envelope["payload_digest"]:
-            raise EnvelopeVerificationError("payload digest mismatch")
+            raise EnvelopeVerificationError(
+                "payload digest mismatch", reason=DenyReason.PAYLOAD_DIGEST_MISMATCH
+            )
 
         signing_input = canonicalize_envelope_for_signing(envelope)
         public_key_pem = key_lookup(envelope["kid"])
@@ -326,7 +386,9 @@ def verify_envelope(
             envelope["signature"],
             public_key_pem,
         ):
-            raise EnvelopeVerificationError("signature invalid")
+            raise EnvelopeVerificationError(
+                "signature invalid", reason=DenyReason.SIGNATURE_INVALID
+            )
 
         claims = verify_capability_token(
             envelope["capability_token"],
@@ -344,10 +406,12 @@ def verify_envelope(
         nonce = envelope["nonce"]
         ttl = max(expires_at - current, timedelta(seconds=0))
         if not replay_cache.mark_if_new(sender, nonce, ttl):
-            raise EnvelopeVerificationError("replay detected")
+            raise EnvelopeVerificationError(
+                "replay detected", reason=DenyReason.REPLAY_DETECTED
+            )
     except EnvelopeVerificationError as exc:
-        _emit("deny", str(exc))
+        _emit("deny", str(exc), reason_code=exc.reason_code)
         raise
 
-    _emit("allow", "ok")
+    _emit("allow", "ok", reason_code="ok")
     return claims

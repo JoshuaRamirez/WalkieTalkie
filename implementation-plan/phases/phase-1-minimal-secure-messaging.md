@@ -123,11 +123,26 @@ Enable authenticated peer discovery and request/response execution with anti-rep
 
 ### B3. Deterministic Error Contracts
 - Security-deny responses are machine-readable and auditable.
-- No ambiguous errors that could cause insecure fallback.
+  **Landed (v0):** `security-foundations/envelope/deny_reason.py` defines the
+  `DenyReason` enum; every `EnvelopeVerificationError` raised by the
+  verification path carries a stable `reason_code` (also embedded in
+  `AuditEvent.reason_code`). Identifiers are immutable once shipped — see
+  the stability contract in the module docstring.
+- No ambiguous errors that could cause insecure fallback. **Landed (v0):**
+  the verifier exclusively raises `EnvelopeVerificationError`; no validation
+  path returns a partial-success result. Callers that want a structured deny
+  use `Verifier.try_verify` which returns `VerificationResult(ok, reason, claims)`.
 
 **Acceptance Criteria**
 - Replay under reorder/partition simulation is denied.
+  **Landed:** `test_sqlite_replay_cache_detects_replay_across_instances` covers
+  the cross-process case; `test_replay_fails` covers the in-process case; both
+  carry `reason_code = replay_detected`.
 - No validation path permits bypass of signature verification.
+  **Landed:** signature verification is unconditional and unguarded;
+  capability validation, replay reservation, and audit emission all occur
+  *after* the envelope signature check. `test_invalid_signature_does_not_reserve_nonce`
+  pins the ordering invariant.
 
 ---
 

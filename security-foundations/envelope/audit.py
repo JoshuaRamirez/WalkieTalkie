@@ -55,6 +55,7 @@ _HASHED_FIELDS = (
     "envelope_kid",
     "issuer_iss",
     "issuer_kid",
+    "reason_code",
 )
 
 ALLOWED_OUTCOMES = ("allow", "deny")
@@ -78,6 +79,12 @@ class AuditEvent:
     issuer_kid: str
     prev_hash: str
     this_hash: str
+    # ``reason_code`` is the machine-readable counterpart to ``reason``; it
+    # carries a :class:`deny_reason.DenyReason` value (as a str) for events
+    # produced by the deterministic-error-contract path, or ``""`` for legacy
+    # events. Defaulted last so existing callers keep working; appended last in
+    # _HASHED_FIELDS so the hash chain extends cleanly.
+    reason_code: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -119,6 +126,7 @@ class AuditSink(ABC):
         envelope_kid: str = "",
         issuer_iss: str = "",
         issuer_kid: str = "",
+        reason_code: str = "",
         timestamp: datetime | None = None,
     ) -> AuditEvent:
         ts = (timestamp or datetime.now(UTC)).astimezone(UTC).isoformat().replace("+00:00", "Z")
@@ -134,6 +142,7 @@ class AuditSink(ABC):
             envelope_kid=envelope_kid,
             issuer_iss=issuer_iss,
             issuer_kid=issuer_kid,
+            reason_code=reason_code,
         )
         self._append(event)
         return event
@@ -199,7 +208,11 @@ class JsonlAuditSink(AuditSink):
                 line = line.strip()
                 if not line:
                     continue
-                events.append(AuditEvent(**json.loads(line)))
+                record = json.loads(line)
+                # ``reason_code`` was appended after the initial ship; tolerate
+                # legacy lines that lack it so old chains still load.
+                record.setdefault("reason_code", "")
+                events.append(AuditEvent(**record))
         return tuple(events)
 
 
