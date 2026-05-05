@@ -34,6 +34,14 @@ the approved plan.
   is exposed on the exception and embedded in audit events for machine-readable
   matching. New deny paths get new identifiers; shipped values are never
   renamed or repurposed.
+
+## Frozen contracts
+
+The Phase 1 §6 freeze for envelope, capability token, audit/policy decision
+log, and security error response is documented in
+[`contracts/`](./contracts/). Each contract records artifact, backwards-
+compatibility policy, schema test vectors, and change control. The discovery
+record schema is deferred until Phase 1 Track A starts.
 - **Hash-chained audit events v0** (`envelope/audit.py`): every
   `verify_envelope` call records exactly one event (allow or deny) with the
   envelope identifiers and the rejection reason. `InMemoryAuditSink` and
