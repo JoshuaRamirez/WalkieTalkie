@@ -41,6 +41,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from cryptography.exceptions import InvalidSignature
+from deny_reason import DenyReason
 from verify_envelope import (
     HEX_SHA256_RE,
     KID_RE,
@@ -75,8 +76,10 @@ class CapabilityClaims:
     issuer_kid: str
 
 
-def _err(reason: str) -> EnvelopeVerificationError:
-    return EnvelopeVerificationError(f"capability token: {reason}")
+def _err(reason_code: DenyReason, message: str) -> EnvelopeVerificationError:
+    return EnvelopeVerificationError(
+        f"capability token: {message}", reason=reason_code
+    )
 
 
 def parse_jwt(token: str) -> tuple[dict[str, Any], dict[str, Any], bytes, bytes]:
@@ -86,13 +89,16 @@ def parse_jwt(token: str) -> tuple[dict[str, Any], dict[str, Any], bytes, bytes]
     objects. Does not verify the signature or any claim semantics.
     """
     if not isinstance(token, str) or not token:
-        raise _err("missing token")
+        raise _err(DenyReason.CAP_MISSING, "missing token")
     if len(token.encode("utf-8")) > MAX_TOKEN_BYTES:
-        raise _err(f"exceeds max size of {MAX_TOKEN_BYTES} bytes")
+        raise _err(
+            DenyReason.CAP_OVERSIZED,
+            f"exceeds max size of {MAX_TOKEN_BYTES} bytes",
+        )
 
     parts = token.split(".")
     if len(parts) != 3:
-        raise _err("must have three base64url segments")
+        raise _err(DenyReason.CAP_MALFORMED, "must have three base64url segments")
 
     header_b64, payload_b64, signature_b64 = parts
     try:
@@ -100,18 +106,18 @@ def parse_jwt(token: str) -> tuple[dict[str, Any], dict[str, Any], bytes, bytes]
         payload_bytes = decode_base64url(payload_b64)
         signature_bytes = decode_base64url(signature_b64)
     except EnvelopeVerificationError as exc:
-        raise _err("invalid base64url segment") from exc
+        raise _err(DenyReason.CAP_MALFORMED, "invalid base64url segment") from exc
 
     try:
         header = json.loads(header_bytes)
         payload = json.loads(payload_bytes)
     except (ValueError, TypeError) as exc:
-        raise _err("segment is not valid JSON") from exc
+        raise _err(DenyReason.CAP_MALFORMED, "segment is not valid JSON") from exc
 
     if not isinstance(header, dict):
-        raise _err("header is not a JSON object")
+        raise _err(DenyReason.CAP_MALFORMED, "header is not a JSON object")
     if not isinstance(payload, dict):
-        raise _err("payload is not a JSON object")
+        raise _err(DenyReason.CAP_MALFORMED, "payload is not a JSON object")
 
     signing_input = (header_b64 + "." + payload_b64).encode("ascii")
     return header, payload, signing_input, signature_bytes
@@ -122,18 +128,21 @@ def _check_header(header: dict[str, Any]) -> str:
     typ = header.get("typ")
     kid = header.get("kid")
     if alg != EXPECTED_ALG:
-        raise _err(f"alg must be {EXPECTED_ALG!r}")
+        raise _err(DenyReason.CAP_WRONG_ALG, f"alg must be {EXPECTED_ALG!r}")
     if typ != EXPECTED_TYP:
-        raise _err(f"typ must be {EXPECTED_TYP!r}")
+        raise _err(DenyReason.CAP_WRONG_TYP, f"typ must be {EXPECTED_TYP!r}")
     if not isinstance(kid, str) or not KID_RE.match(kid):
-        raise _err("invalid kid format")
+        raise _err(DenyReason.CAP_INVALID_KID, "invalid kid format")
     return kid
 
 
 def _extract_claims(payload: dict[str, Any], *, issuer_kid: str) -> CapabilityClaims:
     missing = [c for c in _REQUIRED_CLAIMS if c not in payload]
     if missing:
-        raise _err(f"missing required claims: {','.join(missing)}")
+        raise _err(
+            DenyReason.CAP_MISSING_CLAIM,
+            f"missing required claims: {','.join(missing)}",
+        )
 
     iss = payload["iss"]
     sub = payload["sub"]
@@ -146,23 +155,26 @@ def _extract_claims(payload: dict[str, Any], *, issuer_kid: str) -> CapabilityCl
     cnf = payload["cnf"]
 
     if not isinstance(iss, str) or not SPIFFE_ID_RE.match(iss):
-        raise _err("invalid iss format")
+        raise _err(DenyReason.CAP_INVALID_CLAIM, "invalid iss format")
     if not isinstance(sub, str) or not SPIFFE_ID_RE.match(sub):
-        raise _err("invalid sub format")
+        raise _err(DenyReason.CAP_INVALID_CLAIM, "invalid sub format")
     if not isinstance(aud, str) or not SPIFFE_ID_RE.match(aud):
-        raise _err("invalid aud format")
+        raise _err(DenyReason.CAP_INVALID_CLAIM, "invalid aud format")
     if not isinstance(scope, str) or not scope:
-        raise _err("scope must be a non-empty string")
+        raise _err(DenyReason.CAP_INVALID_CLAIM, "scope must be a non-empty string")
     for name, value in (("iat", iat), ("nbf", nbf), ("exp", exp)):
         if not isinstance(value, int) or isinstance(value, bool):
-            raise _err(f"{name} must be a NumericDate (int seconds since epoch)")
+            raise _err(
+                DenyReason.CAP_INVALID_CLAIM,
+                f"{name} must be a NumericDate (int seconds since epoch)",
+            )
     if not isinstance(jti, str) or not UUID_V7_RE.match(jti):
-        raise _err("jti must be UUIDv7")
+        raise _err(DenyReason.CAP_INVALID_CLAIM, "jti must be UUIDv7")
     if not isinstance(cnf, dict) or "envelope_digest" not in cnf:
-        raise _err("cnf.envelope_digest is required")
+        raise _err(DenyReason.CAP_INVALID_CLAIM, "cnf.envelope_digest is required")
     envelope_digest = cnf["envelope_digest"]
     if not isinstance(envelope_digest, str) or not HEX_SHA256_RE.match(envelope_digest):
-        raise _err("cnf.envelope_digest must be hex sha256")
+        raise _err(DenyReason.CAP_INVALID_CLAIM, "cnf.envelope_digest must be hex sha256")
 
     return CapabilityClaims(
         iss=iss,
@@ -194,38 +206,44 @@ def verify_capability_token(
     claims = _extract_claims(payload, issuer_kid=issuer_kid)
 
     if claims.sub != envelope["sender_spiffe_id"]:
-        raise _err("sub does not match envelope sender")
+        raise _err(DenyReason.CAP_SUB_MISMATCH, "sub does not match envelope sender")
     if claims.aud != envelope["recipient_spiffe_id"]:
-        raise _err("aud does not match envelope recipient")
+        raise _err(DenyReason.CAP_AUD_MISMATCH, "aud does not match envelope recipient")
     if claims.scope != envelope["purpose_of_use"]:
-        raise _err("scope does not match envelope purpose_of_use")
+        raise _err(
+            DenyReason.CAP_SCOPE_MISMATCH,
+            "scope does not match envelope purpose_of_use",
+        )
     if claims.envelope_digest != envelope["payload_digest"]:
-        raise _err("cnf.envelope_digest does not match envelope payload_digest")
+        raise _err(
+            DenyReason.CAP_DIGEST_MISMATCH,
+            "cnf.envelope_digest does not match envelope payload_digest",
+        )
 
     if claims.iat > claims.nbf:
-        raise _err("iat must be <= nbf")
+        raise _err(DenyReason.CAP_IAT_AFTER_NBF, "iat must be <= nbf")
     nbf_dt = datetime.fromtimestamp(claims.nbf, tz=UTC)
     exp_dt = datetime.fromtimestamp(claims.exp, tz=UTC)
     if nbf_dt - current > max_clock_skew:
-        raise _err("nbf in future beyond skew")
+        raise _err(DenyReason.CAP_NOT_YET_VALID, "nbf in future beyond skew")
     if current - exp_dt > max_clock_skew:
-        raise _err("token expired")
+        raise _err(DenyReason.CAP_EXPIRED, "token expired")
     if exp_dt <= nbf_dt:
-        raise _err("invalid validity window")
+        raise _err(DenyReason.CAP_INVALID_VALIDITY_WINDOW, "invalid validity window")
     if exp_dt - nbf_dt > max_capability_ttl:
-        raise _err("ttl exceeds maximum")
+        raise _err(DenyReason.CAP_TTL_EXCEEDED, "ttl exceeds maximum")
 
     pem = issuer_lookup(claims.iss, issuer_kid)
     issuer_key = load_ed25519_public_key(pem)
     try:
         issuer_key.verify(signature_bytes, signing_input)
     except InvalidSignature as exc:
-        raise _err("signature invalid") from exc
+        raise _err(DenyReason.CAP_SIGNATURE_INVALID, "signature invalid") from exc
 
     # Revocation is consulted last so we only ask the revocation list about
     # cryptographically valid tokens. Otherwise an attacker could probe the
     # list with forged jti values and learn which tokens have been revoked.
     if revocation_list is not None and revocation_list.is_revoked(claims.jti):
-        raise _err("revoked")
+        raise _err(DenyReason.CAP_REVOKED, "revoked")
 
     return claims

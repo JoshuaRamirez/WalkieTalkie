@@ -31,6 +31,7 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from deny_reason import DenyReason
 from verify_envelope import (
     KID_RE,
     SPIFFE_ID_RE,
@@ -115,10 +116,12 @@ class IssuerTrustStore:
         entry = self._keys.get((iss, kid))
         if entry is None:
             raise EnvelopeVerificationError(
-                f"unknown issuer key: iss={iss}, kid={kid}"
+                f"unknown issuer key: iss={iss}, kid={kid}",
+                reason=DenyReason.UNKNOWN_ISSUER_KEY,
             )
         if entry.not_after is not None and datetime.now(UTC) > entry.not_after:
             raise EnvelopeVerificationError(
-                f"issuer key expired: iss={iss}, kid={kid}"
+                f"issuer key expired: iss={iss}, kid={kid}",
+                reason=DenyReason.ISSUER_KEY_EXPIRED,
             )
         return entry.pem

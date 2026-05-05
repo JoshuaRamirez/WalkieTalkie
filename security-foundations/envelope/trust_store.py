@@ -22,6 +22,7 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from deny_reason import DenyReason
 from verify_envelope import EnvelopeVerificationError, parse_rfc3339
 
 
@@ -104,7 +105,11 @@ class FileSystemTrustStore:
     def __call__(self, kid: str) -> bytes:
         entry = self._keys.get(kid)
         if entry is None:
-            raise EnvelopeVerificationError(f"unknown kid: {kid}")
+            raise EnvelopeVerificationError(
+                f"unknown kid: {kid}", reason=DenyReason.UNKNOWN_KID
+            )
         if entry.not_after is not None and datetime.now(UTC) > entry.not_after:
-            raise EnvelopeVerificationError(f"key expired: {kid}")
+            raise EnvelopeVerificationError(
+                f"key expired: {kid}", reason=DenyReason.KEY_EXPIRED
+            )
         return entry.pem
