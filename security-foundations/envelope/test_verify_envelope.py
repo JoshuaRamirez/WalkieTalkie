@@ -301,7 +301,9 @@ class VerifyEnvelopeTests(unittest.TestCase):
         with self.assertRaisesRegex(EnvelopeVerificationError, "envelope_digest does not match"):
             self._verify(envelope, now)
 
-    def test_audit_sink_records_allow_event_on_success(self):
+    def test_audit_sink_records_two_allow_events_on_success(self):
+        # Successful verify emits one capability.verify allow followed by one
+        # envelope.verify allow.
         envelope, now = self._valid_envelope()
         sink = InMemoryAuditSink()
         verify_envelope(
@@ -312,19 +314,21 @@ class VerifyEnvelopeTests(unittest.TestCase):
             now=now,
             audit_sink=sink,
         )
-        self.assertEqual(len(sink.events), 1)
-        event = sink.events[0]
-        self.assertEqual(event.event_type, "envelope.verify")
-        self.assertEqual(event.outcome, "allow")
-        self.assertEqual(event.reason, "ok")
-        self.assertEqual(event.message_id, envelope["message_id"])
-        self.assertEqual(event.sender, _SENDER)
-        self.assertEqual(event.recipient, _RECIPIENT)
-        self.assertEqual(event.envelope_kid, "dev-kid-1")
-        self.assertEqual(event.issuer_iss, _ISSUER_IDENTITY)
-        self.assertEqual(event.issuer_kid, _ISSUER_KID)
+        self.assertEqual(len(sink.events), 2)
+        cap, env = sink.events
+        self.assertEqual(cap.event_type, "capability.verify")
+        self.assertEqual(cap.outcome, "allow")
+        self.assertEqual(cap.artifact_version, "wt-cap+jwt")
+        self.assertEqual(cap.issuer_iss, _ISSUER_IDENTITY)
+        self.assertEqual(cap.issuer_kid, _ISSUER_KID)
+        self.assertEqual(env.event_type, "envelope.verify")
+        self.assertEqual(env.outcome, "allow")
+        self.assertEqual(env.artifact_version, "envelope/v0")
+        self.assertEqual(env.message_id, envelope["message_id"])
 
-    def test_audit_sink_records_deny_event_on_failure(self):
+    def test_audit_pre_capability_failure_only_emits_envelope_event(self):
+        # payload_digest_mismatch happens before the capability check, so only
+        # envelope.verify deny is recorded.
         envelope, now = self._valid_envelope()
         envelope["payload"]["args"]["target"] = "tampered"
         sink = InMemoryAuditSink()
@@ -339,15 +343,45 @@ class VerifyEnvelopeTests(unittest.TestCase):
             )
         self.assertEqual(len(sink.events), 1)
         event = sink.events[0]
+        self.assertEqual(event.event_type, "envelope.verify")
         self.assertEqual(event.outcome, "deny")
         self.assertEqual(event.reason, "payload digest mismatch")
-        self.assertEqual(event.message_id, envelope["message_id"])
+        self.assertEqual(event.artifact_version, "envelope/v0")
+
+    def test_audit_capability_failure_emits_both_deny_events(self):
+        # Cap-level deny (here: tampered cap_token bytes) emits a
+        # capability.verify deny then an envelope.verify deny carrying the
+        # same reason_code.
+        envelope, now = self._valid_envelope()
+        envelope["capability_token"] = envelope["capability_token"][:-4] + "XXXX"
+        unsigned = {k: v for k, v in envelope.items() if k != "signature"}
+        envelope["signature"] = sign(
+            canonicalize_envelope_for_signing({**unsigned, "signature": ""}),
+            self.signer_priv_pem,
+        )
+        sink = InMemoryAuditSink()
+        with self.assertRaises(EnvelopeVerificationError):
+            verify_envelope(
+                envelope,
+                key_lookup=lambda kid: self.signer_pub_pem,
+                issuer_lookup=self.issuer_lookup,
+                replay_cache=InMemoryReplayCache(),
+                now=now,
+                audit_sink=sink,
+            )
+        self.assertEqual(len(sink.events), 2)
+        cap, env = sink.events
+        self.assertEqual(cap.event_type, "capability.verify")
+        self.assertEqual(cap.outcome, "deny")
+        self.assertEqual(env.event_type, "envelope.verify")
+        self.assertEqual(env.outcome, "deny")
+        self.assertEqual(cap.reason_code, env.reason_code)
 
     def test_audit_chain_holds_across_verifications(self):
         envelope, now = self._valid_envelope()
         sink = InMemoryAuditSink()
 
-        # One success, one tampered failure, one success — each must chain.
+        # Scenario 1: success — emits cap.allow + env.allow.
         verify_envelope(
             envelope,
             key_lookup=lambda kid: self.signer_pub_pem,
@@ -357,6 +391,7 @@ class VerifyEnvelopeTests(unittest.TestCase):
             audit_sink=sink,
         )
 
+        # Scenario 2: pre-cap deny (digest mismatch) — emits env.deny only.
         bad = dict(envelope)
         bad["payload"] = {"tool": "ping", "args": {"target": "tampered"}}
         with self.assertRaises(EnvelopeVerificationError):
@@ -369,6 +404,7 @@ class VerifyEnvelopeTests(unittest.TestCase):
                 audit_sink=sink,
             )
 
+        # Scenario 3: success again — cap.allow + env.allow.
         envelope2, _ = self._valid_envelope()
         envelope2["nonce"] = "nonce-000000000002"
         envelope2["message_id"] = "0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c3"
@@ -397,8 +433,11 @@ class VerifyEnvelopeTests(unittest.TestCase):
             audit_sink=sink,
         )
 
-        self.assertEqual(len(sink.events), 3)
-        self.assertEqual([e.outcome for e in sink.events], ["allow", "deny", "allow"])
+        # Total: 2 + 1 + 2 = 5 events; the envelope-level outcome trail is
+        # allow/deny/allow.
+        self.assertEqual(len(sink.events), 5)
+        envelope_events = [e for e in sink.events if e.event_type == "envelope.verify"]
+        self.assertEqual([e.outcome for e in envelope_events], ["allow", "deny", "allow"])
         verify_chain(sink.events)
 
     def test_envelope_with_revoked_token_rejected(self):

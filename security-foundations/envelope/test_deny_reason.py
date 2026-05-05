@@ -278,6 +278,7 @@ class EnvelopeReasonCodeTests(unittest.TestCase):
         self.assertIs(ctx.exception.reason, DenyReason.REPLAY_DETECTED)
 
     def test_audit_event_carries_reason_code_on_deny(self):
+        # Pre-cap deny: only envelope.verify is emitted.
         envelope, now = self._valid_envelope()
         envelope["payload"]["args"]["target"] = "tampered"
         sink = InMemoryAuditSink()
@@ -291,10 +292,12 @@ class EnvelopeReasonCodeTests(unittest.TestCase):
                 audit_sink=sink,
             )
         self.assertEqual(len(sink.events), 1)
+        self.assertEqual(sink.events[0].event_type, "envelope.verify")
         self.assertEqual(sink.events[0].outcome, "deny")
         self.assertEqual(
             sink.events[0].reason_code, DenyReason.PAYLOAD_DIGEST_MISMATCH.value
         )
+        self.assertEqual(sink.events[0].artifact_version, "envelope/v0")
 
     def test_audit_event_reason_code_on_allow(self):
         envelope, now = self._valid_envelope()
@@ -307,7 +310,11 @@ class EnvelopeReasonCodeTests(unittest.TestCase):
             now=now,
             audit_sink=sink,
         )
-        self.assertEqual(sink.events[0].reason_code, "ok")
+        # Successful verify emits cap.verify allow then envelope.verify allow.
+        self.assertEqual([e.event_type for e in sink.events], ["capability.verify", "envelope.verify"])
+        self.assertEqual([e.reason_code for e in sink.events], ["ok", "ok"])
+        self.assertEqual(sink.events[0].artifact_version, "wt-cap+jwt")
+        self.assertEqual(sink.events[1].artifact_version, "envelope/v0")
 
     def test_unknown_issuer_kid_reason(self):
         envelope, now = self._valid_envelope()

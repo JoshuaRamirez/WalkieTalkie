@@ -157,8 +157,11 @@ class VerifierTests(unittest.TestCase):
         verifier = self._make_verifier(audit_sink=sink)
         envelope, now = self._valid_envelope()
         verifier.verify(envelope, now=now)
-        self.assertEqual(len(sink.events), 1)
-        self.assertEqual(sink.events[0].outcome, "allow")
+        # Successful verify emits two checkpoints: capability.verify and
+        # envelope.verify, both allow.
+        self.assertEqual(len(sink.events), 2)
+        self.assertEqual([e.event_type for e in sink.events], ["capability.verify", "envelope.verify"])
+        self.assertEqual([e.outcome for e in sink.events], ["allow", "allow"])
 
     def test_replay_state_shared_across_calls(self):
         envelope, now = self._valid_envelope()
