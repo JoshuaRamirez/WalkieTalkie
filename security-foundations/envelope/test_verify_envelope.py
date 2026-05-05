@@ -401,6 +401,49 @@ class VerifyEnvelopeTests(unittest.TestCase):
         self.assertEqual([e.outcome for e in sink.events], ["allow", "deny", "allow"])
         verify_chain(sink.events)
 
+    def test_envelope_with_revoked_token_rejected(self):
+        from revocation_list import InMemoryRevocationList
+
+        envelope, now = self._valid_envelope()
+        # mint_capability_token bakes this jti into the cap token.
+        rl = InMemoryRevocationList(["0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c2"])
+        with self.assertRaisesRegex(EnvelopeVerificationError, "revoked"):
+            verify_envelope(
+                envelope,
+                key_lookup=lambda kid: self.signer_pub_pem,
+                issuer_lookup=self.issuer_lookup,
+                replay_cache=InMemoryReplayCache(),
+                now=now,
+                revocation_list=rl,
+            )
+
+    def test_envelope_revocation_failure_does_not_reserve_nonce(self):
+        from revocation_list import InMemoryRevocationList
+
+        envelope, now = self._valid_envelope()
+        replay_cache = InMemoryReplayCache()
+        rl = InMemoryRevocationList(["0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c2"])
+
+        with self.assertRaises(EnvelopeVerificationError):
+            verify_envelope(
+                envelope,
+                key_lookup=lambda kid: self.signer_pub_pem,
+                issuer_lookup=self.issuer_lookup,
+                replay_cache=replay_cache,
+                now=now,
+                revocation_list=rl,
+            )
+
+        # Same envelope must still verify when revocation is dropped — proves
+        # the nonce was NOT reserved during the revoked attempt.
+        verify_envelope(
+            envelope,
+            key_lookup=lambda kid: self.signer_pub_pem,
+            issuer_lookup=self.issuer_lookup,
+            replay_cache=replay_cache,
+            now=now,
+        )
+
 
 class CanonicalizationSemanticsTests(unittest.TestCase):
     def test_int_and_float_collide_under_jcs(self):

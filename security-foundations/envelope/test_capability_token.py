@@ -85,7 +85,7 @@ class CapabilityTokenTests(unittest.TestCase):
         self.max_ttl = timedelta(minutes=5)
         self.lookup = lambda iss, kid: self.pem
 
-    def _verify(self, token: str) -> CapabilityClaims:
+    def _verify(self, token: str, *, revocation_list=None) -> CapabilityClaims:
         return verify_capability_token(
             token,
             envelope=self.envelope,
@@ -93,6 +93,7 @@ class CapabilityTokenTests(unittest.TestCase):
             current=self.now,
             max_clock_skew=self.skew,
             max_capability_ttl=self.max_ttl,
+            revocation_list=revocation_list,
         )
 
     def test_well_formed_token_passes(self):
@@ -241,6 +242,35 @@ class CapabilityTokenTests(unittest.TestCase):
         bad_sig = _b64u(b"\x00" * 64)
         with self.assertRaisesRegex(EnvelopeVerificationError, "signature invalid"):
             self._verify(f"{h}.{p}.{bad_sig}")
+
+    def test_revoked_jti_rejected(self):
+        from revocation_list import InMemoryRevocationList
+
+        token = _make_token(private_key=self.priv)
+        # Match the jti baked into _make_token's default payload.
+        rl = InMemoryRevocationList(["0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c2"])
+        with self.assertRaisesRegex(EnvelopeVerificationError, "revoked"):
+            self._verify(token, revocation_list=rl)
+
+    def test_revocation_only_consulted_when_provided(self):
+        # Default _verify call (no revocation_list) ignores any revocation
+        # state — confirms backward compat and opt-in semantics.
+        token = _make_token(private_key=self.priv)
+        self._verify(token)  # no revocation_list, no error
+
+    def test_revocation_runs_after_signature_verification(self):
+        # A revoked jti combined with a tampered signature must report the
+        # signature failure, not the revocation. This is the intended order:
+        # we never consult the revocation list for unauthenticated tokens
+        # (avoids leaking which jti values are revoked to forgery attempts).
+        from revocation_list import InMemoryRevocationList
+
+        token = _make_token(private_key=self.priv)
+        h, p, _ = token.split(".")
+        bad_sig = _b64u(b"\x00" * 64)
+        rl = InMemoryRevocationList(["0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c2"])
+        with self.assertRaisesRegex(EnvelopeVerificationError, "signature invalid"):
+            self._verify(f"{h}.{p}.{bad_sig}", revocation_list=rl)
 
     def test_signed_with_unrelated_key_rejected(self):
         other, _ = _ed25519_keypair()

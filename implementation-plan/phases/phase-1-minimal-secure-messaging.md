@@ -47,8 +47,13 @@ Enable authenticated peer discovery and request/response execution with anti-rep
 - Capability validator middleware. **Landed (v0):** RFC 7519 JWT (EdDSA) with
   `cnf.envelope_digest` binding, separate `IssuerTrustStore`, default 5-minute
   TTL. See `security-foundations/envelope/capability_token.py`.
-- Capability revocation API + cache invalidation channel. **Not yet landed;**
-  v0 relies on TTL only.
+- Capability revocation API + cache invalidation channel.
+  **Local revocation list landed (v0):** `RevocationList` interface with
+  `InMemoryRevocationList` and `FileBackedRevocationList` in
+  `security-foundations/envelope/revocation_list.py`. The validator rejects
+  revoked tokens with a distinct `capability token: revoked` reason. The
+  *cache invalidation channel* (cross-process / cross-node propagation) is
+  deferred until a transport choice exists.
 
 ### D1.4 Audit and Trace Enhancements
 - Complete request/response correlation. **Not yet landed.**
@@ -135,7 +140,13 @@ Enable authenticated peer discovery and request/response execution with anti-rep
 
 ### C2. Capability Validation Rules
 - Reject expired, out-of-scope, wrong-audience, or revoked tokens.
+  **All four arms landed (v0):** `verify_capability_token` rejects each with
+  a distinct reason string (`token expired`, `scope does not match envelope
+  purpose_of_use`, `aud does not match envelope recipient`, `revoked`).
+  Revocation requires a `RevocationList` to be passed; absent that the other
+  three arms still apply.
 - Deny on missing delegation metadata (if delegation present).
+  **Not yet applicable;** delegation is a Phase 2 concern (D2.1).
 
 ### C3. Policy Bundle Hygiene
 - Signed policy bundles.

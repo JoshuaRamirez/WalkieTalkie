@@ -167,6 +167,21 @@ class VerifierTests(unittest.TestCase):
         with self.assertRaisesRegex(EnvelopeVerificationError, "replay"):
             verifier.verify(envelope, now=now)
 
+    def test_verifier_rejects_revoked_token(self):
+        from revocation_list import InMemoryRevocationList
+
+        envelope, now = self._valid_envelope()
+        rl = InMemoryRevocationList(["0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c2"])
+        verifier = Verifier(
+            key_lookup=lambda kid: self.signer_pub,
+            issuer_lookup=self._issuer_lookup,
+            replay_cache=InMemoryReplayCache(),
+            revocation_list=rl,
+        )
+        result = verifier.try_verify(envelope, now=now)
+        self.assertFalse(result.ok)
+        self.assertIn("revoked", result.reason)
+
 
 if __name__ == "__main__":
     unittest.main()

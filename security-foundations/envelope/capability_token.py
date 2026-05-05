@@ -17,7 +17,7 @@ Payload claims (all required)::
     iat   NumericDate (seconds since epoch)
     nbf   NumericDate
     exp   NumericDate
-    jti   UUIDv7 — reserved for future revocation
+    jti   UUIDv7 — consulted against an optional revocation list
     cnf   {"envelope_digest": "<hex sha256>"} — must equal
           envelope.payload_digest, binding the token to one specific payload
 
@@ -27,7 +27,6 @@ Signature is detached EdDSA over the ASCII bytes
 Out of scope for v0
 -------------------
 - Token issuance API.
-- Revocation list (``jti`` is parsed but not consulted).
 - ``resource`` claim and structured action/resource binding (deferred to v1).
 - Proof-of-possession via ``cnf.jwk``. v0 is bearer; a leaked token grants the
   same authorization for at most ``max_capability_ttl`` (5 minutes by default).
@@ -39,7 +38,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from cryptography.exceptions import InvalidSignature
 from verify_envelope import (
@@ -51,6 +50,9 @@ from verify_envelope import (
     decode_base64url,
     load_ed25519_public_key,
 )
+
+if TYPE_CHECKING:
+    from revocation_list import RevocationList
 
 MAX_TOKEN_BYTES = 4096
 EXPECTED_TYP = "wt-cap+jwt"
@@ -184,6 +186,7 @@ def verify_capability_token(
     current: datetime,
     max_clock_skew: timedelta,
     max_capability_ttl: timedelta,
+    revocation_list: RevocationList | None = None,
 ) -> CapabilityClaims:
     """Full validation. Raises EnvelopeVerificationError on any failure."""
     header, payload, signing_input, signature_bytes = parse_jwt(token)
@@ -218,5 +221,11 @@ def verify_capability_token(
         issuer_key.verify(signature_bytes, signing_input)
     except InvalidSignature as exc:
         raise _err("signature invalid") from exc
+
+    # Revocation is consulted last so we only ask the revocation list about
+    # cryptographically valid tokens. Otherwise an attacker could probe the
+    # list with forged jti values and learn which tokens have been revoked.
+    if revocation_list is not None and revocation_list.is_revoked(claims.jti):
+        raise _err("revoked")
 
     return claims

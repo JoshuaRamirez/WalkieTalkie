@@ -32,6 +32,7 @@ from verify_envelope import (
 
 if TYPE_CHECKING:
     from capability_token import CapabilityClaims
+    from revocation_list import RevocationList
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,7 @@ class Verifier:
     replay_cache: ReplayCache
     config: VerificationConfig = DEFAULT_CONFIG
     audit_sink: AuditSink | None = None
+    revocation_list: RevocationList | None = None
 
     def verify(self, envelope: dict, *, now: datetime | None = None) -> CapabilityClaims:
         return verify_envelope(
@@ -58,6 +60,7 @@ class Verifier:
             config=self.config,
             now=now,
             audit_sink=self.audit_sink,
+            revocation_list=self.revocation_list,
         )
 
     def try_verify(self, envelope: dict, *, now: datetime | None = None) -> VerificationResult:
