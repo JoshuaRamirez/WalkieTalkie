@@ -24,6 +24,11 @@ the approved plan.
   so envelope-signing keys cannot be used to mint tokens. `CapabilityIssuer`
   validates `iss`/`kid`/`ttl` at construction and auto-generates UUIDv7 `jti`
   values; `generate_uuidv7` is a small RFC 9562 implementation.
+- **Revocation list v0** (`envelope/revocation_list.py`): `InMemoryRevocationList`
+  and `FileBackedRevocationList` (append-only JSONL with an `integrity_hash()`
+  for tamper detection). The validator consults the list *after* signature
+  verification so an attacker forging a token with a guessed `jti` cannot
+  probe the list. Distributed cache invalidation remains out of scope for v0.
 - **Hash-chained audit events v0** (`envelope/audit.py`): every
   `verify_envelope` call records exactly one event (allow or deny) with the
   envelope identifiers and the rejection reason. `InMemoryAuditSink` and

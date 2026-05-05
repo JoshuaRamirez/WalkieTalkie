@@ -17,6 +17,7 @@ from audit import AuditSink
 
 if TYPE_CHECKING:
     from capability_token import CapabilityClaims
+    from revocation_list import RevocationList
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -251,6 +252,7 @@ def verify_envelope(
     config: VerificationConfig = DEFAULT_CONFIG,
     now: datetime | None = None,
     audit_sink: AuditSink | None = None,
+    revocation_list: RevocationList | None = None,
 ) -> CapabilityClaims:
     # Deferred to avoid circular import (capability_token imports from this module).
     from capability_token import verify_capability_token
@@ -333,6 +335,7 @@ def verify_envelope(
             current=current,
             max_clock_skew=config.max_clock_skew,
             max_capability_ttl=config.max_capability_ttl,
+            revocation_list=revocation_list,
         )
         audit_ctx["issuer_iss"] = claims.iss
         audit_ctx["issuer_kid"] = claims.issuer_kid
