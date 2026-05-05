@@ -56,6 +56,7 @@ _HASHED_FIELDS = (
     "issuer_iss",
     "issuer_kid",
     "reason_code",
+    "artifact_version",
 )
 
 ALLOWED_OUTCOMES = ("allow", "deny")
@@ -82,9 +83,13 @@ class AuditEvent:
     # ``reason_code`` is the machine-readable counterpart to ``reason``; it
     # carries a :class:`deny_reason.DenyReason` value (as a str) for events
     # produced by the deterministic-error-contract path, or ``""`` for legacy
-    # events. Defaulted last so existing callers keep working; appended last in
-    # _HASHED_FIELDS so the hash chain extends cleanly.
+    # events. Defaulted so existing callers keep working; appended last in
+    # ``_HASHED_FIELDS`` so the hash chain extends cleanly.
     reason_code: str = ""
+    # ``artifact_version`` records which contract/wire format produced the
+    # decision. v0 emits ``"envelope/v0"`` for envelope.verify events and
+    # ``"wt-cap+jwt"`` for capability.verify events. Phase 1 Track D D1.
+    artifact_version: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -127,6 +132,7 @@ class AuditSink(ABC):
         issuer_iss: str = "",
         issuer_kid: str = "",
         reason_code: str = "",
+        artifact_version: str = "",
         timestamp: datetime | None = None,
     ) -> AuditEvent:
         ts = (timestamp or datetime.now(UTC)).astimezone(UTC).isoformat().replace("+00:00", "Z")
@@ -143,6 +149,7 @@ class AuditSink(ABC):
             issuer_iss=issuer_iss,
             issuer_kid=issuer_kid,
             reason_code=reason_code,
+            artifact_version=artifact_version,
         )
         self._append(event)
         return event
@@ -209,9 +216,10 @@ class JsonlAuditSink(AuditSink):
                 if not line:
                     continue
                 record = json.loads(line)
-                # ``reason_code`` was appended after the initial ship; tolerate
-                # legacy lines that lack it so old chains still load.
+                # Fields appended after initial ship default to "" so legacy
+                # lines (without these keys) still load.
                 record.setdefault("reason_code", "")
+                record.setdefault("artifact_version", "")
                 events.append(AuditEvent(**record))
         return tuple(events)
 

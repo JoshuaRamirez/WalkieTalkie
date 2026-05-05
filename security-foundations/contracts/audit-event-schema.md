@@ -24,10 +24,11 @@ types.
 | Field | Type | Notes |
 |---|---|---|
 | `timestamp` | RFC 3339 string in UTC, ending in `Z` | Wall-clock time at event emission. |
-| `event_type` | string | v0 emits `"envelope.verify"` only. New checkpoints (`capability.issue`, `policy.evaluate`, `execution.dispatch`) MUST use additional values; existing values are immutable. |
+| `event_type` | string | v0 emits `"envelope.verify"` and `"capability.verify"`. Future checkpoints (`policy.evaluate`, `execution.dispatch`, `discovery.admit`) MUST use additional values; existing values are immutable. |
 | `outcome` | `"allow"` or `"deny"` | Closed enum. |
 | `reason` | string | Human-readable. May contain a colon-prefixed namespace (e.g., `"capability token: revoked"`). |
 | `reason_code` | string | Machine-readable. Either `"ok"`, `""` (legacy), or a `DenyReason` value (e.g., `"replay_detected"`). See deny-reason contract below. |
+| `artifact_version` | string | Wire format / contract version that produced the decision. v0: `"envelope/v0"` for `envelope.verify`, `"wt-cap+jwt"` for `capability.verify`. Empty string for legacy events. |
 | `message_id` | string | Envelope `message_id` if available; `""` if the failure occurred before the envelope was parsed. |
 | `sender` | string | Envelope `sender_spiffe_id` or `""`. |
 | `recipient` | string | Envelope `recipient_spiffe_id` or `""`. |
@@ -36,6 +37,18 @@ types.
 | `issuer_kid` | string | Capability token's issuer kid (JWT header `kid`) if validated, else `""`. |
 | `prev_hash` | hex sha256 | Previous event's `this_hash`, or 64 zeros for the genesis event. |
 | `this_hash` | hex sha256 | sha256(prev_hash ‖ JCS(body)), where `body` is every field above except `prev_hash` and `this_hash`. |
+
+### Emission topology
+
+A single `verify_envelope` call emits between one and two events depending
+on where it fails:
+
+| Outcome | Events emitted (in order) |
+|---|---|
+| Success | `capability.verify` allow → `envelope.verify` allow |
+| Pre-cap deny (e.g., digest mismatch, expired envelope) | `envelope.verify` deny only |
+| Cap-level deny (e.g., revoked, sub mismatch) | `capability.verify` deny → `envelope.verify` deny (same `reason_code`) |
+| Post-cap deny (replay) | `capability.verify` allow → `envelope.verify` deny (`replay_detected`) |
 
 ### Hash chain
 
@@ -68,7 +81,7 @@ retired but their string form is reserved.
 
 | File | What it demonstrates |
 |---|---|
-| [`test-vectors/audit-event.jsonl`](../envelope/test-vectors/audit-event.jsonl) | Three events: an allow, a deny (`payload_digest_mismatch`), and a second allow. `verify_chain` must accept the file as-is. |
+| [`test-vectors/audit-event.jsonl`](../envelope/test-vectors/audit-event.jsonl) | Five events covering three scenarios: a successful verify (`capability.verify` allow + `envelope.verify` allow), a pre-cap deny (`envelope.verify` `payload_digest_mismatch` only), and a cap-level deny (`capability.verify` deny + `envelope.verify` deny, both `capability_revoked`). `verify_chain` must accept the file as-is. |
 
 ## Change control
 

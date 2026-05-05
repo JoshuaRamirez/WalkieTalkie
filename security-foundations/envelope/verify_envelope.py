@@ -320,7 +320,31 @@ def verify_envelope(
                 outcome=outcome,
                 reason=reason,
                 reason_code=reason_code,
+                artifact_version="envelope/v0",
                 **audit_ctx,
+            )
+
+    def _emit_cap(
+        outcome: str,
+        reason: str,
+        *,
+        reason_code: str = "",
+        cap_iss: str = "",
+        cap_kid: str = "",
+    ) -> None:
+        if audit_sink is not None:
+            audit_sink.record(
+                event_type="capability.verify",
+                outcome=outcome,
+                reason=reason,
+                reason_code=reason_code,
+                artifact_version="wt-cap+jwt",
+                message_id=audit_ctx["message_id"],
+                sender=audit_ctx["sender"],
+                recipient=audit_ctx["recipient"],
+                envelope_kid=audit_ctx["envelope_kid"],
+                issuer_iss=cap_iss,
+                issuer_kid=cap_kid,
             )
 
     try:
@@ -390,14 +414,24 @@ def verify_envelope(
                 "signature invalid", reason=DenyReason.SIGNATURE_INVALID
             )
 
-        claims = verify_capability_token(
-            envelope["capability_token"],
-            envelope=envelope,
-            issuer_lookup=issuer_lookup,
-            current=current,
-            max_clock_skew=config.max_clock_skew,
-            max_capability_ttl=config.max_capability_ttl,
-            revocation_list=revocation_list,
+        try:
+            claims = verify_capability_token(
+                envelope["capability_token"],
+                envelope=envelope,
+                issuer_lookup=issuer_lookup,
+                current=current,
+                max_clock_skew=config.max_clock_skew,
+                max_capability_ttl=config.max_capability_ttl,
+                revocation_list=revocation_list,
+            )
+        except EnvelopeVerificationError as cap_exc:
+            _emit_cap("deny", str(cap_exc), reason_code=cap_exc.reason_code)
+            raise
+        _emit_cap(
+            "allow", "ok",
+            reason_code="ok",
+            cap_iss=claims.iss,
+            cap_kid=claims.issuer_kid,
         )
         audit_ctx["issuer_iss"] = claims.iss
         audit_ctx["issuer_kid"] = claims.issuer_kid

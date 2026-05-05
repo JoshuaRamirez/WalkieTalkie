@@ -57,12 +57,23 @@ class AuditEventVectorTests(unittest.TestCase):
     def test_audit_chain_verifies(self):
         sink = JsonlAuditSink(_VECTORS_DIR / "audit-event.jsonl")
         events = sink.read_all()
-        self.assertEqual(len(events), 3)
+        # Three scenarios: success (cap+env), pre-cap deny (env only),
+        # cap-level deny (cap+env).
+        self.assertEqual(len(events), 5)
         verify_chain(events)
-        self.assertEqual([e.outcome for e in events], ["allow", "deny", "allow"])
         self.assertEqual(
-            [e.reason_code for e in events],
-            ["ok", "payload_digest_mismatch", "ok"],
+            [e.event_type for e in events],
+            [
+                "capability.verify",
+                "envelope.verify",
+                "envelope.verify",
+                "capability.verify",
+                "envelope.verify",
+            ],
+        )
+        self.assertEqual(
+            [e.outcome for e in events],
+            ["allow", "allow", "deny", "deny", "deny"],
         )
 
     def test_audit_event_has_all_required_fields(self):
@@ -70,10 +81,21 @@ class AuditEventVectorTests(unittest.TestCase):
         events = sink.read_all()
         required = {
             "timestamp", "event_type", "outcome", "reason", "reason_code",
-            "message_id", "sender", "recipient", "envelope_kid",
-            "issuer_iss", "issuer_kid", "prev_hash", "this_hash",
+            "artifact_version", "message_id", "sender", "recipient",
+            "envelope_kid", "issuer_iss", "issuer_kid", "prev_hash",
+            "this_hash",
         }
         self.assertEqual(set(events[0].to_dict()) & required, required)
+
+    def test_artifact_version_matches_event_type(self):
+        sink = JsonlAuditSink(_VECTORS_DIR / "audit-event.jsonl")
+        events = sink.read_all()
+        for e in events:
+            with self.subTest(event_type=e.event_type, message_id=e.message_id):
+                if e.event_type == "envelope.verify":
+                    self.assertEqual(e.artifact_version, "envelope/v0")
+                elif e.event_type == "capability.verify":
+                    self.assertEqual(e.artifact_version, "wt-cap+jwt")
 
 
 class TestVectorBytesAreReproducible(unittest.TestCase):
