@@ -39,6 +39,11 @@ Enable authenticated peer discovery and request/response execution with anti-rep
 
 ### D1.3 Capability Service v1
 - Capability issuance API (short TTL, narrow scope, audience bound).
+  **Landed as in-process library (v0):** `CapabilityIssuer` in
+  `security-foundations/envelope/capability_issuer.py` mints `wt-cap+jwt`
+  tokens that round-trip through the validator. The HTTP/RPC issuance API
+  surface and per-request authorization for *who can ask for which scope*
+  remain outstanding.
 - Capability validator middleware. **Landed (v0):** RFC 7519 JWT (EdDSA) with
   `cnf.envelope_digest` binding, separate `IssuerTrustStore`, default 5-minute
   TTL. See `security-foundations/envelope/capability_token.py`.

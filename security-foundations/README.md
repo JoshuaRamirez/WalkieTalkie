@@ -16,11 +16,14 @@ the approved plan.
     (no `openssl` subprocess),
   - key-id lookup behind a callable interface,
   - capability token validation (see below).
-- **Capability token v0** (`envelope/capability_token.py`): RFC 7519 JWT with
-  EdDSA, bound to the envelope via `cnf.envelope_digest` so a leaked or replayed
-  token only authorizes its specific payload. Issuer trust is a separate
+- **Capability token v0** (`envelope/capability_token.py` validator,
+  `envelope/capability_issuer.py` issuer): RFC 7519 JWT with EdDSA, bound to
+  the envelope via `cnf.envelope_digest` so a leaked or replayed token only
+  authorizes its specific payload. Issuer trust is a separate
   `IssuerTrustStore` (`envelope/issuer_trust_store.py`) keyed on `(iss, kid)`,
-  so envelope-signing keys cannot be used to mint tokens.
+  so envelope-signing keys cannot be used to mint tokens. `CapabilityIssuer`
+  validates `iss`/`kid`/`ttl` at construction and auto-generates UUIDv7 `jti`
+  values; `generate_uuidv7` is a small RFC 9562 implementation.
 - **Hash-chained audit events v0** (`envelope/audit.py`): every
   `verify_envelope` call records exactly one event (allow or deny) with the
   envelope identifiers and the rejection reason. `InMemoryAuditSink` and
