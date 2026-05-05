@@ -193,11 +193,18 @@ Enable authenticated peer discovery and request/response execution with anti-rep
 ---
 
 ## 6) APIs and Contracts to Freeze in Phase 1
-- Envelope schema v1.
-- Discovery record schema v1.
-- Capability token schema v1.
-- Policy decision log schema v1.
-- Security error response schema v1.
+
+Frozen contracts live in [`security-foundations/contracts/`](../../security-foundations/contracts/).
+Each document records the artifact, the backwards-compatibility policy, the
+schema test vectors, and the change-control procedure.
+
+| Contract | Status | Document |
+|---|---|---|
+| Envelope schema v1 | **frozen** | [envelope-schema.md](../../security-foundations/contracts/envelope-schema.md) |
+| Capability token schema v1 | **frozen** | [capability-token-schema.md](../../security-foundations/contracts/capability-token-schema.md) |
+| Policy decision log schema v1 | **frozen** (verification checkpoint; emitted as `AuditEvent`) | [audit-event-schema.md](../../security-foundations/contracts/audit-event-schema.md) |
+| Security error response schema v1 | **frozen** (transport-agnostic shape) | [security-error-response-schema.md](../../security-foundations/contracts/security-error-response-schema.md) |
+| Discovery record schema v1 | deferred | depends on Track A (discovery-plane security) |
 
 Each contract requires:
 - backwards compatibility policy,
