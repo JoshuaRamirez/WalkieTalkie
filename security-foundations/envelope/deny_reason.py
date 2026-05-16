@@ -83,8 +83,9 @@ class DenyReason(StrEnum):
     CAP_SIGNATURE_INVALID = "capability_signature_invalid"
     CAP_REVOKED = "capability_revoked"
 
-    # --- Replay ---
+    # --- Replay / rate limiting ---
     REPLAY_DETECTED = "replay_detected"
+    RATE_LIMITED = "rate_limited"
 
     # --- Discovery ---
     DISCOVERY_MALFORMED = "discovery_malformed"
