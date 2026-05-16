@@ -210,6 +210,16 @@ Enable authenticated peer discovery and request/response execution with anti-rep
 
 ### D2. Queryability and Incident Readiness
 - Search views for break-glass, denies, replay attempts, and cross-tenant attempts.
+  **Landed (v0):** canned filter functions in
+  `security-foundations/envelope/audit_query.py` —
+  `allows`, `denies`, `with_event_type`, `with_reason_code`, `with_sender`,
+  `with_recipient`, `with_message_id`, `replays`, `cross_tenant_attempts`,
+  `break_glass_attempts`. Each is a pure generator over an
+  `Iterable[AuditEvent]`, composable with `itertools` and caller predicates.
+  Cross-tenant = sender and recipient in different SPIFFE trust domains;
+  break-glass is reserved until a break-glass mechanism ships. Anything
+  richer (SQL views, OpenSearch indices) is a storage concern deferred to
+  the transport layer.
 
 ### D3. Alerting
 - Thresholds for repeated validation failures per identity.

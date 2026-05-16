@@ -35,6 +35,12 @@ the approved plan.
   `ABNORMAL_ISSUANCE_VOLUME` (on `capability.issue` allows). Alerts
   dispatch through a caller-supplied `on_alert` callable; the underlying
   hash-chained audit sink is preserved unchanged.
+- **Audit search views v0** (`envelope/audit_query.py`): canned filters
+  over an `Iterable[AuditEvent]` — `allows`, `denies`, `with_event_type`,
+  `with_reason_code`, `with_sender`, `with_recipient`, `with_message_id`,
+  `replays`, `cross_tenant_attempts`, `break_glass_attempts`. Pure
+  generators so they compose with `itertools` and caller predicates.
+  Cross-tenant = sender and recipient in different SPIFFE trust domains.
 - **Revocation list v0** (`envelope/revocation_list.py`): `InMemoryRevocationList`
   and `FileBackedRevocationList` (append-only JSONL with an `integrity_hash()`
   for tamper detection). The validator consults the list *after* signature
