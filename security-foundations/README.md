@@ -88,11 +88,10 @@ the approved plan.
 
 ## Frozen contracts
 
-The Phase 1 §6 freeze for envelope, capability token, audit/policy decision
-log, and security error response is documented in
+All five Phase 1 §6 contracts (envelope, capability token, audit / policy
+decision log, security error response, discovery record) are documented in
 [`contracts/`](./contracts/). Each contract records artifact, backwards-
-compatibility policy, schema test vectors, and change control. The discovery
-record schema is deferred until Phase 1 Track A starts.
+compatibility policy, schema test vectors, and change control.
 - **Hash-chained audit events v0** (`envelope/audit.py`): every
   `verify_envelope` call records exactly one event (allow or deny) with the
   envelope identifiers and the rejection reason. `InMemoryAuditSink` and

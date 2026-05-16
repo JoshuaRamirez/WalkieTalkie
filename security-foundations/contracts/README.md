@@ -15,7 +15,7 @@ contracts that have shipped code. Each contract document records:
 | Capability token schema v1 | **frozen** (`typ: "wt-cap+jwt"`) | [capability-token-schema.md](./capability-token-schema.md) |
 | Audit / policy decision log schema v1 | **frozen** | [audit-event-schema.md](./audit-event-schema.md) |
 | Security error response schema v1 | **frozen** (transport-agnostic shape) | [security-error-response-schema.md](./security-error-response-schema.md) |
-| Discovery record schema v1 | deferred | not landed; depends on Phase 1 Track A (`discovery-plane security`) |
+| Discovery record schema v1 | **frozen** (`typ: "wt-discovery-record/v0"`) | [discovery-record-schema.md](./discovery-record-schema.md) |
 
 ## Naming convention
 

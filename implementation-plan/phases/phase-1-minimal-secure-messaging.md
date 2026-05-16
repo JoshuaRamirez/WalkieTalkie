@@ -312,7 +312,7 @@ schema test vectors, and the change-control procedure.
 | Capability token schema v1 | **frozen** | [capability-token-schema.md](../../security-foundations/contracts/capability-token-schema.md) |
 | Policy decision log schema v1 | **frozen** (verification checkpoint; emitted as `AuditEvent`) | [audit-event-schema.md](../../security-foundations/contracts/audit-event-schema.md) |
 | Security error response schema v1 | **frozen** (transport-agnostic shape) | [security-error-response-schema.md](../../security-foundations/contracts/security-error-response-schema.md) |
-| Discovery record schema v1 | deferred | depends on Track A (discovery-plane security) |
+| Discovery record schema v1 | **frozen** | [discovery-record-schema.md](../../security-foundations/contracts/discovery-record-schema.md) |
 
 Each contract requires:
 - backwards compatibility policy,
