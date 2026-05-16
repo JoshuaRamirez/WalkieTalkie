@@ -85,3 +85,13 @@ class DenyReason(StrEnum):
 
     # --- Replay ---
     REPLAY_DETECTED = "replay_detected"
+
+    # --- Discovery ---
+    DISCOVERY_MALFORMED = "discovery_malformed"
+    DISCOVERY_EXPIRED = "discovery_expired"
+    DISCOVERY_SIGNATURE_INVALID = "discovery_signature_invalid"
+    DISCOVERY_UNKNOWN_ISSUER = "discovery_unknown_issuer"
+
+    # --- Admission ---
+    ADMISSION_WORKLOAD_NOT_ALLOWED = "admission_workload_not_allowed"
+    ADMISSION_VERSION_INCOMPATIBLE = "admission_version_incompatible"

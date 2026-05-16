@@ -222,5 +222,77 @@ class JsonRoundTripTests(unittest.TestCase):
             from_json(json.dumps(obj).encode())
 
 
+class AuditEmissionTests(unittest.TestCase):
+    """The discovery checkpoint is part of Phase 1 Track D D1."""
+
+    def setUp(self):
+        self.priv, self.pem = _keypair()
+        self.lookup = lambda iss, kid: self.pem
+
+    def _new_sink(self):
+        from audit import InMemoryAuditSink
+        return InMemoryAuditSink()
+
+    def test_allow_event_on_success(self):
+        sink = self._new_sink()
+        signed = sign_record(_record(), self.priv)
+        verify_record(signed, issuer_lookup=self.lookup, now=_NOW, audit_sink=sink)
+        self.assertEqual(len(sink.events), 1)
+        ev = sink.events[0]
+        self.assertEqual(ev.event_type, "discovery.verify")
+        self.assertEqual(ev.outcome, "allow")
+        self.assertEqual(ev.reason_code, "ok")
+        self.assertEqual(ev.artifact_version, "wt-discovery-record/v0")
+        self.assertEqual(ev.sender, _WORKLOAD_ISS)
+        self.assertEqual(ev.issuer_iss, _ISSUER_ISS)
+
+    def test_deny_event_on_expired_record(self):
+        sink = self._new_sink()
+        signed = sign_record(_record(), self.priv)
+        with self.assertRaises(DiscoveryRecordError):
+            verify_record(
+                signed,
+                issuer_lookup=self.lookup,
+                now=_NOW + timedelta(hours=2),
+                audit_sink=sink,
+            )
+        self.assertEqual(len(sink.events), 1)
+        ev = sink.events[0]
+        self.assertEqual(ev.event_type, "discovery.verify")
+        self.assertEqual(ev.outcome, "deny")
+        self.assertEqual(ev.reason_code, "discovery_expired")
+
+    def test_deny_event_on_bad_signature(self):
+        sink = self._new_sink()
+        signed = sign_record(_record(), self.priv)
+        _, other_pem = _keypair()
+        with self.assertRaises(DiscoveryRecordError):
+            verify_record(
+                signed,
+                issuer_lookup=lambda iss, kid: other_pem,
+                now=_NOW,
+                audit_sink=sink,
+            )
+        self.assertEqual(sink.events[0].reason_code, "discovery_signature_invalid")
+
+    def test_deny_event_on_unknown_issuer(self):
+        sink = self._new_sink()
+        signed = sign_record(_record(), self.priv)
+
+        def lookup(iss, kid):
+            raise Exception("nope")
+
+        with self.assertRaises(DiscoveryRecordError):
+            verify_record(signed, issuer_lookup=lookup, now=_NOW, audit_sink=sink)
+        self.assertEqual(sink.events[0].reason_code, "discovery_unknown_issuer")
+
+    def test_deny_event_on_malformed_record(self):
+        sink = self._new_sink()
+        signed = sign_record(_record(workload_iss="not-spiffe"), self.priv)
+        with self.assertRaises(DiscoveryRecordError):
+            verify_record(signed, issuer_lookup=self.lookup, now=_NOW, audit_sink=sink)
+        self.assertEqual(sink.events[0].reason_code, "discovery_malformed")
+
+
 if __name__ == "__main__":
     unittest.main()

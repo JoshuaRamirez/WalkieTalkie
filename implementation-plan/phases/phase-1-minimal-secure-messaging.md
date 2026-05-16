@@ -254,16 +254,18 @@ Enable authenticated peer discovery and request/response execution with anti-rep
 
 ### D1. Trace Checkpoint Expansion
 - Add discovery and capability checkpoints.
-  **Capability checkpoint landed (v0):** `verify_envelope` now emits a
-  separate `capability.verify` `AuditEvent` alongside the existing
-  `envelope.verify`. Emission topology is documented in
+  **Both landed (v0):** `verify_envelope` emits `envelope.verify` plus
+  (optionally) `capability.verify`; `CapabilityIssuer.issue` emits
+  `capability.issue`; `discovery_record.verify_record` emits
+  `discovery.verify`; `admission_coupling.admit` /
+  `require_admission` emit `admission.evaluate`. Emission topology
+  is documented in
   [audit-event-schema.md](../../security-foundations/contracts/audit-event-schema.md#emission-topology).
-  Discovery checkpoint remains outstanding (depends on Track A).
 - Include decision reason codes and artifact versions.
   **Both landed (v0):** every `AuditEvent` carries a `reason_code` (a
   `DenyReason` value or `"ok"`) and an `artifact_version`
-  (`"envelope/v0"` for envelope checkpoints, `"wt-cap+jwt"` for capability
-  checkpoints).
+  (`"envelope/v0"`, `"wt-cap+jwt"`, `"wt-discovery-record/v0"`, or
+  `"wt-admission/v0"`).
 
 ### D2. Queryability and Incident Readiness
 - Search views for break-glass, denies, replay attempts, and cross-tenant attempts.
