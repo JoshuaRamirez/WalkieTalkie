@@ -29,6 +29,12 @@ the approved plan.
   `(sub, aud, scope)` tuples + `max_ttl`). Policy denials raise
   `IssuancePolicyError` and emit a `capability.issue` deny audit event when
   an `audit_sink` is attached.
+- **Alerting v0** (`envelope/alerting.py`): `AlertingAuditSink` decorator
+  + `ThresholdAlertingPolicy` (per-identity sliding windows) firing
+  `REPEATED_VALIDATION_FAILURE` (on `envelope.verify` denies) and
+  `ABNORMAL_ISSUANCE_VOLUME` (on `capability.issue` allows). Alerts
+  dispatch through a caller-supplied `on_alert` callable; the underlying
+  hash-chained audit sink is preserved unchanged.
 - **Revocation list v0** (`envelope/revocation_list.py`): `InMemoryRevocationList`
   and `FileBackedRevocationList` (append-only JSONL with an `integrity_hash()`
   for tamper detection). The validator consults the list *after* signature
