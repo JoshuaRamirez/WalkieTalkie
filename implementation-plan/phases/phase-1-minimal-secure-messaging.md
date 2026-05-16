@@ -213,7 +213,18 @@ Enable authenticated peer discovery and request/response execution with anti-rep
 
 ### D3. Alerting
 - Thresholds for repeated validation failures per identity.
+  **Landed (v0):** `ThresholdAlertingPolicy` in
+  `security-foundations/envelope/alerting.py` keys a per-sender sliding
+  window on `envelope.verify` deny events and fires
+  `REPEATED_VALIDATION_FAILURE` alerts when the count crosses
+  `repeated_deny_threshold` within `window`.
 - Thresholds for abnormal capability issuance volume.
+  **Landed (v0):** the same policy keys a per-sender sliding window on
+  `capability.issue` allow events and fires `ABNORMAL_ISSUANCE_VOLUME`
+  alerts when the count crosses `issuance_volume_threshold` within
+  `window`. `AlertingAuditSink` decorates any underlying `AuditSink`,
+  preserving the hash chain; alerts dispatch through a caller-supplied
+  `on_alert` callable so v0 stays transport-agnostic.
 
 **Acceptance Criteria**
 - Security incidents can be reconstructed from logs without missing links.
