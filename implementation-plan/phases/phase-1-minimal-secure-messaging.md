@@ -66,7 +66,17 @@ Enable authenticated peer discovery and request/response execution with anti-rep
 
 ### D1.5 Operational Guardrails
 - Identity-aware rate limits.
+  **Landed (v0):** `IdentityRateLimiter` in
+  `security-foundations/envelope/rate_limiter.py` keeps a per-sender
+  sliding window of request timestamps and returns a
+  `RateLimitDecision(allowed, identity, reason, retry_after_seconds)`.
+  Per-identity overrides supported. `RateLimitedVerifier` decorates a
+  `Verifier` so throttled requests never reach signature verification;
+  the throttled-deny path raises `RateLimitExceededError` (a subclass of
+  `EnvelopeVerificationError` carrying `DenyReason.RATE_LIMITED`).
 - Basic anomaly alerts for token usage spikes and repeated reject patterns.
+  **Landed (v0):** `ThresholdAlertingPolicy` in
+  `security-foundations/envelope/alerting.py` — see Track D D3.
 
 ---
 

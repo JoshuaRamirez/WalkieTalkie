@@ -75,6 +75,12 @@ the approved plan.
   `admission_workload_not_allowed`, `admission_version_incompatible`).
   Pairs with the existing `envelope.verify` / `capability.verify` /
   `capability.issue` checkpoints in `audit.py`.
+- **Identity-aware rate limits v0** (`envelope/rate_limiter.py`):
+  `IdentityRateLimiter` enforces per-identity fixed-count sliding
+  windows with per-identity overrides. `RateLimitedVerifier` decorates
+  a `Verifier` so throttled requests never reach signature verification;
+  throttled-deny is `RateLimitExceededError` (a subclass of
+  `EnvelopeVerificationError` with `DenyReason.RATE_LIMITED`).
 - **Revocation list v0** (`envelope/revocation_list.py`): `InMemoryRevocationList`
   and `FileBackedRevocationList` (append-only JSONL with an `integrity_hash()`
   for tamper detection). The validator consults the list *after* signature
