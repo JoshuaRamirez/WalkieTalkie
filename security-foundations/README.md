@@ -53,6 +53,13 @@ the approved plan.
   PEM supplied out-of-band, pins the trust domain, and materializes the
   bundle into an `IssuerTrustStore` so downstream components consume it
   through the same interface as manifest-loaded keys.
+- **Discovery record integrity v0** (`envelope/discovery_record.py`):
+  `DiscoveryRecord` advertises `(workload_iss, workload_kid, endpoints)`
+  signed by a discovery authority. `verify_record()` enforces shape,
+  time window (default 1-hour max TTL, 60-second clock skew), and
+  signature against an `IssuerTrustStore` — typically the one
+  materialized from the bootstrap bundle. Anti-poisoning: stale records
+  fail the time window; forged records fail the signature.
 - **Revocation list v0** (`envelope/revocation_list.py`): `InMemoryRevocationList`
   and `FileBackedRevocationList` (append-only JSONL with an `integrity_hash()`
   for tamper detection). The validator consults the list *after* signature

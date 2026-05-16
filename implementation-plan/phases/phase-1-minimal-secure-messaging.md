@@ -113,7 +113,20 @@ Enable authenticated peer discovery and request/response execution with anti-rep
 
 ### A2. Discovery Record Integrity
 - Signed discovery records with expiry.
+  **Landed (v0):** `DiscoveryRecord` in
+  `security-foundations/envelope/discovery_record.py` carries
+  `workload_iss`, `workload_kid`, `endpoints[]`, `issuer_iss`,
+  `issuer_kid`, `issued_at`, `expires_at`, and an EdDSA `signature`
+  over a JCS-canonicalized body (with `typ: "wt-discovery-record/v0"`
+  cross-protocol binding).
 - Anti-poisoning checks for stale/forged records.
+  **Landed (v0):** `verify_record()` enforces a time window
+  (`issued_at ≤ now ≤ expires_at`, both with clock-skew tolerance),
+  a max-TTL cap (default 1 hour), and signature verification against
+  an `IssuerTrustStore` (typically the one materialized from the
+  bootstrap bundle). Forged records fail at the signature step;
+  stale records fail at the time-window step; both raise
+  `DiscoveryRecordError`.
 
 ### A3. Admission Coupling
 - Discovery output only feeds admitted peers.
