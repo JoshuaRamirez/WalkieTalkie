@@ -24,6 +24,11 @@ the approved plan.
   so envelope-signing keys cannot be used to mint tokens. `CapabilityIssuer`
   validates `iss`/`kid`/`ttl` at construction and auto-generates UUIDv7 `jti`
   values; `generate_uuidv7` is a small RFC 9562 implementation.
+- **Issuance policy v0** (`envelope/issuance_policy.py`): `IssuancePolicy`
+  ABC + `AllowAllPolicy` (default) + `AllowlistPolicy` (frozen
+  `(sub, aud, scope)` tuples + `max_ttl`). Policy denials raise
+  `IssuancePolicyError` and emit a `capability.issue` deny audit event when
+  an `audit_sink` is attached.
 - **Revocation list v0** (`envelope/revocation_list.py`): `InMemoryRevocationList`
   and `FileBackedRevocationList` (append-only JSONL with an `integrity_hash()`
   for tamper detection). The validator consults the list *after* signature

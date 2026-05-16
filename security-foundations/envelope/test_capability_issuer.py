@@ -192,5 +192,118 @@ class CapabilityIssuerIssueTests(unittest.TestCase):
             )
 
 
+class CapabilityIssuerPolicyTests(unittest.TestCase):
+    """Phase 1 Track C C1 acceptance — policy gates issuance, denials are
+    fail-closed, and the issuance audit event reflects each decision.
+    """
+
+    def test_default_allow_all_policy_preserves_behavior(self):
+        # No policy passed → AllowAllPolicy default → existing test path works.
+        issuer, _ = _make_issuer()
+        token = issuer.issue(
+            sub=_SUB, aud=_AUD, scope=_PURPOSE, envelope_digest=_DIGEST
+        )
+        self.assertEqual(len(token.split(".")), 3)
+
+    def test_allowlist_policy_permits_listed_grant(self):
+        from issuance_policy import AllowlistPolicy
+
+        issuer, _ = _make_issuer(
+            policy=AllowlistPolicy(
+                allowed_grants=frozenset({(_SUB, _AUD, _PURPOSE)}),
+            )
+        )
+        token = issuer.issue(
+            sub=_SUB, aud=_AUD, scope=_PURPOSE, envelope_digest=_DIGEST
+        )
+        self.assertEqual(len(token.split(".")), 3)
+
+    def test_allowlist_policy_denies_unlisted_grant(self):
+        from issuance_policy import AllowlistPolicy, IssuancePolicyError
+
+        issuer, _ = _make_issuer(
+            policy=AllowlistPolicy(
+                allowed_grants=frozenset({(_SUB, _AUD, _PURPOSE)}),
+            )
+        )
+        with self.assertRaises(IssuancePolicyError) as ctx:
+            issuer.issue(
+                sub=_SUB,
+                aud=_AUD,
+                scope="different_scope",
+                envelope_digest=_DIGEST,
+            )
+        self.assertFalse(ctx.exception.decision.allowed)
+        self.assertIn("not in allowlist", ctx.exception.decision.reason)
+
+    def test_allowlist_policy_denies_ttl_above_cap(self):
+        from datetime import timedelta as _td
+
+        from issuance_policy import AllowlistPolicy, IssuancePolicyError
+
+        issuer, _ = _make_issuer(
+            policy=AllowlistPolicy(
+                allowed_grants=frozenset({(_SUB, _AUD, _PURPOSE)}),
+                max_ttl=_td(minutes=2),
+            )
+        )
+        with self.assertRaisesRegex(IssuancePolicyError, "exceeds policy max"):
+            issuer.issue(
+                sub=_SUB,
+                aud=_AUD,
+                scope=_PURPOSE,
+                envelope_digest=_DIGEST,
+                ttl=_td(minutes=10),
+            )
+
+    def test_audit_sink_records_issue_allow_event(self):
+        import sys as _sys
+        from pathlib import Path as _P
+
+        _sys.path.insert(0, str(_P(__file__).resolve().parent))
+        from audit import InMemoryAuditSink
+
+        sink = InMemoryAuditSink()
+        issuer, _ = _make_issuer(audit_sink=sink)
+        issuer.issue(
+            sub=_SUB, aud=_AUD, scope=_PURPOSE, envelope_digest=_DIGEST
+        )
+        self.assertEqual(len(sink.events), 1)
+        ev = sink.events[0]
+        self.assertEqual(ev.event_type, "capability.issue")
+        self.assertEqual(ev.outcome, "allow")
+        self.assertEqual(ev.reason_code, "ok")
+        self.assertEqual(ev.artifact_version, "wt-cap+jwt")
+        self.assertEqual(ev.sender, _SUB)
+        self.assertEqual(ev.recipient, _AUD)
+        self.assertEqual(ev.issuer_iss, _ISS)
+        self.assertEqual(ev.issuer_kid, _KID)
+
+    def test_audit_sink_records_issue_deny_event_on_policy_failure(self):
+        from audit import InMemoryAuditSink
+        from issuance_policy import AllowlistPolicy, IssuancePolicyError
+
+        sink = InMemoryAuditSink()
+        issuer, _ = _make_issuer(
+            policy=AllowlistPolicy(
+                allowed_grants=frozenset({(_SUB, _AUD, _PURPOSE)}),
+            ),
+            audit_sink=sink,
+        )
+        with self.assertRaises(IssuancePolicyError):
+            issuer.issue(
+                sub=_SUB,
+                aud=_AUD,
+                scope="different_scope",
+                envelope_digest=_DIGEST,
+            )
+        self.assertEqual(len(sink.events), 1)
+        ev = sink.events[0]
+        self.assertEqual(ev.event_type, "capability.issue")
+        self.assertEqual(ev.outcome, "deny")
+        self.assertEqual(ev.reason_code, "issuance_policy_denied")
+        self.assertIn("not in allowlist", ev.reason)
+
+
 if __name__ == "__main__":
     unittest.main()
