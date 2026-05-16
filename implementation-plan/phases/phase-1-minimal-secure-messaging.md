@@ -176,8 +176,20 @@ Enable authenticated peer discovery and request/response execution with anti-rep
 
 ### C3. Policy Bundle Hygiene
 - Signed policy bundles.
+  **Landed (v0):** `PolicyBundle` in
+  `security-foundations/envelope/policy_bundle.py` is a JCS-canonicalized,
+  EdDSA-signed artifact carrying a `version`, `issuer_iss`, `issuer_kid`,
+  `allowlist_grants`, and `max_ttl_seconds`. `verify_bundle()` checks the
+  signature against an `IssuerTrustStore` (operator-supplied; SHOULD be
+  distinct from the capability-issuer trust store), and returns a realized
+  `AllowlistPolicy`.
 - Anti-rollback version checks.
-- Canary + auto-rollback for policy releases.
+  **Landed (v0):** `RollbackGuard` ABC with `InMemoryRollbackGuard` and
+  `FileBackedRollbackGuard` implementations. Each `accept(bundle)` enforces
+  `bundle.version > last_accepted_for_issuer`; per-issuer isolation so two
+  policy authorities can have overlapping integer sequences.
+- Canary + auto-rollback for policy releases. **Not yet landed;** separate
+  slice. Requires a release-traffic split mechanism.
 
 **Acceptance Criteria**
 - Policy error path is fail-closed.
