@@ -41,6 +41,12 @@ the approved plan.
   `replays`, `cross_tenant_attempts`, `break_glass_attempts`. Pure
   generators so they compose with `itertools` and caller predicates.
   Cross-tenant = sender and recipient in different SPIFFE trust domains.
+- **Signed policy bundles v0** (`envelope/policy_bundle.py`): `PolicyBundle`
+  carries a monotonic `version`, an EdDSA signature, and a serialized
+  `AllowlistPolicy`. `verify_bundle()` checks the signature against an
+  `IssuerTrustStore` and returns the realized policy. `RollbackGuard`
+  (`InMemoryRollbackGuard` / `FileBackedRollbackGuard`) enforces per-issuer
+  monotonic-version acceptance.
 - **Revocation list v0** (`envelope/revocation_list.py`): `InMemoryRevocationList`
   and `FileBackedRevocationList` (append-only JSONL with an `integrity_hash()`
   for tamper detection). The validator consults the list *after* signature
