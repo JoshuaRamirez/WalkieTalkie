@@ -47,6 +47,12 @@ the approved plan.
   `IssuerTrustStore` and returns the realized policy. `RollbackGuard`
   (`InMemoryRollbackGuard` / `FileBackedRollbackGuard`) enforces per-issuer
   monotonic-version acceptance.
+- **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
+  `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
+  domain. `verify_bundle()` validates shape + signature against a root
+  PEM supplied out-of-band, pins the trust domain, and materializes the
+  bundle into an `IssuerTrustStore` so downstream components consume it
+  through the same interface as manifest-loaded keys.
 - **Revocation list v0** (`envelope/revocation_list.py`): `InMemoryRevocationList`
   and `FileBackedRevocationList` (append-only JSONL with an `integrity_hash()`
   for tamper detection). The validator consults the list *after* signature

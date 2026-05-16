@@ -93,8 +93,23 @@ Enable authenticated peer discovery and request/response execution with anti-rep
 
 ### A1. Bootstrap Artifact Validation
 - Validate anchor set, environment identity, epoch metadata.
+  **Landed (v0):** `BootstrapBundle` in
+  `security-foundations/envelope/bootstrap_bundle.py` carries
+  `version`, `trust_domain`, `epoch`, and a tuple of
+  `BootstrapAnchor` ``(iss, kid, pem_b64)``. `verify_bundle()`
+  validates shape (positive epoch/version, SPIFFE ID and KID format,
+  no duplicate anchors, every PEM parses as Ed25519) and signature.
 - Enforce no-join on mismatch.
+  **Landed (v0):** `verify_bundle()` accepts an optional
+  `expected_trust_domain` pin; a mismatch raises
+  `BootstrapBundleError("trust_domain mismatch: ...")` and the bundle
+  is not materialized. Unsigned bundles, signatures by the wrong root
+  key, and corrupt PEMs are all fatal.
 - Add out-of-band re-seeding path for suspected compromise.
+  **Landed (v0):** the root verification key is passed via the
+  `expected_root_pem` parameter — explicitly out-of-band by
+  construction. Re-seeding is a new root PEM through that channel +
+  a new bundle epoch.
 
 ### A2. Discovery Record Integrity
 - Signed discovery records with expiry.
