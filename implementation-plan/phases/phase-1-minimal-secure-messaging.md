@@ -130,11 +130,28 @@ Enable authenticated peer discovery and request/response execution with anti-rep
 
 ### A3. Admission Coupling
 - Discovery output only feeds admitted peers.
+  **Landed (v0):** `admit()` / `require_admission()` in
+  `security-foundations/envelope/admission_coupling.py` enforce a
+  closed `AdmissionPolicy.allowed_workloads` frozenset of admitted
+  SPIFFE IDs. Denied decisions zero out the `endpoints` field so the
+  deny path never propagates transport hints for an unadmitted peer.
 - Discovery and admission policy versions must match compatibility matrix.
+  **Landed (v0):** `AdmissionPolicy.accepted_discovery_versions`
+  (default `frozenset({"v0"})`) is the compatibility matrix. A
+  `DiscoveryRecord` with a version outside the matrix is denied even
+  if the workload is allowlisted; the matrix check runs first so old
+  admission policies cannot accidentally accept a record format they
+  do not fully validate.
 
 **Acceptance Criteria**
 - Forged discovery entries always rejected.
+  **Landed:** `verify_record()` raises `DiscoveryRecordError("signature
+  invalid")` / `"unknown discovery issuer key"` for forgeries.
 - Stale discovery records never admitted.
+  **Landed:** `verify_record()` raises `DiscoveryRecordError("record
+  expired")` / `"issued_at in future"` / `"ttl exceeds maximum"` for
+  stale records; the verifier MUST run before admission so a stale
+  record never reaches `admit()`.
 
 ---
 

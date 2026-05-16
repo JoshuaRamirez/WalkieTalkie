@@ -60,6 +60,13 @@ the approved plan.
   signature against an `IssuerTrustStore` — typically the one
   materialized from the bootstrap bundle. Anti-poisoning: stale records
   fail the time window; forged records fail the signature.
+- **Admission coupling v0** (`envelope/admission_coupling.py`): after
+  `verify_record()` succeeds, `admit(record, policy)` /
+  `require_admission(record, policy)` checks the workload SPIFFE ID
+  against `AdmissionPolicy.allowed_workloads` and the discovery
+  version against `accepted_discovery_versions` (the "compatibility
+  matrix"). Denied decisions zero out the `endpoints` field so the
+  deny path never propagates transport hints for an unadmitted peer.
 - **Revocation list v0** (`envelope/revocation_list.py`): `InMemoryRevocationList`
   and `FileBackedRevocationList` (append-only JSONL with an `integrity_hash()`
   for tamper detection). The validator consults the list *after* signature
