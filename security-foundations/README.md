@@ -67,6 +67,14 @@ the approved plan.
   version against `accepted_discovery_versions` (the "compatibility
   matrix"). Denied decisions zero out the `endpoints` field so the
   deny path never propagates transport hints for an unadmitted peer.
+- **Discovery + admission audit checkpoints**: `verify_record` and
+  `admit` / `require_admission` accept an optional `audit_sink` and
+  emit `discovery.verify` / `admission.evaluate` events with stable
+  `reason_code` values (`discovery_malformed`, `discovery_expired`,
+  `discovery_signature_invalid`, `discovery_unknown_issuer`,
+  `admission_workload_not_allowed`, `admission_version_incompatible`).
+  Pairs with the existing `envelope.verify` / `capability.verify` /
+  `capability.issue` checkpoints in `audit.py`.
 - **Revocation list v0** (`envelope/revocation_list.py`): `InMemoryRevocationList`
   and `FileBackedRevocationList` (append-only JSONL with an `integrity_hash()`
   for tamper detection). The validator consults the list *after* signature

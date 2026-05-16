@@ -118,5 +118,47 @@ class RequireAdmissionTests(unittest.TestCase):
         self.assertEqual(ctx.exception.decision.workload_iss, _WORKLOAD_UNAPPROVED)
 
 
+class AuditEmissionTests(unittest.TestCase):
+    """Admission decisions emit one ``admission.evaluate`` event per call."""
+
+    def _new_sink(self):
+        from audit import InMemoryAuditSink
+        return InMemoryAuditSink()
+
+    def test_allow_event_on_admission(self):
+        sink = self._new_sink()
+        policy = AdmissionPolicy(allowed_workloads=frozenset({_WORKLOAD_A}))
+        admit(_record(_WORKLOAD_A), policy, audit_sink=sink)
+        self.assertEqual(len(sink.events), 1)
+        ev = sink.events[0]
+        self.assertEqual(ev.event_type, "admission.evaluate")
+        self.assertEqual(ev.outcome, "allow")
+        self.assertEqual(ev.reason_code, "ok")
+        self.assertEqual(ev.artifact_version, "wt-admission/v0")
+        self.assertEqual(ev.sender, _WORKLOAD_A)
+
+    def test_deny_event_workload_not_allowed(self):
+        sink = self._new_sink()
+        policy = AdmissionPolicy(allowed_workloads=frozenset({_WORKLOAD_A}))
+        admit(_record(_WORKLOAD_UNAPPROVED), policy, audit_sink=sink)
+        self.assertEqual(sink.events[0].reason_code, "admission_workload_not_allowed")
+        self.assertEqual(sink.events[0].outcome, "deny")
+
+    def test_deny_event_version_incompatible(self):
+        sink = self._new_sink()
+        policy = AdmissionPolicy(allowed_workloads=frozenset({_WORKLOAD_A}))
+        admit(_record(_WORKLOAD_A, version="v999"), policy, audit_sink=sink)
+        self.assertEqual(sink.events[0].reason_code, "admission_version_incompatible")
+
+    def test_require_admission_emits_and_raises(self):
+        sink = self._new_sink()
+        policy = AdmissionPolicy(allowed_workloads=frozenset({_WORKLOAD_A}))
+        with self.assertRaises(AdmissionError):
+            require_admission(_record(_WORKLOAD_UNAPPROVED), policy, audit_sink=sink)
+        # Deny event was still recorded.
+        self.assertEqual(len(sink.events), 1)
+        self.assertEqual(sink.events[0].outcome, "deny")
+
+
 if __name__ == "__main__":
     unittest.main()

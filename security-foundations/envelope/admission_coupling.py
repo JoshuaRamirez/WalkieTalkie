@@ -31,8 +31,16 @@ Out of scope for v0
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
+from deny_reason import DenyReason
 from discovery_record import DiscoveryRecord
+
+if TYPE_CHECKING:
+    from audit import AuditSink
+
+ADMISSION_EVENT_TYPE = "admission.evaluate"
+ADMISSION_ARTIFACT_VERSION = "wt-admission/v0"
 
 
 class AdmissionError(ValueError):
@@ -49,6 +57,7 @@ class AdmissionDecision:
     reason: str
     workload_iss: str
     endpoints: tuple[str, ...] = ()
+    reason_code: str = ""
 
 
 @dataclass(frozen=True)
@@ -76,39 +85,74 @@ class AdmissionPolicy:
             raise ValueError("accepted_discovery_versions must be non-empty")
 
 
-def admit(record: DiscoveryRecord, policy: AdmissionPolicy) -> AdmissionDecision:
+def admit(
+    record: DiscoveryRecord,
+    policy: AdmissionPolicy,
+    *,
+    audit_sink: AuditSink | None = None,
+) -> AdmissionDecision:
     """Evaluate ``record`` against ``policy``. Never raises.
 
     Caller MUST have already verified the record's signature and time
     window via :func:`discovery_record.verify_record`. This function
     answers only the *policy* question, not the *integrity* question.
+
+    ``audit_sink``, if supplied, receives one ``admission.evaluate``
+    event per call.
     """
     if record.version not in policy.accepted_discovery_versions:
-        return AdmissionDecision(
+        decision = AdmissionDecision(
             admitted=False,
             reason=(
                 f"discovery version {record.version!r} not in admission "
                 f"compatibility matrix {sorted(policy.accepted_discovery_versions)}"
             ),
             workload_iss=record.workload_iss,
+            reason_code=DenyReason.ADMISSION_VERSION_INCOMPATIBLE.value,
         )
-    if record.workload_iss not in policy.allowed_workloads:
-        return AdmissionDecision(
+    elif record.workload_iss not in policy.allowed_workloads:
+        decision = AdmissionDecision(
             admitted=False,
             reason=f"workload {record.workload_iss!r} not in admission allowlist",
             workload_iss=record.workload_iss,
+            reason_code=DenyReason.ADMISSION_WORKLOAD_NOT_ALLOWED.value,
         )
-    return AdmissionDecision(
-        admitted=True,
-        reason="ok",
-        workload_iss=record.workload_iss,
-        endpoints=record.endpoints,
+    else:
+        decision = AdmissionDecision(
+            admitted=True,
+            reason="ok",
+            workload_iss=record.workload_iss,
+            endpoints=record.endpoints,
+            reason_code="ok",
+        )
+    _emit(decision, record, audit_sink)
+    return decision
+
+
+def _emit(decision: AdmissionDecision, record: DiscoveryRecord, sink: AuditSink | None) -> None:
+    if sink is None:
+        return
+    sink.record(
+        event_type=ADMISSION_EVENT_TYPE,
+        outcome="allow" if decision.admitted else "deny",
+        reason=decision.reason,
+        reason_code=decision.reason_code,
+        artifact_version=ADMISSION_ARTIFACT_VERSION,
+        sender=record.workload_iss,
+        envelope_kid=record.workload_kid,
+        issuer_iss=record.issuer_iss,
+        issuer_kid=record.issuer_kid,
     )
 
 
-def require_admission(record: DiscoveryRecord, policy: AdmissionPolicy) -> AdmissionDecision:
+def require_admission(
+    record: DiscoveryRecord,
+    policy: AdmissionPolicy,
+    *,
+    audit_sink: AuditSink | None = None,
+) -> AdmissionDecision:
     """:func:`admit` that raises :class:`AdmissionError` on denial."""
-    decision = admit(record, policy)
+    decision = admit(record, policy, audit_sink=audit_sink)
     if not decision.admitted:
         raise AdmissionError(decision)
     return decision

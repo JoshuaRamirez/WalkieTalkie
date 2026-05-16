@@ -34,10 +34,12 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 import jcs
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from deny_reason import DenyReason
 from verify_envelope import (
     KID_RE,
     SPIFFE_ID_RE,
@@ -46,13 +48,32 @@ from verify_envelope import (
     parse_rfc3339,
 )
 
+if TYPE_CHECKING:
+    from audit import AuditSink
+
+DISCOVERY_EVENT_TYPE = "discovery.verify"
+DISCOVERY_ARTIFACT_VERSION = "wt-discovery-record/v0"
+
 DISCOVERY_TYP = "wt-discovery-record/v0"
 DEFAULT_MAX_RECORD_TTL = timedelta(hours=1)
 DEFAULT_CLOCK_SKEW = timedelta(seconds=60)
 
 
 class DiscoveryRecordError(ValueError):
-    """Raised when a discovery record fails verification."""
+    """Raised when a discovery record fails verification.
+
+    Carries an optional :class:`~deny_reason.DenyReason` so callers and the
+    audit checkpoint emitter can match the failure mode without parsing the
+    human-readable message.
+    """
+
+    def __init__(self, message: str, *, reason: DenyReason | None = None) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+    @property
+    def reason_code(self) -> str:
+        return self.reason.value if self.reason is not None else ""
 
 
 @dataclass(frozen=True)
@@ -107,20 +128,29 @@ def from_json(data: bytes) -> DiscoveryRecord:
     try:
         obj = json.loads(data)
     except (ValueError, TypeError) as exc:
-        raise DiscoveryRecordError("record is not valid JSON") from exc
+        raise DiscoveryRecordError(
+            "record is not valid JSON", reason=DenyReason.DISCOVERY_MALFORMED
+        ) from exc
     if not isinstance(obj, dict):
-        raise DiscoveryRecordError("record JSON must be an object")
+        raise DiscoveryRecordError(
+            "record JSON must be an object", reason=DenyReason.DISCOVERY_MALFORMED
+        )
     required = {
         "version", "workload_iss", "workload_kid", "endpoints",
         "issuer_iss", "issuer_kid", "issued_at", "expires_at", "signature",
     }
     missing = sorted(required - set(obj))
     if missing:
-        raise DiscoveryRecordError(f"missing required fields: {','.join(missing)}")
+        raise DiscoveryRecordError(
+            f"missing required fields: {','.join(missing)}",
+            reason=DenyReason.DISCOVERY_MALFORMED,
+        )
 
     endpoints_raw = obj["endpoints"]
     if not isinstance(endpoints_raw, list):
-        raise DiscoveryRecordError("endpoints must be a list")
+        raise DiscoveryRecordError(
+            "endpoints must be a list", reason=DenyReason.DISCOVERY_MALFORMED
+        )
 
     return DiscoveryRecord(
         version=obj["version"],
@@ -136,21 +166,24 @@ def from_json(data: bytes) -> DiscoveryRecord:
 
 
 def _validate_shape(record: DiscoveryRecord) -> None:
+    def _malformed(msg: str) -> DiscoveryRecordError:
+        return DiscoveryRecordError(msg, reason=DenyReason.DISCOVERY_MALFORMED)
+
     if record.version != "v0":
-        raise DiscoveryRecordError(f"unsupported version: {record.version!r}")
+        raise _malformed(f"unsupported version: {record.version!r}")
     if not isinstance(record.workload_iss, str) or not SPIFFE_ID_RE.match(record.workload_iss):
-        raise DiscoveryRecordError(f"invalid workload_iss: {record.workload_iss!r}")
+        raise _malformed(f"invalid workload_iss: {record.workload_iss!r}")
     if not isinstance(record.workload_kid, str) or not KID_RE.match(record.workload_kid):
-        raise DiscoveryRecordError(f"invalid workload_kid: {record.workload_kid!r}")
+        raise _malformed(f"invalid workload_kid: {record.workload_kid!r}")
     if not isinstance(record.issuer_iss, str) or not SPIFFE_ID_RE.match(record.issuer_iss):
-        raise DiscoveryRecordError(f"invalid issuer_iss: {record.issuer_iss!r}")
+        raise _malformed(f"invalid issuer_iss: {record.issuer_iss!r}")
     if not isinstance(record.issuer_kid, str) or not KID_RE.match(record.issuer_kid):
-        raise DiscoveryRecordError(f"invalid issuer_kid: {record.issuer_kid!r}")
+        raise _malformed(f"invalid issuer_kid: {record.issuer_kid!r}")
     if not record.endpoints:
-        raise DiscoveryRecordError("endpoints must be non-empty")
+        raise _malformed("endpoints must be non-empty")
     for index, ep in enumerate(record.endpoints):
         if not isinstance(ep, str) or not ep:
-            raise DiscoveryRecordError(f"endpoints[{index}] must be a non-empty string")
+            raise _malformed(f"endpoints[{index}] must be a non-empty string")
 
 
 @dataclass(frozen=True)
@@ -168,54 +201,104 @@ def verify_record(
     issuer_lookup: Callable[[str, str], bytes],
     now: datetime | None = None,
     config: DiscoveryVerificationConfig = DEFAULT_DISCOVERY_CONFIG,
+    audit_sink: AuditSink | None = None,
 ) -> DiscoveryRecord:
     """Verify shape + time-window + signature. Return the record on success.
 
     ``issuer_lookup`` is a callable mapping ``(iss, kid) -> PEM`` —
     typically an :class:`IssuerTrustStore` materialized from a verified
-    bootstrap bundle.
+    bootstrap bundle. ``audit_sink``, if supplied, receives one
+    ``discovery.verify`` event per call (allow on success, deny with the
+    appropriate :class:`~deny_reason.DenyReason` code on failure).
     """
-    _validate_shape(record)
-    if not record.signature:
-        raise DiscoveryRecordError("record is unsigned")
+    audit_ctx = {
+        "message_id": "",  # discovery records don't have a message_id
+        "sender": record.workload_iss if isinstance(record, DiscoveryRecord) else "",
+        "recipient": "",
+        "envelope_kid": record.workload_kid if isinstance(record, DiscoveryRecord) else "",
+        "issuer_iss": record.issuer_iss if isinstance(record, DiscoveryRecord) else "",
+        "issuer_kid": record.issuer_kid if isinstance(record, DiscoveryRecord) else "",
+    }
+
+    def _emit(outcome: str, reason: str, reason_code: str) -> None:
+        if audit_sink is not None:
+            audit_sink.record(
+                event_type=DISCOVERY_EVENT_TYPE,
+                outcome=outcome,
+                reason=reason,
+                reason_code=reason_code,
+                artifact_version=DISCOVERY_ARTIFACT_VERSION,
+                **audit_ctx,
+            )
 
     try:
-        issued_at = parse_rfc3339(record.issued_at)
-        expires_at = parse_rfc3339(record.expires_at)
-    except Exception as exc:
-        raise DiscoveryRecordError(f"invalid timestamp: {exc}") from exc
+        _validate_shape(record)
+        if not record.signature:
+            raise DiscoveryRecordError(
+                "record is unsigned", reason=DenyReason.DISCOVERY_MALFORMED
+            )
 
-    current = now.astimezone(UTC) if now is not None else datetime.now(UTC)
+        try:
+            issued_at = parse_rfc3339(record.issued_at)
+            expires_at = parse_rfc3339(record.expires_at)
+        except Exception as exc:
+            raise DiscoveryRecordError(
+                f"invalid timestamp: {exc}", reason=DenyReason.DISCOVERY_MALFORMED
+            ) from exc
 
-    if expires_at <= issued_at:
-        raise DiscoveryRecordError("invalid validity window")
-    if expires_at - issued_at > config.max_record_ttl:
-        raise DiscoveryRecordError(
-            f"record ttl exceeds maximum {config.max_record_ttl}"
-        )
-    if issued_at - current > config.max_clock_skew:
-        raise DiscoveryRecordError("issued_at in future beyond skew")
-    if current - expires_at > config.max_clock_skew:
-        raise DiscoveryRecordError("record expired")
+        current = now.astimezone(UTC) if now is not None else datetime.now(UTC)
 
-    try:
-        sig_bytes = decode_base64url(record.signature)
-    except Exception as exc:
-        raise DiscoveryRecordError("invalid signature encoding") from exc
+        if expires_at <= issued_at:
+            raise DiscoveryRecordError(
+                "invalid validity window", reason=DenyReason.DISCOVERY_EXPIRED
+            )
+        if expires_at - issued_at > config.max_record_ttl:
+            raise DiscoveryRecordError(
+                f"record ttl exceeds maximum {config.max_record_ttl}",
+                reason=DenyReason.DISCOVERY_EXPIRED,
+            )
+        if issued_at - current > config.max_clock_skew:
+            raise DiscoveryRecordError(
+                "issued_at in future beyond skew", reason=DenyReason.DISCOVERY_EXPIRED
+            )
+        if current - expires_at > config.max_clock_skew:
+            raise DiscoveryRecordError(
+                "record expired", reason=DenyReason.DISCOVERY_EXPIRED
+            )
 
-    try:
-        pem = issuer_lookup(record.issuer_iss, record.issuer_kid)
-    except Exception as exc:
-        raise DiscoveryRecordError(f"unknown discovery issuer key: {exc}") from exc
+        try:
+            sig_bytes = decode_base64url(record.signature)
+        except Exception as exc:
+            raise DiscoveryRecordError(
+                "invalid signature encoding",
+                reason=DenyReason.DISCOVERY_MALFORMED,
+            ) from exc
 
-    try:
-        key = load_ed25519_public_key(pem)
-    except Exception as exc:
-        raise DiscoveryRecordError("invalid discovery issuer public key") from exc
+        try:
+            pem = issuer_lookup(record.issuer_iss, record.issuer_kid)
+        except Exception as exc:
+            raise DiscoveryRecordError(
+                f"unknown discovery issuer key: {exc}",
+                reason=DenyReason.DISCOVERY_UNKNOWN_ISSUER,
+            ) from exc
 
-    try:
-        key.verify(sig_bytes, _body_for_signing(record))
-    except InvalidSignature as exc:
-        raise DiscoveryRecordError("signature invalid") from exc
+        try:
+            key = load_ed25519_public_key(pem)
+        except Exception as exc:
+            raise DiscoveryRecordError(
+                "invalid discovery issuer public key",
+                reason=DenyReason.DISCOVERY_UNKNOWN_ISSUER,
+            ) from exc
 
+        try:
+            key.verify(sig_bytes, _body_for_signing(record))
+        except InvalidSignature as exc:
+            raise DiscoveryRecordError(
+                "signature invalid", reason=DenyReason.DISCOVERY_SIGNATURE_INVALID
+            ) from exc
+    except DiscoveryRecordError as exc:
+        _emit("deny", str(exc), reason_code=exc.reason_code)
+        raise
+
+    _emit("allow", "ok", reason_code="ok")
     return record
