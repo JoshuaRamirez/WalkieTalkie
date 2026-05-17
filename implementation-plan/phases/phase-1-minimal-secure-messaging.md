@@ -243,8 +243,16 @@ Enable authenticated peer discovery and request/response execution with anti-rep
   `FileBackedRollbackGuard` implementations. Each `accept(bundle)` enforces
   `bundle.version > last_accepted_for_issuer`; per-issuer isolation so two
   policy authorities can have overlapping integer sequences.
-- Canary + auto-rollback for policy releases. **Not yet landed;** separate
-  slice. Requires a release-traffic split mechanism.
+- Canary + auto-rollback for policy releases.
+  **Landed (v0):** `CanaryPolicy` in
+  `security-foundations/envelope/canary_policy.py` wraps two
+  `IssuancePolicy` instances (stable + candidate) and routes a
+  configurable percentage of grants to the candidate using a
+  deterministic sha256-based bucket over `(sub, aud, scope)`.
+  Crossing `rollback_after_denials` on the candidate fires a sticky
+  auto-rollback — all subsequent evaluates route to stable.
+  Persistent / cross-process counter state remains a follow-up
+  (documented).
 
 **Acceptance Criteria**
 - Policy error path is fail-closed.

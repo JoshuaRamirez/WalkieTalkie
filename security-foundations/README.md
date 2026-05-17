@@ -47,6 +47,12 @@ the approved plan.
   `IssuerTrustStore` and returns the realized policy. `RollbackGuard`
   (`InMemoryRollbackGuard` / `FileBackedRollbackGuard`) enforces per-issuer
   monotonic-version acceptance.
+- **Canary policy releases v0** (`envelope/canary_policy.py`): `CanaryPolicy`
+  wraps a stable + candidate `IssuancePolicy` pair and routes a percentage
+  of grants to the candidate via a deterministic sha256-based bucket over
+  `(sub, aud, scope)`. Auto-rollback engages once the candidate's denial
+  count crosses `rollback_after_denials`; rollback is sticky for the
+  lifetime of the instance.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root
