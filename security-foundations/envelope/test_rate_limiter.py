@@ -213,9 +213,10 @@ class RateLimitedVerifierTests(unittest.TestCase):
             replay_cache=InMemoryReplayCache(),
         )
 
-    def test_throttled_request_does_not_reach_inner(self):
-        # The inner verifier would reject due to replay on the second call.
-        # The rate limiter should throttle before then.
+    def test_authentic_throttle(self):
+        # Two successful verifies on a limit-1 window: the second is throttled
+        # at the rate limiter, *after* the inner verifier has authenticated it
+        # (and consumed the replay slot).
         rl_verifier = RateLimitedVerifier(
             inner=self._make_verifier(),
             limiter=IdentityRateLimiter(limit=1, window=timedelta(minutes=5)),
@@ -223,7 +224,6 @@ class RateLimitedVerifierTests(unittest.TestCase):
         env = self._envelope()
         rl_verifier.verify(env, now=_NOW)
         env2 = self._envelope(nonce="nonce-000000000002")
-        # Second call should hit the rate limit, not the verifier.
         with self.assertRaises(RateLimitExceededError) as ctx:
             rl_verifier.verify(env2, now=_NOW)
         self.assertEqual(ctx.exception.decision.identity, _SENDER_A)
@@ -244,8 +244,8 @@ class RateLimitedVerifierTests(unittest.TestCase):
         self.assertIn("rate limit exceeded", second.reason)
 
     def test_rate_limit_error_is_envelope_verification_error(self):
-        # Verifies the inheritance: callers that catch
-        # EnvelopeVerificationError also catch RateLimitExceededError.
+        # Callers that catch EnvelopeVerificationError also catch
+        # RateLimitExceededError without special-casing.
         rl_verifier = RateLimitedVerifier(
             inner=self._make_verifier(),
             limiter=IdentityRateLimiter(limit=1, window=timedelta(minutes=5)),
@@ -254,8 +254,28 @@ class RateLimitedVerifierTests(unittest.TestCase):
         env2 = self._envelope(nonce="nonce-000000000002")
         with self.assertRaises(EnvelopeVerificationError) as ctx:
             rl_verifier.verify(env2, now=_NOW)
-        # And carries the RATE_LIMITED reason code.
         self.assertEqual(ctx.exception.reason_code, "rate_limited")
+
+    def test_forged_signature_does_not_burn_victims_allowance(self):
+        # Hardening: rate limiter MUST run after signature verification so an
+        # attacker cannot DoS a workload by sending envelopes that *claim* the
+        # victim's sender_spiffe_id but fail signature.
+        rl_verifier = RateLimitedVerifier(
+            inner=self._make_verifier(),
+            limiter=IdentityRateLimiter(limit=1, window=timedelta(minutes=5)),
+        )
+        env = self._envelope()
+        # Tamper with the signature: still claims sender=_SENDER_A but signature
+        # is invalid. The inner verifier rejects → limiter never sees the call.
+        env["signature"] = "A" * 86  # well-formed base64url, wrong bytes
+        with self.assertRaises(EnvelopeVerificationError) as ctx:
+            rl_verifier.verify(env, now=_NOW)
+        self.assertNotEqual(ctx.exception.reason_code, "rate_limited")
+
+        # The legitimate sender's allowance is intact — a real envelope from
+        # _SENDER_A should still succeed.
+        legit = self._envelope(nonce="nonce-000000000099")
+        rl_verifier.verify(legit, now=_NOW)
 
 
 if __name__ == "__main__":
