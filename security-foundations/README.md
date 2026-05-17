@@ -62,6 +62,15 @@ the approved plan.
   `delegator_iss == parent.sub`, scope must equal parent's scope, aud
   must equal parent's, and `[iat, exp]` must be contained within the
   parent's window. Depth capped at `max_chain_depth` (default 3).
+- **Data classification + lineage v0**
+  (`envelope/data_classification.py`, Phase 2 Track B B1): `DataClass`
+  enum (public / internal / confidential / restricted), `ClassifiedData`
+  frozen wrapper around a `data_digest`, `lineage` chain, and metadata
+  bag. `classify()` / `derive()` / `combine()` are the only constructors;
+  derivation rejects class demotion (`DataClassificationError`), combine
+  takes the max class. Each `LineageTag` commits to its parent's
+  `chain_hash` so tamper-evident lineage walks are possible without
+  trusting any single producer.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root

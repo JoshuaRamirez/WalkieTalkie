@@ -127,7 +127,18 @@ Phase 2 target: stable A1, controlled pilot for A2.
 
 ### B1. Data Classification Pipeline
 - Class labels (public/internal/confidential/restricted).
+  **Landed (v0):** `DataClass` StrEnum in
+  `security-foundations/envelope/data_classification.py` with the four
+  required labels and a strict ordering for "more restrictive" comparisons.
 - Metadata binding and immutable lineage tags.
+  **Landed (v0):** `ClassifiedData` (frozen dataclass) carries a
+  `data_digest`, a `DataClass` label, an immutable tuple of
+  `LineageTag` entries, and an immutable tuple-of-pairs metadata bag.
+  `classify()` / `derive()` / `combine()` are the only ways to construct
+  multi-link lineages. `derive()` rejects class demotion; `combine()`
+  takes the max class. Each lineage tag commits to its parent's
+  `chain_hash` so tampering anywhere in the lineage is detectable by
+  re-derivation.
 
 ### B2. Purpose-of-Use Policy Enforcement
 - Retrieval denied unless class + purpose + identity align.
