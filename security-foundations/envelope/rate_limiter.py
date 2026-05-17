@@ -130,29 +130,38 @@ class IdentityRateLimiter:
 
 @dataclass
 class RateLimitedVerifier:
-    """Decorate a :class:`Verifier` with per-sender rate limiting.
+    """Decorate a :class:`Verifier` with per-identity rate limiting.
 
-    Calls the limiter with ``envelope["sender_spiffe_id"]`` *before*
-    invoking the wrapped verifier. The pre-check means a throttled sender
-    never reaches signature verification — saving the expensive crypto
-    work the v0 token-bucket pattern was supposed to avoid.
+    The limiter runs **after** the inner verifier authenticates the envelope.
+    This is a deliberate hardening choice: if we throttled on the *claimed*
+    ``sender_spiffe_id`` before signature verification, an attacker could DoS
+    any workload by sending fake envelopes with the victim's SPIFFE ID — the
+    verifier would reject the signatures but the limiter would already have
+    burned the victim's allowance.
+
+    Throttled requests have already consumed their replay-cache slot (the
+    inner verifier ran to completion). Callers MUST mint a fresh nonce on
+    retry; that matches normal envelope semantics anyway.
 
     ``verify`` raises :class:`RateLimitExceededError`; ``try_verify``
     returns a :class:`VerificationResult` with ``ok=False`` and
-    ``reason="rate_limited: ..."``.
+    ``reason="rate_limited: ..."``. The limiter only counts requests that
+    the verifier *accepted*, so only authentic senders consume slots.
     """
 
     inner: Verifier
     limiter: IdentityRateLimiter
 
     def verify(self, envelope: dict, *, now: datetime | None = None):
+        # Authenticate first so the limiter only sees verified identities.
+        claims = self.inner.verify(envelope, now=now)
         identity = (
             envelope.get("sender_spiffe_id", "") if isinstance(envelope, dict) else ""
         )
         decision = self.limiter.check(identity, now=now)
         if not decision.allowed:
             raise RateLimitExceededError(decision)
-        return self.inner.verify(envelope, now=now)
+        return claims
 
     def try_verify(self, envelope: dict, *, now: datetime | None = None) -> VerificationResult:
         try:
