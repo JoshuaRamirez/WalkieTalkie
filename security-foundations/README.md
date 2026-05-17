@@ -53,6 +53,15 @@ the approved plan.
   `(sub, aud, scope)`. Auto-rollback engages once the candidate's denial
   count crosses `rollback_after_denials`; rollback is sticky for the
   lifetime of the instance.
+- **Delegation receipts v0** (`envelope/delegation_receipt.py`, Phase 2
+  Track A): `DelegationReceipt` records one hop of a delegation chain
+  (`chain_id`, `hop_index`, `parent_jti`, `delegator_iss`, `delegate_iss`,
+  scope/aud/window, signature with `typ: "wt-delegation/v0"`).
+  `verify_receipt()` enforces every non-escalation invariant: hop_index
+  must be exactly `parent.hop_index + 1`, parent_jti must match,
+  `delegator_iss == parent.sub`, scope must equal parent's scope, aud
+  must equal parent's, and `[iat, exp]` must be contained within the
+  parent's window. Depth capped at `max_chain_depth` (default 3).
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root

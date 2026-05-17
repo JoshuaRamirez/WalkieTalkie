@@ -81,12 +81,30 @@ Phase 2 target: stable A1, controlled pilot for A2.
 
 ### A1. Delegation Data Model
 - Define chain IDs, hop index, parent reference, and signed receipt schema.
+  **Landed (v0):** `DelegationReceipt` in
+  `security-foundations/envelope/delegation_receipt.py` carries
+  `chain_id` (UUIDv7), `hop_index`, `parent_jti`, `delegator_iss`/
+  `delegator_kid`, `delegate_iss`, `scope`, `aud`, `iat`/`nbf`/`exp`,
+  `jti`, and a base64url EdDSA signature over the JCS-canonicalized
+  body with `typ: "wt-delegation/v0"`.
 - Standardize clock and expiry semantics across hops.
+  **Landed (v0):** NumericDate `iat`/`nbf`/`exp` per JWT; the
+  validator enforces `iat <= nbf < exp` and the same skew tolerance
+  used by the capability validator.
 
 ### A2. Delegation Validator
 - Validate depth limits.
+  **Landed (v0):** `DelegationVerificationConfig.max_chain_depth`
+  defaults to 3; `hop_index >= max_chain_depth` raises
+  `DelegationError(DELEGATION_DEPTH_EXCEEDED)`.
 - Verify monotonic scope and TTL constraints.
+  **Landed (v0):** Child scope MUST equal parent scope
+  (`DELEGATION_SCOPE_ESCALATION`); child `[iat, exp]` MUST be contained
+  within parent's window (`DELEGATION_TTL_ESCALATION`).
 - Enforce audience continuity constraints.
+  **Landed (v0):** Child aud MUST equal parent aud
+  (`DELEGATION_AUDIENCE_DRIFT`); child `delegator_iss` MUST equal
+  parent `sub` (`DELEGATION_PARENT_MISMATCH`).
 
 ### A3. Non-Escalation Proof Tests
 - Property-based tests for random delegation graphs.
@@ -94,7 +112,14 @@ Phase 2 target: stable A1, controlled pilot for A2.
 
 **Acceptance Criteria**
 - No test case can produce broader privilege at child hop.
+  **Landed (deterministic v0 tests):** explicit cases for scope
+  divergence (both directions), audience drift, TTL extension, hop
+  reordering, parent-jti mismatch, and depth overrun all raise
+  `DelegationError` with the matching `DenyReason` family. A3's
+  property/fuzz tests remain a follow-up.
 - Invalid chain receipt always denies execution.
+  **Landed:** the validator raises on every invariant breach; the
+  consumer never sees a partial-success return value.
 
 ---
 
