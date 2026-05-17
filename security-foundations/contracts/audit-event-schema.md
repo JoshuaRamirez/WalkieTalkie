@@ -91,6 +91,41 @@ stability contract applies: identifiers, once shipped, are never renamed or
 repurposed. New denial paths get new identifiers; deprecated ones can be
 retired but their string form is reserved.
 
+### Field attribution on deny events
+
+On a successful verification (`outcome = "allow"`), every identity field
+(`sender`, `recipient`, `envelope_kid`, `issuer_iss`, `issuer_kid`) has
+been *cryptographically validated* — the envelope's signature, the
+capability token's signature, and the issuer-trust-store lookup all
+passed.
+
+On a denied verification (`outcome = "deny"`), identity fields reflect
+what the envelope **claimed at the point the deny fired**, not what the
+verifier confirmed. A deny that fires before signature verification
+(e.g., `payload_digest_mismatch`, missing required field, malformed
+timestamp) records the *claimed* `sender_spiffe_id` without proof. An
+attacker who sends garbage envelopes can therefore cause deny events to
+appear with a victim's SPIFFE ID in the `sender` column.
+
+Consequences for downstream consumers:
+
+- Threshold alerts on deny counts per-`sender` (see :mod:`alerting`) may
+  fire on innocent identities. The alert means "someone is sending
+  envelopes that claim to be from X, and they're failing" — not
+  necessarily "X is misbehaving." Operators MUST treat these alerts as
+  investigation triggers, not automatic enforcement.
+- Search views (see :mod:`audit_query`) that filter by `sender` will
+  include both verified and unverified attributions on the deny side.
+- The rate limiter (see :mod:`rate_limiter`) is deliberately wired
+  **after** signature verification so it does not act on claimed-but-
+  unverified identities. That's a hard requirement for any future
+  automated enforcement built on these events.
+
+This is a documented v0 trade-off. A future hardening pass could split
+the schema into `claimed_sender` (always present) and `verified_sender`
+(present only when `outcome == "allow"`), but that's a backwards-
+incompatible field change and would require a contract version bump.
+
 ## Backwards-compatibility policy
 
 | Change | Compatibility |
