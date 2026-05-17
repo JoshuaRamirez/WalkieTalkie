@@ -96,3 +96,14 @@ class DenyReason(StrEnum):
     # --- Admission ---
     ADMISSION_WORKLOAD_NOT_ALLOWED = "admission_workload_not_allowed"
     ADMISSION_VERSION_INCOMPATIBLE = "admission_version_incompatible"
+
+    # --- Delegation (Phase 2 Track A) ---
+    DELEGATION_MALFORMED = "delegation_malformed"
+    DELEGATION_EXPIRED = "delegation_expired"
+    DELEGATION_SIGNATURE_INVALID = "delegation_signature_invalid"
+    DELEGATION_UNKNOWN_ISSUER = "delegation_unknown_issuer"
+    DELEGATION_DEPTH_EXCEEDED = "delegation_depth_exceeded"
+    DELEGATION_PARENT_MISMATCH = "delegation_parent_mismatch"
+    DELEGATION_SCOPE_ESCALATION = "delegation_scope_escalation"
+    DELEGATION_AUDIENCE_DRIFT = "delegation_audience_drift"
+    DELEGATION_TTL_ESCALATION = "delegation_ttl_escalation"
