@@ -107,3 +107,8 @@ class DenyReason(StrEnum):
     DELEGATION_SCOPE_ESCALATION = "delegation_scope_escalation"
     DELEGATION_AUDIENCE_DRIFT = "delegation_audience_drift"
     DELEGATION_TTL_ESCALATION = "delegation_ttl_escalation"
+
+    # --- Retrieval / context firewall (Phase 2 Track B) ---
+    RETRIEVAL_CROSS_TENANT = "retrieval_cross_tenant"
+    RETRIEVAL_CLASS_EXCEEDS_RULE = "retrieval_class_exceeds_rule"
+    RETRIEVAL_NO_RULE_MATCH = "retrieval_no_rule_match"
