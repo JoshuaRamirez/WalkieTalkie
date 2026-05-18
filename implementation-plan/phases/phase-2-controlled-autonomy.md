@@ -142,7 +142,21 @@ Phase 2 target: stable A1, controlled pilot for A2.
 
 ### B2. Purpose-of-Use Policy Enforcement
 - Retrieval denied unless class + purpose + identity align.
+  **Landed (v0):** `AllowlistRetrievalPolicy` in
+  `security-foundations/envelope/retrieval_policy.py` evaluates a
+  closed tuple of `RetrievalRule(caller_iss, purpose_of_use, max_class)`
+  in declaration order; the first matching `(caller_iss, purpose_of_use)`
+  decides, and `data.data_class` must be at most as restrictive as the
+  rule's `max_class`. Denials carry stable `DenyReason` codes
+  (`RETRIEVAL_NO_RULE_MATCH`, `RETRIEVAL_CLASS_EXCEEDS_RULE`).
+  `require_retrieval()` raises `RetrievalError` carrying the decision.
 - Cross-tenant retrieval denied by default.
+  **Landed (v0):** the policy carries a `CrossTenantRetrieval` dial
+  defaulting to `DENY`. Origin tenant is derived from the trust-domain
+  component of the first lineage tag's `actor_iss`; when caller and
+  origin trust domains differ, retrieval is rejected with
+  `RETRIEVAL_CROSS_TENANT` regardless of any matching rule. Operators
+  must explicitly set `cross_tenant=ALLOW` to opt in.
 
 ### B3. Prompt Assembly Minimization
 - Least-sensitive-first context composition.

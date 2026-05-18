@@ -71,6 +71,16 @@ the approved plan.
   takes the max class. Each `LineageTag` commits to its parent's
   `chain_hash` so tamper-evident lineage walks are possible without
   trusting any single producer.
+- **Retrieval policy v0** (`envelope/retrieval_policy.py`, Phase 2 Track
+  B B2): `AllowlistRetrievalPolicy` evaluates retrieval against a closed
+  tuple of `RetrievalRule(caller_iss, purpose_of_use, max_class)` plus a
+  `CrossTenantRetrieval` dial that defaults to `DENY`. The tenant check
+  runs first — origin tenant is the trust-domain of the data's first
+  lineage tag's `actor_iss`, and a mismatched caller is rejected with
+  `RETRIEVAL_CROSS_TENANT` regardless of any rule. Otherwise, the first
+  `(caller_iss, purpose_of_use)` rule wins and the data's class must be
+  at most as restrictive as `max_class`. `require_retrieval()` raises
+  `RetrievalError` carrying the decision on denial.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root
