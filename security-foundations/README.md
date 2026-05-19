@@ -169,6 +169,17 @@ the approved plan.
   for each failure mode so operators can choose per-class behavior.
   The acceptance criterion "Revoked capability cannot commit writes
   post-revocation checkpoint" is pinned by a dedicated test.
+- **Session tokens v0** (`envelope/session_token.py`, Phase 2 Track E
+  E2): `SessionToken` is an EdDSA-signed JCS body with
+  `typ="wt-session/v0"` cross-protocol binding, carrying a stable
+  `session_id` plus a monotonic `seq`, `parent_jti`, SPIFFE iss /
+  sub / aud, `scope`, a per-token `[iat, nbf, exp]` window (default
+  max TTL 5 min), and a UUIDv7 `jti`. `verify_session_token()`
+  checks shape, window, and signature. `verify_resume()` adds the
+  chain rules: matching `session_id`, `parent_jti == previous.jti`,
+  `seq == previous.seq + 1`, no subject / audience / scope drift,
+  and a cumulative-lifetime cap (default 1 hour). Resume identifier
+  replay (reusing `seq`) raises `SESSION_RESUME_SEQUENCE_INVALID`.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root
