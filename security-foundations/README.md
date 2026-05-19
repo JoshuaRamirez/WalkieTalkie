@@ -102,6 +102,15 @@ the approved plan.
   (`RiskLevel.NONE` for clean output) and whose `.redact()` returns
   the text with every match replaced by `[REDACTED:<pattern_name>]`.
   ML classifiers are deferred; the result shape leaves room for them.
+- **Policy-adaptive egress v0** (`envelope/egress_policy.py`, Phase 2
+  Track C C2): `MatrixEgressPolicy` consults a closed matrix of
+  `EgressMatrixCell(risk, data_class, action)` cells where `action` is
+  one of `ALLOW` / `QUARANTINE` / `DENY`. Unmatched cells fall through
+  to default-deny with `EGRESS_NO_MATRIX_ENTRY`. The
+  `restricted_no_export=True` default forces any `RESTRICTED` artifact
+  to deny regardless of matrix or risk score, carrying
+  `EGRESS_RESTRICTED_NO_EXPORT`. `require_egress()` raises
+  `EgressError` on any non-ALLOW verdict.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root

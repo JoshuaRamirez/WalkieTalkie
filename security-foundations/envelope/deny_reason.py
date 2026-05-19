@@ -112,3 +112,8 @@ class DenyReason(StrEnum):
     RETRIEVAL_CROSS_TENANT = "retrieval_cross_tenant"
     RETRIEVAL_CLASS_EXCEEDS_RULE = "retrieval_class_exceeds_rule"
     RETRIEVAL_NO_RULE_MATCH = "retrieval_no_rule_match"
+
+    # --- Egress / output DLP (Phase 2 Track C) ---
+    EGRESS_DENIED_BY_POLICY = "egress_denied_by_policy"
+    EGRESS_RESTRICTED_NO_EXPORT = "egress_restricted_no_export"
+    EGRESS_NO_MATRIX_ENTRY = "egress_no_matrix_entry"
