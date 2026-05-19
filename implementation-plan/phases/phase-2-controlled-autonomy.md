@@ -321,7 +321,25 @@ Phase 2 target: stable A1, controlled pilot for A2.
 
 ### E1. Checkpointed Execution
 - Revalidate capability and policy at commit points.
+  **Landed (v0):** `Checkpoint` + `validate_checkpoint()` in
+  `security-foundations/envelope/checkpointed_execution.py`. A
+  `Checkpoint(checkpoint_id, task_id, step, requested_at,
+  intended_action)` represents one commit point in a long-running
+  task. The validator re-checks the capability's `[nbf, exp]`
+  window, the `jti` against an `InMemoryRevocationLedger` (swap-in
+  abstract base `RevocationLedger`), and the active policy epoch
+  against the epoch the task was authorized under.
 - Abort or downgrade behavior on revocation or policy epoch mismatch.
+  **Landed (v0):** `CheckpointPolicy` carries three independent
+  failure-mode dials (`on_capability_expired`,
+  `on_capability_revoked`, `on_epoch_mismatch`), each ∈
+  `{ABORT, DOWNGRADE}` (default ABORT). The validator returns a
+  `CheckpointDecision(action, reason, reason_code)` so the task
+  runtime can fan a single verdict to the abort path or the
+  re-evaluate-under-new-policy path. The acceptance criterion
+  ("Revoked capability cannot commit writes post-revocation
+  checkpoint") is pinned by
+  `test_revoked_capability_blocked_at_next_checkpoint`.
 
 ### E2. Streaming and Resume Controls
 - Session tokens with bounded lifetime and strict resume conditions.

@@ -158,6 +158,17 @@ the approved plan.
   outcome. The test enforces a 100 % block-rate AND that the corpus
   exercises every installed gate, so regressions in either direction
   fail CI.
+- **Checkpointed execution v0**
+  (`envelope/checkpointed_execution.py`, Phase 2 Track E E1):
+  `Checkpoint(checkpoint_id, task_id, step, requested_at,
+  intended_action)` is the commit-point shape for long-running tasks.
+  `validate_checkpoint()` re-checks the capability's time window, the
+  `jti` against a `RevocationLedger` (in-memory default), and the
+  active policy epoch against `CheckpointPolicy.expected_epoch`.
+  `CheckpointPolicy` carries independent `{ABORT, DOWNGRADE}` dials
+  for each failure mode so operators can choose per-class behavior.
+  The acceptance criterion "Revoked capability cannot commit writes
+  post-revocation checkpoint" is pinned by a dedicated test.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root
