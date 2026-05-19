@@ -111,6 +111,17 @@ the approved plan.
   to deny regardless of matrix or risk score, carrying
   `EGRESS_RESTRICTED_NO_EXPORT`. `require_egress()` raises
   `EgressError` on any non-ALLOW verdict.
+- **Reviewer workflow v0** (`envelope/reviewer_workflow.py`, Phase 2
+  Track C C3): `QuarantineRecord` is the queue-entry shape (UUIDv7
+  `record_id`, `artifact_digest`, risk, data class, requester SPIFFE
+  id, `purpose_of_use`). `ReviewDecision` is an EdDSA-signed
+  JCS-canonical record with `typ="wt-review/v0"` cross-protocol
+  binding, carrying `record_digest` (binds to a specific quarantine
+  record), `verdict` (`RELEASE` / `REJECT`), reviewer SPIFFE id + kid,
+  `[iat, nbf, exp]` (default max TTL 24h), and a UUIDv7 `jti`.
+  `verify_release_authorization()` is the release-path check: shape +
+  binding + window + signature (via `IssuerTrustStore`) + verdict ==
+  RELEASE. `verify_decision()` is the audit-only variant.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root
