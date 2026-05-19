@@ -343,7 +343,25 @@ Phase 2 target: stable A1, controlled pilot for A2.
 
 ### E2. Streaming and Resume Controls
 - Session tokens with bounded lifetime and strict resume conditions.
+  **Landed (v0):** `SessionToken` in
+  `security-foundations/envelope/session_token.py` is an EdDSA-signed
+  JCS body with `typ="wt-session/v0"` cross-protocol binding,
+  carrying `session_id` (stable across resumes), `seq` (monotonic,
+  +1 per resume), `parent_jti`, `iss`/`iss_kid`/`sub`/`aud`/`scope`,
+  `[iat, nbf, exp]` (default per-token max TTL 5 minutes), and a
+  UUIDv7 `jti`. `verify_session_token()` enforces shape, window,
+  TTL, and signature. `verify_resume()` additionally enforces a
+  cumulative-lifetime cap (default 1 hour) — operators bound how
+  long a single session can stay alive across resumes regardless of
+  individual token TTLs.
 - Replay-safe resume identifiers.
+  **Landed (v0):** every `SessionToken` carries a unique `jti`. A
+  resume MUST set `parent_jti` to the previous token's `jti` and
+  set `seq = previous.seq + 1`. Reusing or skipping a sequence
+  number → `SESSION_RESUME_SEQUENCE_INVALID`. The chain rules also
+  reject `session_id` switching, `parent_jti` forging, and any
+  subject / audience / scope drift across resumes, so a stolen
+  token cannot be turned into a broader-privilege resume.
 
 **Acceptance Criteria**
 - Revoked capability cannot commit writes post-revocation checkpoint.
