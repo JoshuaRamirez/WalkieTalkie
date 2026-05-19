@@ -81,6 +81,18 @@ the approved plan.
   `(caller_iss, purpose_of_use)` rule wins and the data's class must be
   at most as restrictive as `max_class`. `require_retrieval()` raises
   `RetrievalError` carrying the decision on denial.
+- **Prompt assembly minimization v0** (`envelope/prompt_assembly.py`,
+  Phase 2 Track B B3): `compose()` consumes a list of `PromptCandidate`
+  records (each pairs a `ClassifiedData` with a source label and the raw
+  context text) against an `ActionBudget(action, max_class, max_items)`.
+  Items whose class exceeds the budget are dropped with
+  `reason_code="class_exceeds_budget"`; survivors are sorted
+  least-sensitive-first (PUBLIC → RESTRICTED, tie-broken by
+  `source_label`); overflow past `max_items` is dropped with
+  `reason_code="items_over_budget"`. Each `IncludedItem` carries
+  `source_label`, `data_class`, and `trust_label` so downstream audit
+  records can answer "what sensitivity and what tenant did each prompt
+  chunk come from".
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root

@@ -160,7 +160,20 @@ Phase 2 target: stable A1, controlled pilot for A2.
 
 ### B3. Prompt Assembly Minimization
 - Least-sensitive-first context composition.
+  **Landed (v0):** `compose()` in
+  `security-foundations/envelope/prompt_assembly.py` sorts surviving
+  candidates by `DataClass` rank ascending (PUBLIC → RESTRICTED), with
+  `source_label` breaking ties for deterministic output.
 - Max context sensitivity budget per action class.
+  **Landed (v0):** `ActionBudget(action, max_class, max_items)` caps both
+  the most-restrictive class allowed in the assembled prompt and the
+  item count. Candidates above the class ceiling are dropped with
+  `reason_code="class_exceeds_budget"`; survivors past `max_items` are
+  dropped with `reason_code="items_over_budget"`. Every `IncludedItem`
+  carries `source_label`, `data_class`, and `trust_label` (the
+  trust-domain of the first lineage tag's `actor_iss`), satisfying the
+  "prompt assembly logs include source sensitivity and trust labels"
+  acceptance criterion.
 
 **Acceptance Criteria**
 - Unauthorized retrieval attempts are denied with explicit policy reason.
