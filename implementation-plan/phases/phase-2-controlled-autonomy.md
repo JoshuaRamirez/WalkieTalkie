@@ -222,7 +222,25 @@ Phase 2 target: stable A1, controlled pilot for A2.
 
 ### C3. Reviewer Workflow
 - Quarantined outputs route to human review queue.
+  **Landed (v0):** `QuarantineRecord` in
+  `security-foundations/envelope/reviewer_workflow.py` is the queue
+  entry shape — a frozen dataclass binding `record_id` (UUIDv7),
+  `artifact_digest`, `risk`, `data_class`, `requested_at`,
+  `requester_iss`, and `purpose_of_use`. Storage and routing belong to
+  the operator; the in-process primitive guarantees the binding stays
+  immutable. A JCS-stable `record_digest` is exposed for cnf-style
+  reviewer-decision binding.
 - Signed reviewer decision record with expiration and scope.
+  **Landed (v0):** `ReviewDecision` is an EdDSA-signed JCS body with
+  `typ="wt-review/v0"` cross-protocol binding, carrying
+  `record_digest`, `verdict` (RELEASE / REJECT), `reason`, reviewer
+  SPIFFE id + kid, `[iat, nbf, exp]` window, and a UUIDv7 `jti`.
+  `verify_release_authorization()` is the release-path check that
+  validates shape, record binding, time window (default max TTL 24h),
+  signature (via `IssuerTrustStore`), and that the verdict is RELEASE.
+  A REJECT raises `REVIEW_REJECTED`. `verify_decision()` is the
+  audit/archive entry point that does the same shape/signature/window
+  checks without the RELEASE requirement.
 
 **Acceptance Criteria**
 - Synthetic secret/PII corpora produce expected block/quarantine rates.

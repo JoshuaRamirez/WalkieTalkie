@@ -117,3 +117,14 @@ class DenyReason(StrEnum):
     EGRESS_DENIED_BY_POLICY = "egress_denied_by_policy"
     EGRESS_RESTRICTED_NO_EXPORT = "egress_restricted_no_export"
     EGRESS_NO_MATRIX_ENTRY = "egress_no_matrix_entry"
+
+    # --- Reviewer workflow (Phase 2 Track C C3) ---
+    REVIEW_MALFORMED = "review_malformed"
+    REVIEW_RECORD_MISMATCH = "review_record_mismatch"
+    REVIEW_EXPIRED = "review_expired"
+    REVIEW_NOT_YET_VALID = "review_not_yet_valid"
+    REVIEW_INVALID_VALIDITY_WINDOW = "review_invalid_validity_window"
+    REVIEW_TTL_EXCEEDED = "review_ttl_exceeded"
+    REVIEW_SIGNATURE_INVALID = "review_signature_invalid"
+    REVIEW_UNKNOWN_ISSUER = "review_unknown_issuer"
+    REVIEW_REJECTED = "review_rejected"
