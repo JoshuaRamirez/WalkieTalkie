@@ -203,7 +203,22 @@ Phase 2 target: stable A1, controlled pilot for A2.
 
 ### C2. Policy-Adaptive Egress
 - Deny, allow, or quarantine based on risk and data class.
+  **Landed (v0):** `MatrixEgressPolicy` in
+  `security-foundations/envelope/egress_policy.py` evaluates a closed
+  matrix of `EgressMatrixCell(risk, data_class, action)` where `action`
+  is one of `ALLOW`, `QUARANTINE`, `DENY`. Cells not present in the
+  matrix default to `EgressAction.DENY` (`EGRESS_NO_MATRIX_ENTRY`).
+  Quarantine returns `reason_code="egress_quarantined"` so downstream
+  systems can fan a single verdict out to allow / review-queue / drop
+  without re-encoding the decision. `require_egress()` raises
+  `EgressError` on any non-ALLOW verdict.
 - Mandatory NO_EXPORT for restricted-class outputs where required.
+  **Landed (v0):** `MatrixEgressPolicy.restricted_no_export` (default
+  `True`) overrides every matrix entry to deny when
+  `data_class==DataClass.RESTRICTED`, carrying
+  `EGRESS_RESTRICTED_NO_EXPORT`. Operators that want to take
+  responsibility for restricted artifacts inside the matrix can set the
+  flag to `False`.
 
 ### C3. Reviewer Workflow
 - Quarantined outputs route to human review queue.
