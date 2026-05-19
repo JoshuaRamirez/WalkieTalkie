@@ -273,7 +273,25 @@ Phase 2 target: stable A1, controlled pilot for A2.
 
 ### D2. Tool Policy Gate
 - Runtime tool-call validation independent of model deliberation.
+  **Landed (v0):** `ToolPolicy` (closed allowlist of `ToolRule`
+  records) + `evaluate_tool_call()` in
+  `security-foundations/envelope/tool_policy_gate.py`. The gate's
+  inputs are operator-configured (policy) and out-of-band (optional
+  step-up attestation); the model has zero influence on the decision.
+  Unknown tools → `TOOL_UNKNOWN`. Per-tool caller allowlists →
+  `TOOL_CALLER_NOT_ALLOWED`. `require_tool_call()` raises
+  `ToolPolicyDenied` on any non-ALLOW verdict.
 - High-risk tools require step-up authorization path.
+  **Landed (v0):** `ToolRule.risk_tier` (LOW / MEDIUM / HIGH /
+  CRITICAL) drives `effective_step_up_required` (defaulting to True
+  for HIGH and CRITICAL); operators can override per-rule.
+  `StepUpAttestation` is an EdDSA-signed JCS body with
+  `typ="wt-stepup/v0"` cross-protocol binding, carrying
+  `tool_name`, `caller_iss`, `arguments_digest` (so a stale
+  attestation cannot be reused for a different call), `iat`/`nbf`/`exp`,
+  and a UUIDv7 `jti`. Verification (call binding, time window,
+  signature via `IssuerTrustStore`) is in-line; failures surface
+  `TOOL_STEP_UP_*` reason codes.
 
 ### D3. Adversarial Corpus CI Gate
 - Curated injection and smuggling corpus run per release.

@@ -128,3 +128,13 @@ class DenyReason(StrEnum):
     REVIEW_SIGNATURE_INVALID = "review_signature_invalid"
     REVIEW_UNKNOWN_ISSUER = "review_unknown_issuer"
     REVIEW_REJECTED = "review_rejected"
+
+    # --- Tool policy gate (Phase 2 Track D D2) ---
+    TOOL_UNKNOWN = "tool_unknown"
+    TOOL_CALLER_NOT_ALLOWED = "tool_caller_not_allowed"
+    TOOL_STEP_UP_REQUIRED = "tool_step_up_required"
+    TOOL_STEP_UP_MISMATCH = "tool_step_up_mismatch"
+    TOOL_STEP_UP_EXPIRED = "tool_step_up_expired"
+    TOOL_STEP_UP_MALFORMED = "tool_step_up_malformed"
+    TOOL_STEP_UP_SIGNATURE_INVALID = "tool_step_up_signature_invalid"
+    TOOL_STEP_UP_UNKNOWN_ISSUER = "tool_step_up_unknown_issuer"

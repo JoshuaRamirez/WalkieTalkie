@@ -134,6 +134,18 @@ the approved plan.
   HTML-escapes content and source labels so synthetic fences cannot
   appear in the wrapped region, and returns an `audit_log` of every
   segment's `(channel, source_label, trust, signature_ref)`.
+- **Tool policy gate v0** (`envelope/tool_policy_gate.py`, Phase 2
+  Track D D2): `ToolPolicy` is a closed allowlist of `ToolRule`
+  records `(tool_name, risk_tier, allowed_callers, step_up_required)`.
+  `evaluate_tool_call()` enforces unknown-tool rejection
+  (`TOOL_UNKNOWN`), per-tool caller allowlists
+  (`TOOL_CALLER_NOT_ALLOWED`), and step-up authorization for high-risk
+  tools. `RiskTier.HIGH` and `CRITICAL` default to `step_up_required`.
+  `StepUpAttestation` is an EdDSA-signed JCS body with `typ="wt-stepup/v0"`
+  cross-protocol binding, carrying `tool_name`, `caller_iss`,
+  `arguments_digest`, time window, and a UUIDv7 `jti`. The gate runs
+  independent of model deliberation — operator-configured policy plus
+  out-of-band signed attestation are its only inputs.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root
