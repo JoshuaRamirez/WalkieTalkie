@@ -185,7 +185,21 @@ Phase 2 target: stable A1, controlled pilot for A2.
 
 ### C1. Output Scanning
 - Deterministic secret patterns + ML classifiers.
+  **Landed (v0, deterministic half):** `PatternRegistry` + `scan()` in
+  `security-foundations/envelope/output_scanning.py`. Built-in patterns
+  cover AWS access keys, generic PEM private-key blocks, Anthropic /
+  OpenAI / GitHub / Stripe API keys, and RFC 7519 JWTs. Each pattern
+  carries a `RiskLevel` (NONE / LOW / MEDIUM / HIGH / CRITICAL). The
+  `ML classifiers` half is deferred; `ScanResult.matches` is a flat
+  tuple so a future classifier can append matches without breaking
+  consumers.
 - Risk score assigned to every outbound artifact.
+  **Landed (v0):** every `scan()` returns a `ScanResult` whose `.risk`
+  property is the most-severe match's severity (or `RiskLevel.NONE`
+  for clean output). `ScanResult.redact()` returns a copy of the text
+  with each match replaced by `[REDACTED:<pattern_name>]`, with
+  overlapping-match resolution favouring earlier start, then higher
+  severity, then longer match.
 
 ### C2. Policy-Adaptive Egress
 - Deny, allow, or quarantine based on risk and data class.

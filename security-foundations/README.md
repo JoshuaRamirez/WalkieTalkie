@@ -93,6 +93,15 @@ the approved plan.
   `source_label`, `data_class`, and `trust_label` so downstream audit
   records can answer "what sensitivity and what tenant did each prompt
   chunk come from".
+- **Output scanning v0** (`envelope/output_scanning.py`, Phase 2 Track C
+  C1, deterministic half): `PatternRegistry` carries an immutable tuple
+  of `SecretPattern(name, regex, severity)` records. Built-ins cover
+  AWS access keys, generic PEM private-key blocks, Anthropic / OpenAI
+  / GitHub / Stripe API keys, and RFC 7519 JWTs. `scan(text)` returns
+  a `ScanResult` whose `.risk` is the max-severity over all matches
+  (`RiskLevel.NONE` for clean output) and whose `.redact()` returns
+  the text with every match replaced by `[REDACTED:<pattern_name>]`.
+  ML classifiers are deferred; the result shape leaves room for them.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root
