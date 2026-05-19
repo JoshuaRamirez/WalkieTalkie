@@ -138,3 +138,8 @@ class DenyReason(StrEnum):
     TOOL_STEP_UP_MALFORMED = "tool_step_up_malformed"
     TOOL_STEP_UP_SIGNATURE_INVALID = "tool_step_up_signature_invalid"
     TOOL_STEP_UP_UNKNOWN_ISSUER = "tool_step_up_unknown_issuer"
+
+    # --- Checkpointed execution (Phase 2 Track E E1) ---
+    CHECKPOINT_CAPABILITY_EXPIRED = "checkpoint_capability_expired"
+    CHECKPOINT_CAPABILITY_REVOKED = "checkpoint_capability_revoked"
+    CHECKPOINT_POLICY_EPOCH_MISMATCH = "checkpoint_policy_epoch_mismatch"
