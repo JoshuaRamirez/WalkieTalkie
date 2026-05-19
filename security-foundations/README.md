@@ -146,6 +146,18 @@ the approved plan.
   `arguments_digest`, time window, and a UUIDv7 `jti`. The gate runs
   independent of model deliberation — operator-configured policy plus
   out-of-band signed attestation are its only inputs.
+- **Adversarial corpus CI gate v0**
+  (`envelope/test_adversarial_corpus.py` +
+  `envelope/test-vectors/adversarial-corpus-v0.json`, Phase 2 Track D
+  D3): an 18-entry curated corpus spanning prompt injection,
+  role-confusion, synthetic-fence escape, secret exfiltration (AWS,
+  PEM, Anthropic / OpenAI / GitHub / Stripe, JWT), tool smuggling
+  (unknown / unauthorized / missing-step-up), cross-tenant retrieval,
+  class-above-rule retrieval, and restricted-class egress. Every
+  entry declares the v0 gate that must block it plus the expected
+  outcome. The test enforces a 100 % block-rate AND that the corpus
+  exercises every installed gate, so regressions in either direction
+  fail CI.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root

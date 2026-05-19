@@ -295,7 +295,21 @@ Phase 2 target: stable A1, controlled pilot for A2.
 
 ### D3. Adversarial Corpus CI Gate
 - Curated injection and smuggling corpus run per release.
+  **Landed (v0):** `security-foundations/envelope/test-vectors/adversarial-corpus-v0.json`
+  carries 18 curated entries spanning prompt injection, role
+  confusion, synthetic-fence escapes, secret exfiltration (AWS root,
+  private keys, Anthropic / OpenAI / GitHub / Stripe keys, JWTs),
+  unauthorized tool smuggling (unknown, unauthorized caller, missing
+  step-up), cross-tenant retrieval, class-above-rule retrieval, and
+  restricted egress. Every entry declares the v0 gate that MUST block
+  it plus the expected reason_code / risk level / structural
+  assertion.
 - Block release on regressions below safety threshold.
+  **Landed (v0):** `test_adversarial_corpus.py` runs alongside every
+  other suite. `test_every_entry_is_blocked` enforces a **100 %
+  block-rate** — any regression fails CI. `test_corpus_covers_every_v0_gate`
+  enforces the inverse: the corpus must continue to exercise every
+  installed gate, so coverage cannot silently shrink.
 
 **Acceptance Criteria**
 - Known injection patterns cannot force unauthorized tool actions.
