@@ -252,7 +252,24 @@ Phase 2 target: stable A1, controlled pilot for A2.
 
 ### D1. Instruction Isolation
 - Treat peer/tool outputs as untrusted data channel.
+  **Landed (v0):** `ContentChannel` StrEnum (`SYSTEM` / `USER` / `TOOL`
+  / `RETRIEVED`) + `Trust` StrEnum (`TRUSTED` / `UNTRUSTED`) in
+  `security-foundations/envelope/instruction_isolation.py`.
+  `ContentSegment` enforces channel/trust pairings at construction:
+  `SYSTEM` must be `TRUSTED`, `USER` and `RETRIEVED` must be
+  `UNTRUSTED`, and `TOOL` may only be `TRUSTED` when a non-empty
+  `signature_ref` is supplied — that's the "tool outputs treated as
+  untrusted unless signed" rule, lifted into the type system.
 - Ensure model cannot treat arbitrary external data as control instructions.
+  **Landed (v0):** `assemble_isolated_prompt()` renders non-SYSTEM
+  segments inside `<<wt-iso:NONCE:CHANNEL ...>>` ... `<<wt-iso:NONCE:end>>`
+  fences keyed off a fresh 96-bit random nonce. Segment text and
+  source labels are HTML-escaped so a payload literally cannot
+  produce a `<<` in the wrapped region. The system prompt is
+  expected to instruct the model to treat anything inside a
+  `<<wt-iso:…>>` fence as inert data. An `audit_log` of
+  `(channel, source_label, trust, signature_ref)` per segment is
+  returned alongside the assembled text.
 
 ### D2. Tool Policy Gate
 - Runtime tool-call validation independent of model deliberation.

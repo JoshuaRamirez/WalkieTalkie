@@ -122,6 +122,18 @@ the approved plan.
   `verify_release_authorization()` is the release-path check: shape +
   binding + window + signature (via `IssuerTrustStore`) + verdict ==
   RELEASE. `verify_decision()` is the audit-only variant.
+- **Instruction isolation v0** (`envelope/instruction_isolation.py`,
+  Phase 2 Track D D1): `ContentChannel` (`SYSTEM` / `USER` / `TOOL` /
+  `RETRIEVED`) + `Trust` (`TRUSTED` / `UNTRUSTED`) segregate the four
+  prompt content sources. `ContentSegment` enforces channel/trust
+  pairings at construction — `SYSTEM` must be `TRUSTED`, `USER` and
+  `RETRIEVED` must be `UNTRUSTED`, and `TOOL` may only be `TRUSTED`
+  when accompanied by a non-empty `signature_ref` ("untrusted unless
+  signed"). `assemble_isolated_prompt()` wraps every non-SYSTEM
+  segment in nonce-fenced data frames (`<<wt-iso:NONCE:CHANNEL …>>`),
+  HTML-escapes content and source labels so synthetic fences cannot
+  appear in the wrapped region, and returns an `audit_log` of every
+  segment's `(channel, source_label, trust, signature_ref)`.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root
