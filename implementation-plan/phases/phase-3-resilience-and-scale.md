@@ -272,7 +272,21 @@ Transitions must follow deterministic workflow:
 
 ### D1. Key Rotation Drills
 - Overlap windows and deterministic cutovers.
+  **Landed (v0):** `KeyRotationPlan` in
+  `security-foundations/envelope/key_rotation.py` defines a rotation
+  via three timestamps (`overlap_start`, `cutover_at`,
+  `overlap_end`). `current_phase()` returns exactly one of
+  `PRE_OVERLAP` / `OVERLAP` / `POST_CUTOVER` / `COMPLETE` for any
+  `now`; the cutover moment is deterministic.
 - Compatibility validation during transition.
+  **Landed (v0):** `accepted_kids()` returns the frozenset of kids
+  a verifier should honor for a given plan at a given time:
+  `{old}` before overlap, `{old, new}` during overlap and the
+  post-cutover sunset window, `{new}` after `overlap_end`.
+  `RotationRegistry` aggregates multiple plans and rejects
+  conflicts (`ROTATION_PLAN_CONFLICT`). `require_accepted_kid()`
+  raises `ROTATION_KID_NOT_ACCEPTED` when a candidate kid is not
+  in any active acceptance window.
 
 ### D2. Revocation Convergence
 - Push + pull propagation.
