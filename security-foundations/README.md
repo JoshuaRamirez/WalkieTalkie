@@ -245,6 +245,19 @@ the approved plan.
   below what active triggers require). `require_authorized_downgrade()`
   tags failures with `SAFE_MODE_DOWNGRADE_UNAUTHORIZED` /
   `_TRIGGERS_ACTIVE`.
+- **Key rotation drills v0** (`envelope/key_rotation.py`, Phase 3
+  Track D D1): `KeyRotationPlan(subject_iss, old_kid, new_kid,
+  overlap_start, cutover_at, overlap_end)` defines a rotation
+  schedule. `current_phase()` returns the deterministic
+  `PRE_OVERLAP` / `OVERLAP` / `POST_CUTOVER` / `COMPLETE` phase for
+  a given `now`. `accepted_kids()` returns the kids a verifier
+  should honor: `{old}` pre-overlap, `{old, new}` during overlap
+  and the post-cutover sunset, `{new}` after `overlap_end`.
+  `RotationRegistry` admits multiple concurrent plans and rejects
+  conflicting registrations (overlapping windows + shared kid) with
+  `ROTATION_PLAN_CONFLICT`. `require_accepted_kid()` raises
+  `ROTATION_KID_NOT_ACCEPTED` when a kid falls outside every active
+  acceptance window.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root

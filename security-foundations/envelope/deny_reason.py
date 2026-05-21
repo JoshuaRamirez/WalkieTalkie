@@ -179,3 +179,7 @@ class DenyReason(StrEnum):
     SAFE_MODE_DOWNGRADE_UNAUTHORIZED = "safe_mode_downgrade_unauthorized"
     SAFE_MODE_DOWNGRADE_TRIGGERS_ACTIVE = "safe_mode_downgrade_triggers_active"
     SAFE_MODE_TRANSITION_INVALID = "safe_mode_transition_invalid"
+
+    # --- Key rotation (Phase 3 Track D D1) ---
+    ROTATION_KID_NOT_ACCEPTED = "rotation_kid_not_accepted"
+    ROTATION_PLAN_CONFLICT = "rotation_plan_conflict"
