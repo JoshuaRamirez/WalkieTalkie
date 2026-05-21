@@ -270,6 +270,21 @@ the approved plan.
   `ConvergenceSnapshot` with `coverage`, `time_to_target`,
   `elapsed`, and a `SLOStatus` of `MEETING` / `PENDING` / `MISSED`.
   `pending_broadcasts()` is the foundation for an alerting layer.
+- **Recovery and re-admission v0**
+  (`envelope/recovery_readmission.py`, Phase 3 Track D D3):
+  `QuarantineEntry(quarantine_id, workload_iss, last_kid,
+  quarantined_at, reason)` is the incident-ticket shape.
+  `CleanRoomAttestation` is an EdDSA-signed JCS body with
+  `typ="wt-readmission/v0"` cross-protocol binding, carrying
+  `quarantine_id`, `new_kid`, `baseline_digest`, attester SPIFFE id
+  + kid, time window, and `monitoring_period_seconds`. Signed by a
+  separate trust pool so the workload being readmitted cannot sign
+  its own re-admission. `verify_readmission()` returns a
+  `ReAdmissionGrant(workload_iss, new_kid, monitoring_period,
+  baseline_digest, granted_at)` after enforcing the three clean-state
+  evidence requirements: separate-trust signature, baseline commit,
+  and kid distinct from the quarantined material
+  (`READMISSION_KID_REUSE` if not).
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root

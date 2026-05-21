@@ -183,3 +183,12 @@ class DenyReason(StrEnum):
     # --- Key rotation (Phase 3 Track D D1) ---
     ROTATION_KID_NOT_ACCEPTED = "rotation_kid_not_accepted"
     ROTATION_PLAN_CONFLICT = "rotation_plan_conflict"
+
+    # --- Recovery / re-admission (Phase 3 Track D D3) ---
+    READMISSION_QUARANTINE_UNKNOWN = "readmission_quarantine_unknown"
+    READMISSION_ATTESTATION_MALFORMED = "readmission_attestation_malformed"
+    READMISSION_ATTESTATION_MISMATCH = "readmission_attestation_mismatch"
+    READMISSION_ATTESTATION_EXPIRED = "readmission_attestation_expired"
+    READMISSION_ATTESTATION_SIGNATURE_INVALID = "readmission_attestation_signature_invalid"
+    READMISSION_ATTESTATION_UNKNOWN_ISSUER = "readmission_attestation_unknown_issuer"
+    READMISSION_KID_REUSE = "readmission_kid_reuse"
