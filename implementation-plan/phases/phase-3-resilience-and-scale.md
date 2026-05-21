@@ -317,8 +317,35 @@ Transitions must follow deterministic workflow:
 
 ### D3. Recovery and Re-Admission
 - Quarantine policy.
+  **Landed (v0):** `QuarantineEntry(quarantine_id, workload_iss,
+  last_kid, quarantined_at, reason)` in
+  `security-foundations/envelope/recovery_readmission.py` is the
+  incident-ticket shape that the re-admission flow attaches to. The
+  enforcement plumbing (revoking the workload's tokens, refusing
+  inbound envelopes) lives in the existing revocation and admission
+  primitives.
 - Clean-room rebuild proof.
+  **Landed (v0):** `CleanRoomAttestation` is an EdDSA-signed JCS
+  body with `typ="wt-readmission/v0"` cross-protocol binding. It
+  carries the `quarantine_id` it covers, the rebuilt workload's
+  `new_kid`, the `baseline_digest` of the clean image the rebuild
+  was performed from, the attester SPIFFE id + kid, and a time
+  window. The signing authority is a separate trust pool
+  (`IssuerTrustStore`-shaped lookup) so the workload being
+  readmitted physically cannot sign its own re-admission.
 - Re-attestation and scoped monitoring period post rejoin.
+  **Landed (v0):** `verify_readmission()` validates the attestation
+  against the quarantine entry and returns a `ReAdmissionGrant`
+  carrying the post-rejoin `monitoring_period`. The runtime applies
+  extra scrutiny (e.g. tighter budget ceiling, mandatory step-up)
+  for that duration before treating the workload as fully trusted.
+
+The Track D D3 acceptance criterion — "Re-admitted nodes satisfy
+clean-state evidence requirements" — is pinned by three concrete
+v0 requirements: (1) attestation signed by a separate trust pool;
+(2) commits to a `baseline_digest` proving clean image; (3) uses a
+`new_kid` distinct from the quarantined material
+(`READMISSION_KID_REUSE` if not).
 
 **Acceptance Criteria**
 - Revoked entities cannot perform privileged writes post checkpoint.
