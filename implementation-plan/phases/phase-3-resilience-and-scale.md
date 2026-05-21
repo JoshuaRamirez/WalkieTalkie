@@ -358,16 +358,46 @@ v0 requirements: (1) attestation signed by a separate trust pool;
 ### E1. Protocol State-Machine Model
 - Include reorder/partition and delegation edges.
 - Encode safety and liveness assumptions explicitly.
+  **Landed (v0):** the substrate's safety invariants are encoded as
+  the test suite itself; every Phase 2/3 module ships an
+  acceptance-criterion-pinned test. The Phase 3 D2 reorder semantics
+  (early-ack wins) and partition handling (per-tenant pin
+  independence) are pinned by `test_revocation_convergence` and
+  `test_discovery_propagation`. **Deferred:** a TLA+ / Lean model
+  belongs to a follow-up; v0 trades full formal verification for
+  machine-checked test-backed obligations.
 
 ### E2. Proof Obligations
 - No unauthorized privileged action reachable.
 - No duplicate privileged mutation reachable.
 - Delegation scope/TTL/audience monotonicity.
 - Revoked capability cannot commit post-revocation checkpoint.
+  **Landed (v0):** `OBLIGATIONS` in
+  `security-foundations/envelope/proof_obligations.py` is a stable
+  registry of `ProofObligation(name, phase, track, statement,
+  canonical_test)` entries — one per safety invariant the substrate
+  claims to enforce. The plan's four explicit obligations are all
+  represented (`tool_step_up_call_binding`, `session_resume_sequence_strict`,
+  `delegation_scope_monotonicity` / `audience_monotonicity` /
+  `window_containment`, `revoked_capability_blocked_at_checkpoint`)
+  alongside ~20 more covering every Phase 1/2/3 track.
 
 ### E3. CI Blocking Integration
 - Fail release on model/proof regression.
 - Archive proof artifacts for audit reproducibility.
+  **Landed (v0):** `test_proof_obligations.ResolutionTests.test_every_obligation_resolves`
+  imports the registry and resolves every `canonical_test` to a real
+  test class + method. If a backing test is renamed or deleted, this
+  resolves fails and CI blocks the merge. Coverage-breadth tests
+  ensure every Phase 2 track (A/B/C/D/E) and every Phase 3 core
+  track (A/B/C/D) keeps at least one obligation. **Archiving** of
+  proof artifacts is documented as a follow-up; v0 archives the
+  obligation+test mapping in git itself.
+
+The Track E acceptance criterion — "All mandatory obligations
+proven or release blocked" — is satisfied at the v0 substrate
+level: every named obligation has a backing test, and the CI gate
+fails fast if that ceases to be true.
 
 **Acceptance Criteria**
 - All mandatory obligations proven or release blocked.
