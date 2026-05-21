@@ -168,3 +168,9 @@ class DenyReason(StrEnum):
     # --- Discovery propagation (Phase 3 Track A A3) ---
     DISCOVERY_REWOUND = "discovery_rewound"
     DISCOVERY_RATE_LIMITED = "discovery_rate_limited"
+
+    # --- Capacity budgets (Phase 3 Track B B1/B2) ---
+    BUDGET_POOL_UNKNOWN = "budget_pool_unknown"
+    BUDGET_CEILING_EXCEEDED = "budget_ceiling_exceeded"
+    BUDGET_FLOOR_GUARD = "budget_floor_guard"
+    BUDGET_TENANT_BURST_EXCEEDED = "budget_tenant_burst_exceeded"
