@@ -164,3 +164,7 @@ class DenyReason(StrEnum):
     SYBIL_ISSUER_QUOTA_EXCEEDED = "sybil_issuer_quota_exceeded"
     SYBIL_TENANT_QUOTA_EXCEEDED = "sybil_tenant_quota_exceeded"
     SYBIL_REPUTATION_INSUFFICIENT = "sybil_reputation_insufficient"
+
+    # --- Discovery propagation (Phase 3 Track A A3) ---
+    DISCOVERY_REWOUND = "discovery_rewound"
+    DISCOVERY_RATE_LIMITED = "discovery_rate_limited"

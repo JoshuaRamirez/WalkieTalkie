@@ -145,7 +145,25 @@ Transitions must follow deterministic workflow:
 
 ### A3. Discovery and Routing Integrity
 - Signed updates and freshness checks.
+  **Signed updates landed earlier** via Phase 1's
+  `discovery_record.py` (`DiscoveryRecord` + `verify_record()`
+  enforce signature, window, and TTL).
+  **Freshness checks landed (v0):** `DiscoveryFreshnessTracker` in
+  `security-foundations/envelope/discovery_propagation.py` pins the
+  highest `issued_at` seen per `(workload_iss, workload_kid)` and
+  refuses any record whose timestamp doesn't strictly increase.
+  Catches operator-mistake rewinds AND an adversary recovering an
+  old still-in-window signed record to overwrite a newer one. Surfaces
+  `DISCOVERY_REWOUND`.
 - Rate-limited propagation channels.
+  **Landed (v0):** `DiscoveryPropagationLimiter` enforces a per-
+  workload sliding-window republish cap (default 1 per 60 s).
+  Surfaces `DISCOVERY_RATE_LIMITED`. The limiter runs AFTER the
+  Phase 1 signature/window verification (running it pre-auth would
+  let any spoofed `workload_iss` exhaust another workload's
+  allowance — same lesson as the Phase 1 rate-limit hardening).
+  `DiscoveryAdmissionGate` composes both checks into one
+  `admit()` entry point.
 
 **Acceptance Criteria**
 - Simulated Sybil clusters cannot dominate peer view beyond tolerated threshold.

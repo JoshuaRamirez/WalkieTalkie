@@ -204,6 +204,18 @@ the approved plan.
   `detect_trust_domain_surges()` returns trust domains whose
   in-window candidate count meets a configurable threshold — a
   signal for operators to investigate.
+- **Discovery propagation integrity v0**
+  (`envelope/discovery_propagation.py`, Phase 3 Track A A3):
+  `DiscoveryFreshnessTracker` pins the highest `issued_at` seen per
+  `(workload_iss, workload_kid)` and refuses any record whose
+  timestamp doesn't strictly increase (`DISCOVERY_REWOUND`).
+  `DiscoveryPropagationLimiter` enforces a sliding-window per-
+  workload republish cap (default 1 per 60 s, `DISCOVERY_RATE_LIMITED`).
+  `DiscoveryAdmissionGate` composes both checks into a single
+  `admit()` entry point; callers must verify the underlying
+  `DiscoveryRecord` signature with the Phase 1 verifier first, since
+  running the limiter pre-auth would let any spoofed `workload_iss`
+  exhaust another workload's allowance.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root
