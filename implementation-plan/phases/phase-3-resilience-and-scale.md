@@ -290,8 +290,30 @@ Transitions must follow deterministic workflow:
 
 ### D2. Revocation Convergence
 - Push + pull propagation.
+  **Landed (v0):** `RevocationBroadcast` in
+  `security-foundations/envelope/revocation_convergence.py` is the
+  push-side announcement shape. Consumer nodes (whether they
+  received it via push or pull) ACK via
+  `ConvergenceTracker.record_ack`. The tracker doesn't distinguish
+  push from pull — what matters is that a node has confirmed it
+  sees the revocation.
 - Emergency fast-path revocation.
+  **Landed (v0):** broadcasts carry a `fast_path` flag. `SLOPolicy`
+  defines a tighter `fast_path_deadline` separate from the
+  `normal_deadline`, so operators can require sub-minute
+  convergence for emergency revocations without forcing the same
+  cadence on routine ones.
 - Convergence SLO telemetry.
+  **Landed (v0):** `evaluate_slo()` returns a
+  `ConvergenceSnapshot(jti, acks_received, acks_expected,
+  coverage, time_to_target, elapsed, deadline, status, fast_path)`
+  carrying everything a dashboard or alerting layer needs.
+  `SLOStatus` is `MEETING` / `PENDING` / `MISSED`. The
+  `time_to_target` field is filled when `target_coverage` has been
+  reached, supporting "what was our actual p99 convergence
+  yesterday?" queries. `pending_broadcasts()` is the foundation for
+  alerting — feed it the in-flight `jti` set and surface anything
+  not yet meeting SLO.
 
 ### D3. Recovery and Re-Admission
 - Quarantine policy.

@@ -258,6 +258,18 @@ the approved plan.
   `ROTATION_PLAN_CONFLICT`. `require_accepted_kid()` raises
   `ROTATION_KID_NOT_ACCEPTED` when a kid falls outside every active
   acceptance window.
+- **Revocation convergence v0**
+  (`envelope/revocation_convergence.py`, Phase 3 Track D D2):
+  `RevocationBroadcast(jti, issued_at, fast_path, reason,
+  expected_nodes)` is the push-side announcement.
+  `ConvergenceTracker.record_ack` collects per-node acknowledgements
+  (push and pull are not distinguished — what matters is each node
+  confirming it sees the revocation). `SLOPolicy` carries separate
+  `normal_deadline` and `fast_path_deadline` so emergency
+  revocations get a tighter SLO. `evaluate_slo()` returns a
+  `ConvergenceSnapshot` with `coverage`, `time_to_target`,
+  `elapsed`, and a `SLOStatus` of `MEETING` / `PENDING` / `MISSED`.
+  `pending_broadcasts()` is the foundation for an alerting layer.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root
