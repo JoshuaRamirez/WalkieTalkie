@@ -224,15 +224,44 @@ Transitions must follow deterministic workflow:
 - Policy rollback detection.
 - Revocation uncertainty.
 - Critical anomaly quarantine signal.
+  **Landed (v0):** `TriggerKind` StrEnum in
+  `security-foundations/envelope/safe_mode_engine.py` covers all
+  five categories. `Trigger(kind, category, minimum_state,
+  observed_at, detail)` is the in-process observation shape.
+  `trigger_for(kind, …)` uses a built-in default profile derived
+  from §4.1 (e.g. `LEDGER_DIVERGENCE` → S4_LOCKDOWN with
+  `CRYPTO_TRUST` authority).
 
 ### C2. State Computation
 - Determine min required state per trigger.
 - Resolve to max severity.
 - Apply authority hierarchy if conflicts arise.
+  **Landed (v0):** `SafeModeEngine.observe()` admits triggers into
+  a per-kind active map. The engine's current state is
+  `max(t.minimum_state for t in active)`. The §4.1 authority
+  hierarchy is enforced on the downgrade path: a
+  `DowngradeApproval.authority` must be at least as high as every
+  still-active trigger's `TriggerCategory`. `is_higher_authority()`
+  and `is_more_severe_state()` are the ordering predicates.
 
 ### C3. Transition Runtime
 - Deterministic transition handlers with idempotent steps.
 - Recovery downgrade checks with signed approvals.
+  **Landed (v0):** `observe()` and `clear()` are idempotent
+  (re-observing a same-kind trigger with equal/lower severity is a
+  no-op; clearing a non-active kind is a no-op). Every state change
+  returns a `StateTransition(from_state, to_state, transition_at,
+  cause, active_kinds, detail)` record so transitions are
+  machine-readable. Manual `downgrade()` requires a
+  `DowngradeApproval` whose authority dominates every active
+  trigger AND a target state at-or-above the current trigger floor;
+  `require_authorized_downgrade()` tags failures with
+  `SAFE_MODE_DOWNGRADE_UNAUTHORIZED` / `_TRIGGERS_ACTIVE`. Signed
+  artifacts are documented as a follow-up (the shapes are
+  signing-ready).
+  The Track C acceptance criterion — "Compound failures always
+  result in predictable state and logs" — is pinned by
+  `test_two_engines_walk_identical_history` and `test_expected_history`.
 
 **Acceptance Criteria**
 - Compound failures always result in predictable state and logs.

@@ -174,3 +174,8 @@ class DenyReason(StrEnum):
     BUDGET_CEILING_EXCEEDED = "budget_ceiling_exceeded"
     BUDGET_FLOOR_GUARD = "budget_floor_guard"
     BUDGET_TENANT_BURST_EXCEEDED = "budget_tenant_burst_exceeded"
+
+    # --- Safe-mode engine (Phase 3 Track C C1/C2/C3) ---
+    SAFE_MODE_DOWNGRADE_UNAUTHORIZED = "safe_mode_downgrade_unauthorized"
+    SAFE_MODE_DOWNGRADE_TRIGGERS_ACTIVE = "safe_mode_downgrade_triggers_active"
+    SAFE_MODE_TRANSITION_INVALID = "safe_mode_transition_invalid"
