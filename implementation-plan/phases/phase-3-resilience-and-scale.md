@@ -99,8 +99,27 @@ Transitions must follow deterministic workflow:
 
 ### A1. Sybil Deterrence
 - Identity issuance quotas.
+  **Landed (v0):** `SybilDeterrence` in
+  `security-foundations/envelope/sybil_deterrence.py` enforces two
+  independent sliding-window quotas: `max_per_issuer` and
+  `max_per_tenant` (trust-domain aggregated via
+  `audit_query.trust_domain_of`). Saturation surfaces distinct
+  `SYBIL_ISSUER_QUOTA_EXCEEDED` and `SYBIL_TENANT_QUOTA_EXCEEDED`
+  reason codes. `InMemorySybilLedger` is the v0 backend; operators
+  wanting cluster-wide consistency swap in a distributed store
+  behind the `SybilLedger` ABC.
 - Attestation burden tuning.
+  **Deferred:** the attestation cost dial (proof-of-work or
+  hardware-attestation strength) belongs in the higher-level
+  identity-issuance flow and is documented as out-of-scope for the
+  in-process v0 primitive.
 - Reputation hygiene and decay controls.
+  **Landed (v0):** `IssuerReputation` tracks a per-`(iss, kid)`
+  score with configurable `decay_per_interval` / `decay_interval`,
+  bounded `[floor, ceiling]`. `reward()` and `penalize()` adjust the
+  score; `current_score()` applies decay lazily. The deterrence gate
+  refuses issuance when the decayed score falls below
+  `min_reputation` (`SYBIL_REPUTATION_INSUFFICIENT`).
 
 ### A2. Eclipse Resistance
 - Neighbor diversity rules.

@@ -180,6 +180,18 @@ the approved plan.
   `seq == previous.seq + 1`, no subject / audience / scope drift,
   and a cumulative-lifetime cap (default 1 hour). Resume identifier
   replay (reusing `seq`) raises `SESSION_RESUME_SEQUENCE_INVALID`.
+- **Sybil deterrence v0** (`envelope/sybil_deterrence.py`, Phase 3
+  Track A A1): `SybilDeterrence` enforces sliding-window quotas
+  `max_per_issuer` and `max_per_tenant` on identity issuance.
+  `InMemorySybilLedger` is the v0 backend; cluster-wide consistency
+  belongs to a distributed implementation behind the `SybilLedger`
+  ABC. `IssuerReputation` tracks a per-`(iss, kid)` score with
+  configurable decay, `reward()` / `penalize()` adjustments, and a
+  `[floor, ceiling]` clamp; the gate refuses issuance when the
+  decayed score falls below `min_reputation`. Saturation paths
+  surface distinct `SYBIL_ISSUER_QUOTA_EXCEEDED` /
+  `SYBIL_TENANT_QUOTA_EXCEEDED` / `SYBIL_REPUTATION_INSUFFICIENT`
+  reason codes.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root
