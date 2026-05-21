@@ -174,15 +174,42 @@ Transitions must follow deterministic workflow:
 
 ### B1. Resource Budget Partitioning
 - Separate pools for control-plane and data-plane.
+  **Landed (v0):** `BudgetController` + `BudgetPool` in
+  `security-foundations/envelope/capacity_budgets.py`. Operators
+  define one pool per workload class (e.g. `security-critical`,
+  `control-plane`, `data-plane`); `acquire()` admits a request
+  against a named pool.
 - Security-critical services get non-preemptible floor.
+  **Landed (v0):** every pool carries a `reserved` allocation. The
+  controller enforces that any pool's burst cannot dip into another
+  pool's `reserved` even when the other pool is idle — that's the
+  "non-preemptible floor" invariant and the substrate-level proof
+  that "data-plane flood cannot starve revocation/authZ/policy
+  services" (the Track B acceptance criterion). Surfaces
+  `BUDGET_FLOOR_GUARD`.
 
 ### B2. Anti-Amplification Controls
 - Bounded expensive verification paths.
 - Work-token or equivalent throttles for abuse-heavy identities.
+  **Landed (v0):** every `acquire()` accepts a positive `cost`
+  parameter. Operators charge expensive routes more so a flood of
+  expensive calls hits the ceiling faster than a flood of cheap
+  ones. The cost API is the work-token equivalent. Per-pool
+  ceilings (`BUDGET_CEILING_EXCEEDED`) bound the worst-case spend
+  per pool.
 
 ### B3. Fairness Controller
 - Tenant reserve pools and burst ceilings.
+  **Landed (v0):** `TenantBudget(pool, tenant, reserve, burst)`
+  pins a per-`(pool, tenant)` allowance. A noisy tenant hits their
+  own `burst` cap (`BUDGET_TENANT_BURST_EXCEEDED`) before draining
+  the pool's burst headroom, so other tenants in the same pool are
+  insulated.
 - Automatic rebalance on cascading throttle detection.
+  **Deferred:** the reactive controller belongs in a follow-up.
+  v0 exposes `BudgetController.snapshot()` / `tenant_snapshot()`
+  so a rebalancer can read live consumption and trigger
+  reallocation.
 
 **Acceptance Criteria**
 - Data-plane flood cannot starve revocation/authZ/policy services.

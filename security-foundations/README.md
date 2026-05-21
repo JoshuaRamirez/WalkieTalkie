@@ -216,6 +216,21 @@ the approved plan.
   `DiscoveryRecord` signature with the Phase 1 verifier first, since
   running the limiter pre-auth would let any spoofed `workload_iss`
   exhaust another workload's allowance.
+- **Capacity budgets v0** (`envelope/capacity_budgets.py`, Phase 3
+  Track B B1/B2 + tenant half of B3): `BudgetController` partitions
+  `total_capacity` across named `BudgetPool(name, reserved, ceiling)`
+  records (e.g. `security-critical`, `control-plane`, `data-plane`).
+  The "non-preemptible floor" invariant: no pool can burst into
+  another pool's `reserved` even when the other is idle — surfacing
+  `BUDGET_FLOOR_GUARD`. That's the substrate-level proof that
+  "data-plane flood cannot starve security-critical services" (Track
+  B acceptance criterion). Every `acquire()` takes a positive `cost`,
+  giving operators a work-token dial for expensive routes.
+  Per-tenant fairness via `TenantBudget(pool, tenant, reserve, burst)`:
+  a noisy tenant hits their own `burst` cap
+  (`BUDGET_TENANT_BURST_EXCEEDED`) before draining the pool's burst
+  headroom. `snapshot()` and `tenant_snapshot()` expose live
+  consumption for a future rebalancer.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root
