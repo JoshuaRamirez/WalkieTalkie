@@ -159,3 +159,8 @@ class DenyReason(StrEnum):
     SESSION_RESUME_AUDIENCE_DRIFT = "session_resume_audience_drift"
     SESSION_RESUME_SUBJECT_DRIFT = "session_resume_subject_drift"
     SESSION_RESUME_LIFETIME_EXCEEDED = "session_resume_lifetime_exceeded"
+
+    # --- Sybil deterrence (Phase 3 Track A A1) ---
+    SYBIL_ISSUER_QUOTA_EXCEEDED = "sybil_issuer_quota_exceeded"
+    SYBIL_TENANT_QUOTA_EXCEEDED = "sybil_tenant_quota_exceeded"
+    SYBIL_REPUTATION_INSUFFICIENT = "sybil_reputation_insufficient"
