@@ -123,8 +123,25 @@ Transitions must follow deterministic workflow:
 
 ### A2. Eclipse Resistance
 - Neighbor diversity rules.
+  **Landed (v0):** `select_neighbors()` + `DiversityRule` in
+  `security-foundations/envelope/eclipse_resistance.py`. Greedy
+  freshness-first selector with two diversity invariants:
+  `max_per_trust_domain` (per-domain cap that a Sybil cluster
+  cannot overflow no matter how many candidates it submits) and
+  `min_distinct_trust_domains` (minimum spread, reported as a
+  `diversity_shortfall` flag when not met). Rejection diagnostics
+  carry distinct reason codes (`diversity_per_domain_cap`,
+  `diversity_target_reached`).
 - Independent peer sampling paths.
+  **Deferred:** multi-process / network-topology concern. Operators
+  pull peers from separate gossip layers and feed the combined pool
+  into `select_neighbors`. The selector takes the union as input.
 - Routing anomaly detection.
+  **Landed (v0, surge half):** `detect_trust_domain_surges()` returns
+  any trust domain that posted ≥ `surge_threshold` candidates with
+  `last_seen` inside a configurable window. A surge is a signal for
+  operators to investigate, not a denial — pair with the per-domain
+  cap for the deny path.
 
 ### A3. Discovery and Routing Integrity
 - Signed updates and freshness checks.

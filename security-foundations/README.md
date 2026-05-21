@@ -192,6 +192,18 @@ the approved plan.
   surface distinct `SYBIL_ISSUER_QUOTA_EXCEEDED` /
   `SYBIL_TENANT_QUOTA_EXCEEDED` / `SYBIL_REPUTATION_INSUFFICIENT`
   reason codes.
+- **Eclipse resistance v0** (`envelope/eclipse_resistance.py`, Phase
+  3 Track A A2): `select_neighbors()` is a freshness-first greedy
+  selector that caps per-trust-domain occupancy via
+  `DiversityRule.max_per_trust_domain` (a Sybil cluster cannot
+  dominate the neighbor set no matter how many candidates it
+  submits) and reports `diversity_shortfall` when fewer than
+  `min_distinct_trust_domains` trust domains appear in the final
+  set. Rejection diagnostics distinguish `diversity_per_domain_cap`
+  from `diversity_target_reached`.
+  `detect_trust_domain_surges()` returns trust domains whose
+  in-window candidate count meets a configurable threshold — a
+  signal for operators to investigate.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root
