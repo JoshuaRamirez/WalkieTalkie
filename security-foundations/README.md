@@ -285,6 +285,21 @@ the approved plan.
   evidence requirements: separate-trust signature, baseline commit,
   and kid distinct from the quarantined material
   (`READMISSION_KID_REUSE` if not).
+- **Proof obligations registry v0**
+  (`envelope/proof_obligations.py`, Phase 3 Track E E1+E2+E3):
+  `OBLIGATIONS` is a stable taxonomy of `ProofObligation(name,
+  phase, track, statement, canonical_test)` entries — one per
+  safety invariant the substrate claims to enforce. Covers all four
+  explicit Phase 3 E2 obligations (no unauthorized privileged
+  action, no duplicate privileged mutation, delegation
+  scope/TTL/audience monotonicity, revoked capability cannot
+  commit) plus ~20 more across Phase 1/2/3. The companion
+  `test_every_obligation_resolves` imports each `canonical_test`
+  and asserts it points at a real `unittest.TestCase.test_*`
+  method — a renamed or deleted backing test fails CI. Coverage
+  tests enforce that every Phase 2 track and every Phase 3 core
+  track keeps at least one obligation, so coverage cannot silently
+  shrink.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root
