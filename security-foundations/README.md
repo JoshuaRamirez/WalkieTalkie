@@ -231,6 +231,20 @@ the approved plan.
   (`BUDGET_TENANT_BURST_EXCEEDED`) before draining the pool's burst
   headroom. `snapshot()` and `tenant_snapshot()` expose live
   consumption for a future rebalancer.
+- **Safe-mode engine v0** (`envelope/safe_mode_engine.py`, Phase 3
+  Track C C1/C2/C3): implements the §4.2 S0/S1/S2/S3/S4 global state
+  semantics plus the §4.1 authority hierarchy (`CRYPTO_TRUST` >
+  `AUTHORIZATION` > `DATA_PROTECTION` > `AVAILABILITY`). `TriggerKind`
+  covers clock-trust failure, ledger divergence, policy rollback,
+  revocation uncertainty, anomaly quarantine. `SafeModeEngine.observe()`
+  / `clear()` are idempotent and deterministic: same trigger sequence
+  always lands the same state and same `StateTransition` log.
+  `downgrade()` enforces both the authority dominance check (an
+  `AUTHORIZATION`-class approval cannot clear a `CRYPTO_TRUST`-class
+  trigger) and the trigger-floor check (cannot silently downgrade
+  below what active triggers require). `require_authorized_downgrade()`
+  tags failures with `SAFE_MODE_DOWNGRADE_UNAUTHORIZED` /
+  `_TRIGGERS_ACTIVE`.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root
