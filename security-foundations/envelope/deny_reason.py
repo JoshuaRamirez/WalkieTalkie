@@ -192,3 +192,9 @@ class DenyReason(StrEnum):
     READMISSION_ATTESTATION_SIGNATURE_INVALID = "readmission_attestation_signature_invalid"
     READMISSION_ATTESTATION_UNKNOWN_ISSUER = "readmission_attestation_unknown_issuer"
     READMISSION_KID_REUSE = "readmission_kid_reuse"
+
+    # --- Signed safe-mode artifacts (Phase 3 Track C D3.3) ---
+    SAFE_MODE_ARTIFACT_MALFORMED = "safe_mode_artifact_malformed"
+    SAFE_MODE_ARTIFACT_SIGNATURE_INVALID = "safe_mode_artifact_signature_invalid"
+    SAFE_MODE_ARTIFACT_UNKNOWN_ISSUER = "safe_mode_artifact_unknown_issuer"
+    SAFE_MODE_ARTIFACT_EXPIRED = "safe_mode_artifact_expired"

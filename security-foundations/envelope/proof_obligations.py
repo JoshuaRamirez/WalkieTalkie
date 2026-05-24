@@ -455,6 +455,34 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             ".test_attester_trust_pool_is_separate"
         ),
     ),
+    # ----- Phase 3 D3.3 circle-back: signed safe-mode artifacts -----
+    ProofObligation(
+        name="signed_safe_mode_transition_integrity",
+        phase=Phase.PHASE_3,
+        track="C",
+        statement=(
+            "A safe-mode state-transition record whose body has been "
+            "tampered with post-signing fails signature verification."
+        ),
+        canonical_test=(
+            "test_signed_safe_mode.TransitionFailureTests"
+            ".test_tampered_transition_rejected"
+        ),
+    ),
+    ProofObligation(
+        name="signed_downgrade_signature_runs_before_engine",
+        phase=Phase.PHASE_3,
+        track="C",
+        statement=(
+            "verified_downgrade() refuses a tampered SignedDowngradeApproval "
+            "BEFORE consulting the safe-mode engine; authority spoofing "
+            "via constructed-in-memory approvals is prevented."
+        ),
+        canonical_test=(
+            "test_signed_safe_mode.VerifiedDowngradeTests"
+            ".test_signature_failure_blocks_engine_call"
+        ),
+    ),
 )
 
 
