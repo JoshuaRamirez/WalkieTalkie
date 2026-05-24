@@ -300,6 +300,19 @@ the approved plan.
   tests enforce that every Phase 2 track and every Phase 3 core
   track keeps at least one obligation, so coverage cannot silently
   shrink.
+- **Signed safe-mode artifacts v0** (`envelope/signed_safe_mode.py`,
+  Phase 3 §3 D3.3 circle-back): `SignedStateTransition` and
+  `SignedDowngradeApproval` are EdDSA-signed JCS bodies with
+  `typ="wt-safe-mode-transition/v0"` and
+  `typ="wt-safe-mode-downgrade/v0"` cross-protocol bindings.
+  `verify_transition()` validates audit-grade transition records
+  against an `IssuerTrustStore`-shaped attester lookup.
+  `verified_downgrade()` extends the engine's
+  `SafeModeEngine.downgrade()` to require a signed approval — the
+  signature check runs BEFORE the engine consults the unsigned
+  authority hierarchy, so an in-memory forged approval is rejected
+  with `SAFE_MODE_ARTIFACT_SIGNATURE_INVALID` before the engine
+  ever sees it.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root
