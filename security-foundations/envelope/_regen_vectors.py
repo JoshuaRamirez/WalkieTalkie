@@ -11,10 +11,17 @@ Writes:
 - ``test-vectors/tampered-envelope.json`` — same envelope and capability
   signatures, but the payload is mutated so digest and envelope signature
   both fail.
+- ``test-vectors/valid-discovery-record.json`` — Phase 1 hangover
+  vector that verifies cleanly under the embedded issuer key.
+- ``test-vectors/tampered-discovery-record.json`` — same signature
+  with mutated endpoints so signature verification fails.
 - ``test-vectors/dev-kid-1.pub.pem`` — envelope-signing public key.
-- ``test-vectors/dev-issuer-1.pub.pem`` — capability-issuing public key.
+- ``test-vectors/dev-issuer-1.pub.pem`` — capability-issuing /
+  discovery-signing public key.
 
-The vectors are illustrative; no test loads them.
+The envelope vectors are illustrative; ``test_discovery_test_vectors``
+loads the discovery vectors and asserts they stay coherent with the
+verifier.
 """
 
 from __future__ import annotations
@@ -29,6 +36,8 @@ import jcs
 from capability_issuer import CapabilityIssuer
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from discovery_record import DiscoveryRecord, sign_record
+from discovery_record import to_json as discovery_to_json
 
 # Deterministic 32-byte seeds derived from tag strings so the tags can be
 # edited without breaking Ed25519PrivateKey.from_private_bytes' length
@@ -120,6 +129,42 @@ def main() -> None:
     )
     (out / "dev-kid-1.pub.pem").write_bytes(signer_pub_pem)
     (out / "dev-issuer-1.pub.pem").write_bytes(issuer_pub_pem)
+
+    # ---- Discovery records ----
+    # The discovery issuer reuses the cap-issuer's keypair — the trust
+    # pool is the same one operators load via IssuerTrustStore.
+    valid_disco = DiscoveryRecord(
+        version="v0",
+        workload_iss=_SENDER,
+        workload_kid="dev-kid-1",
+        endpoints=("tls://service-a.mesh.example:4443",),
+        issuer_iss=_ISSUER_IDENTITY,
+        issuer_kid=_ISSUER_KID,
+        issued_at="2026-04-14T12:00:00Z",
+        expires_at="2026-04-14T12:30:00Z",
+    )
+    signed_disco = sign_record(valid_disco, issuer_priv)
+    (out / "valid-discovery-record.json").write_bytes(
+        discovery_to_json(signed_disco)
+    )
+
+    # Tampered vector reuses the valid signature but mutates the
+    # endpoints — the signature check fails because the canonical
+    # body no longer matches what was signed.
+    tampered_disco = DiscoveryRecord(
+        version=valid_disco.version,
+        workload_iss=valid_disco.workload_iss,
+        workload_kid=valid_disco.workload_kid,
+        endpoints=("tls://attacker.example:4443",),  # mutated
+        issuer_iss=valid_disco.issuer_iss,
+        issuer_kid=valid_disco.issuer_kid,
+        issued_at=valid_disco.issued_at,
+        expires_at=valid_disco.expires_at,
+        signature=signed_disco.signature,
+    )
+    (out / "tampered-discovery-record.json").write_bytes(
+        discovery_to_json(tampered_disco)
+    )
 
 
 if __name__ == "__main__":

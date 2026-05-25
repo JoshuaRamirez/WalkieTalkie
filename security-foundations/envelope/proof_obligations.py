@@ -483,6 +483,24 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             ".test_signature_failure_blocks_engine_call"
         ),
     ),
+    # ----- Phase 1 hangover circle-back: discovery test vectors -----
+    ProofObligation(
+        name="discovery_test_vectors_coherent",
+        phase=Phase.PHASE_1,
+        track="D",
+        statement=(
+            "The shipped valid-discovery-record.json vector verifies "
+            "cleanly under the bundled issuer public key, and the "
+            "tampered-discovery-record.json vector (same signature, "
+            "mutated endpoints) fails signature verification — proving "
+            "the vectors are interpreted identically by the verifier "
+            "across regenerations."
+        ),
+        canonical_test=(
+            "test_discovery_test_vectors.TamperedVectorTests"
+            ".test_tampered_vector_fails_signature_check"
+        ),
+    ),
 )
 
 
