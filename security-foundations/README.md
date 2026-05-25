@@ -313,6 +313,15 @@ the approved plan.
   authority hierarchy, so an in-memory forged approval is rejected
   with `SAFE_MODE_ARTIFACT_SIGNATURE_INVALID` before the engine
   ever sees it.
+- **Discovery record test vectors** (Phase 1 hangover circle-back):
+  `test-vectors/valid-discovery-record.json` is a deterministic
+  signed `DiscoveryRecord` that verifies cleanly under the bundled
+  `dev-issuer-1.pub.pem`; `test-vectors/tampered-discovery-record.json`
+  reuses the valid signature but mutates the `endpoints` field so
+  signature verification fails. `_regen_vectors.py` emits both; the
+  `test_discovery_test_vectors` suite asserts the verifier accepts
+  the valid one and rejects the tampered one, keeping the vectors
+  coherent across regenerations.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root
