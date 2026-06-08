@@ -206,10 +206,22 @@ Transitions must follow deterministic workflow:
   the pool's burst headroom, so other tenants in the same pool are
   insulated.
 - Automatic rebalance on cascading throttle detection.
-  **Deferred:** the reactive controller belongs in a follow-up.
-  v0 exposes `BudgetController.snapshot()` / `tenant_snapshot()`
-  so a rebalancer can read live consumption and trigger
-  reallocation.
+  **Landed (v0, circle-back):** `CapacityRebalancer` in
+  `security-foundations/envelope/capacity_rebalancer.py` reads a
+  `BudgetController` snapshot, classifies pools as stressed (above
+  `stress_threshold`, default 0.85) or slack (below
+  `slack_threshold`, default 0.30), and declares the system
+  *cascading* when at least `cascade_min_stressed` pools (default 2)
+  are stressed AND at least one slack pool is available.
+  `evaluate()` drafts a `RebalanceDecision` that transfers
+  `transfer_fraction` (default 0.20) of each slack pool's
+  donor-side headroom (`ceiling - max(reserved, in_flight)`) to the
+  stressed pools, proportional to their `stress_excess`. `apply()`
+  mutates the controller via `BudgetController.adjust_ceiling`,
+  which preserves the **non-preemptible floor**, the
+  **cross-pool oversubscription cap**, and the no-retroactive-
+  overcommit rule end to end. Shrinks apply before grows so
+  intermediate states never violate the oversubscription cap.
 
 **Acceptance Criteria**
 - Data-plane flood cannot starve revocation/authZ/policy services.
