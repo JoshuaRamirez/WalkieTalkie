@@ -231,6 +231,21 @@ the approved plan.
   (`BUDGET_TENANT_BURST_EXCEEDED`) before draining the pool's burst
   headroom. `snapshot()` and `tenant_snapshot()` expose live
   consumption for a future rebalancer.
+- **Capacity rebalancer v0** (`envelope/capacity_rebalancer.py`,
+  Phase 3 B3 deferred half, circle-back): `CapacityRebalancer`
+  reads a `BudgetController` snapshot, classifies pools as stressed
+  (utilization ≥ `stress_threshold`) or slack (utilization ≤
+  `slack_threshold`), and declares the system *cascading* when
+  `cascade_min_stressed` (default 2) pools are stressed AND at
+  least one slack pool is available. `evaluate()` drafts a
+  `RebalanceDecision` that moves `transfer_fraction` of each slack
+  pool's donor-side headroom to the stressed pools proportional to
+  their `stress_excess`. `apply()` mutates the controller via
+  `BudgetController.adjust_ceiling`, which preserves the
+  **non-preemptible floor**, the **cross-pool oversubscription
+  cap**, and the no-retroactive-overcommit rule end-to-end. Shrinks
+  apply before grows so intermediate states never violate the
+  oversubscription cap.
 - **Safe-mode engine v0** (`envelope/safe_mode_engine.py`, Phase 3
   Track C C1/C2/C3): implements the §4.2 S0/S1/S2/S3/S4 global state
   semantics plus the §4.1 authority hierarchy (`CRYPTO_TRUST` >

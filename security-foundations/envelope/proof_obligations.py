@@ -501,6 +501,35 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             ".test_tampered_vector_fails_signature_check"
         ),
     ),
+    # ----- Phase 3 B3 deferred-half circle-back: capacity rebalancer -----
+    ProofObligation(
+        name="rebalancer_preserves_non_preemptible_floor",
+        phase=Phase.PHASE_3,
+        track="B",
+        statement=(
+            "After CapacityRebalancer.apply, every pool's ceiling is "
+            "still >= its own reserved — the Track B non-preemptible "
+            "floor invariant survives every rebalance step."
+        ),
+        canonical_test=(
+            "test_capacity_rebalancer.ApplyTests"
+            ".test_apply_preserves_floor_invariant"
+        ),
+    ),
+    ProofObligation(
+        name="rebalancer_preserves_oversubscription_cap",
+        phase=Phase.PHASE_3,
+        track="B",
+        statement=(
+            "After CapacityRebalancer.apply, every pool satisfies "
+            "ceiling + sum(other_pools.reserved) <= total_capacity — "
+            "the cross-pool oversubscription cap holds end-to-end."
+        ),
+        canonical_test=(
+            "test_capacity_rebalancer.ApplyTests"
+            ".test_apply_preserves_oversubscription_cap"
+        ),
+    ),
 )
 
 

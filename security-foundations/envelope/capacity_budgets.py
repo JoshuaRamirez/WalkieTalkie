@@ -46,6 +46,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from dataclasses import replace as _dc_replace
 
 from deny_reason import DenyReason
 
@@ -295,6 +296,60 @@ class BudgetController:
 
     def tenant_snapshot(self) -> dict[tuple[str, str], int]:
         return dict(self._in_flight_tenant)
+
+    def adjust_ceiling(self, pool: str, new_ceiling: int) -> None:
+        """Replace ``pool``'s ceiling with ``new_ceiling`` in place.
+
+        Preserves ``reserved`` and any in-flight counters. Raises
+        :class:`CapacityBudgetError` if:
+        - ``pool`` is unknown
+        - ``new_ceiling < pool.reserved`` (would violate this pool's
+          own floor guarantee)
+        - ``new_ceiling`` plus the sum of OTHER pools' reserved would
+          exceed ``total_capacity`` (would oversubscribe the system)
+        - ``new_ceiling`` is below the pool's current in-flight count
+          (would create an illegally-overcommitted controller; the
+          rebalancer should drain first)
+
+        The rebalancer in :mod:`capacity_rebalancer` is the
+        intended caller; direct operators should normally use it
+        rather than mutating ceilings ad hoc.
+        """
+        if not isinstance(new_ceiling, int) or new_ceiling < 0:
+            raise CapacityBudgetError(
+                f"new_ceiling must be a non-negative int: {new_ceiling!r}"
+            )
+        existing = self._pool_by_name(pool)
+        if existing is None:
+            raise CapacityBudgetError(f"unknown pool: {pool!r}")
+        if new_ceiling < existing.reserved:
+            raise CapacityBudgetError(
+                f"new_ceiling ({new_ceiling}) below pool {pool!r} "
+                f"reserved ({existing.reserved})"
+            )
+        in_flight = self._in_flight_pool.get(pool, 0)
+        if new_ceiling < in_flight:
+            raise CapacityBudgetError(
+                f"new_ceiling ({new_ceiling}) below pool {pool!r} "
+                f"current in_flight ({in_flight}); drain first"
+            )
+        others_reserved = sum(
+            p.reserved for p in self.pools if p.name != pool
+        )
+        if new_ceiling + others_reserved > self.total_capacity:
+            raise CapacityBudgetError(
+                f"new_ceiling ({new_ceiling}) + other pools' reserved "
+                f"({others_reserved}) exceeds total_capacity "
+                f"({self.total_capacity})"
+            )
+        # Replace the BudgetPool entry in the pools tuple.
+        new_pools: list[BudgetPool] = []
+        for p in self.pools:
+            if p.name == pool:
+                new_pools.append(_dc_replace(p, ceiling=new_ceiling))
+            else:
+                new_pools.append(p)
+        self.pools = tuple(new_pools)
 
 
 def build_controller(
