@@ -1,0 +1,12 @@
+{
+  "keys": [
+    {
+      "kid": "client-kid-1",
+      "pem_path": "client-pub.pem"
+    },
+    {
+      "kid": "host-kid-1",
+      "pem_path": "host-pub.pem"
+    }
+  ]
+}

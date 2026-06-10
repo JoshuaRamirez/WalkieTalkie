@@ -100,13 +100,22 @@ might already be on the "intentionally not doing" list.
 
 ## Phase 4 status
 
-Phase 4 is **planned, not yet implemented**. See
-`implementation-plan/phases/phase-4-integration-proof.md`. Its
-scope is the minimum integration loop that proves the substrate
-works inside a real MCP host: one adapter module, one example host,
-one end-to-end smoke test, one integration runbook. Hard 500-line
-ceiling on the example host. No drills, observability, or
-distributed deployment — those are Phase 5.
+Phase 4 is **complete**. See
+`implementation-plan/phases/phase-4-integration-proof.md`. The
+deliverables that landed:
+
+- D4.1 MCP envelope adapter — `security-foundations/integrations/mcp/envelope_adapter.py`.
+- D4.2 Example MCP host — `security-foundations/integrations/mcp/host.py`, hard 500-line ceiling, pinned by `test_host.HostLineCountTests`.
+- D4.3 End-to-end smoke test — `security-foundations/integrations/mcp/test_smoke.py`, drives a real signed envelope through the full substrate pipeline and asserts the reply independently re-verifies. Pinned by proof obligation `mcp_smoke_round_trip_verifies`.
+- D4.4 Integration runbook — `security-foundations/integrations/mcp/example/README.md` walks a fresh operator from `git clone` to a passing smoke test in under 15 minutes. `gen_keys.py` mints deterministic Ed25519 keypairs + trust-store manifests; `_gen_sample_audit.py` produces a hash-chained reference audit log under `sample-audit.jsonl`.
+
+When integrating against a real MCP host, **start from the smoke
+test fixtures in `test_smoke.py:_Stage` or `example/_gen_sample_audit.py`**
+— they're the two places that wire a complete host end-to-end.
+
+For what's NOT covered (compound-failure drills, observability,
+distributed deployment, etc.), see `DEFERRED.md`. There is no
+Phase 5 plan yet.
 
 Phase 3 §§6–8 + §11 (drills, isolation tests, observability,
 phase-close artifacts) and the audit-emission-wiring for Phase 2
