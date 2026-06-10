@@ -166,18 +166,61 @@ instances at a higher layer.
 
 ---
 
-## Phase 4 status
+## Items routed to Phase 4 (planned, not yet implemented)
 
-There is no Phase 4 plan doc. The four shipped plans
-(`phase-0-security-foundations.md` through
-`phase-3-resilience-and-scale.md`) all have every deliverable
-annotated `**Landed (v0):**`. To start new substrate work either:
+`implementation-plan/phases/phase-4-integration-proof.md` ships the
+minimum integration loop. None of its WBS items are landed yet.
+Phase 4 itself is in scope; everything below this line is what
+Phase 4 specifically does NOT cover.
 
-1. Write a Phase 4 plan first, drawing items from the "Deferred"
-   section above, and run it through the same cadence the prior
-   phases used.
-2. OR pick a single deferred item, write a focused circle-back
-   slice, and ship it the same way.
+## Items routed to Phase 5 (deferred from Phase 3, surfaced after Phase 4)
+
+The Phase 3 plan document specifies these but the substrate has
+not implemented them. Phase 4 intentionally skips them so the
+operator can pick which matter once a real running system reveals
+the actual failure modes:
+
+### Compound-failure drill harness (Phase 3 §6)
+Four required scenarios — clock skew + policy rollback, ledger
+divergence + revocation race, anomaly quarantine + export
+attestation failure, partition during trust anchor rotation. The
+safe-mode engine is built; the harness that runs these scenarios
+end-to-end is not.
+
+### Shared-component isolation validation (Phase 3 §7)
+Noisy-neighbor saturation tests, cross-tenant replay and retrieval
+abuse simulations, embedding and nearest-neighbor bleed checks on
+replay cache, queue/scheduler, model serving, vector index, and
+policy bundle distribution. None built.
+
+### Observability surface (Phase 3 §8)
+State-machine transition metrics, revocation convergence timing,
+quorum health and partition status, security-service protected-
+capacity utilization. Audit emission exists for envelope /
+capability; everything else is not wired to telemetry.
+
+### Phase-close evidence bundle (Phase 3 §11)
+Safe-mode state machine implementation spec + runbook, compound-
+failure drill reports and trend analysis, capacity protection and
+fairness policy package, revocation / rotation game-day evidence,
+formal verification artifact set + CI gate report, final Go/No-Go
+recommendation memo. None produced.
+
+### Audit-emission coverage for Phase 2 primitives
+The Phase 2 verifiers (delegation, retrieval, egress, reviewer,
+tool gate, checkpointed execution, session tokens) return their
+decisions; the audit pipeline only consumes envelope / capability
+events. Wiring the rest is an additive slice.
+
+---
+
+## Phase numbering
+
+Plans now run Phase 0 through Phase 4. Phase 4 is the integration
+proof. Phase 5 (if it exists) will draw from the deferred items
+above PLUS whatever the Phase 4 close-out note in
+`implementation-plan/phases/README.md` says the operator learned
+about real failure modes.
 
 Do not start refactoring or rewriting v0 modules without an
 explicit reason. The v0 contract is "this is what the substrate

@@ -6,6 +6,7 @@ This directory contains execution-focused plans for each build phase:
 2. [Phase 1 — Minimal Secure Messaging](./phase-1-minimal-secure-messaging.md)
 3. [Phase 2 — Controlled Autonomy](./phase-2-controlled-autonomy.md)
 4. [Phase 3 — Resilience and Scale](./phase-3-resilience-and-scale.md)
+5. [Phase 4 — Integration Proof](./phase-4-integration-proof.md)
 
 ## Plan quality and verification
 - [Plan Verification Report](./plan-verification-report.md)

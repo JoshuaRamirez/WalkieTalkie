@@ -100,11 +100,18 @@ might already be on the "intentionally not doing" list.
 
 ## Phase 4 status
 
-There is no Phase 4 plan doc. The four shipped plans (Phase 0
-hardening, Phase 1 minimal secure messaging, Phase 2 controlled
-autonomy, Phase 3 resilience and scale) all close their last leaf.
-Picking up new work either means writing a Phase 4 plan first OR
-working from the deferred-items registry in `DEFERRED.md`.
+Phase 4 is **planned, not yet implemented**. See
+`implementation-plan/phases/phase-4-integration-proof.md`. Its
+scope is the minimum integration loop that proves the substrate
+works inside a real MCP host: one adapter module, one example host,
+one end-to-end smoke test, one integration runbook. Hard 500-line
+ceiling on the example host. No drills, observability, or
+distributed deployment — those are Phase 5.
+
+Phase 3 §§6–8 + §11 (drills, isolation tests, observability,
+phase-close artifacts) and the audit-emission-wiring for Phase 2
+primitives that lack it are explicitly deferred to Phase 5; see
+DEFERRED.md.
 
 ## Anti-patterns
 
