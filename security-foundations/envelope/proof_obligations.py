@@ -532,6 +532,26 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "test_host.HostLineCountTests.test_host_module_under_500_lines"
         ),
     ),
+    # ----- Phase 4 D4.3: end-to-end smoke test -----
+    ProofObligation(
+        name="mcp_smoke_round_trip_verifies",
+        phase=Phase.PHASE_3,  # nearest peer; Phase enum not yet extended for Phase 4
+        track="D",
+        statement=(
+            "A signed MCP envelope round-trips through the example "
+            "host end-to-end: verify_envelope accepts the inbound, "
+            "the tool gate allows the call, output_scanning and "
+            "egress_policy approve the response, and the signed reply "
+            "envelope is independently verifiable via verify_envelope. "
+            "The audit chain hash-validates and the expected event "
+            "sequence appears. This is the substrate-works-as-a-system "
+            "proof for Phase 4."
+        ),
+        canonical_test=(
+            "test_smoke.HappyPathTests"
+            ".test_round_trip_succeeds_and_reply_is_verifiable"
+        ),
+    ),
     # ----- Phase 3 B3 deferred-half circle-back: capacity rebalancer -----
     ProofObligation(
         name="rebalancer_preserves_non_preemptible_floor",
