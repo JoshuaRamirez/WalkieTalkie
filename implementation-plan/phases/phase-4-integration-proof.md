@@ -87,6 +87,20 @@ will then have real failure modes to chase instead of imagined ones.
   reply.
 - Configuration via the existing `FileSystemTrustStore` and
   `IssuerTrustStore` manifest formats.
+  **Landed (v0):** `security-foundations/integrations/mcp/host.py`
+  ships `ExampleMCPHost` + `HostConfig` + two demo tools
+  (`read_file` LOW-risk, `exec_sql` CRITICAL requires step-up).
+  The `handle()` flow runs every Phase 1/2 verification step in
+  order: `verify_envelope` (signature + window + replay +
+  capability binding + envelope audit) → `unwrap_request` →
+  `tool_policy_gate.evaluate_tool_call` (tool gate audit) → tool
+  dispatch → `output_scanning.scan` → `egress_policy.evaluate`
+  (egress audit) → `sign_envelope` reply. Failures at any gate
+  produce a *signed* JSON-RPC error reply rather than propagating
+  an exception, so the peer always gets a verifiable response.
+  46 integration tests now passing (27 adapter + 19 host shape
+  tests including the 500-line-ceiling assertion). End-to-end
+  smoke testing lands in D4.3. Host module: 479 lines.
 
 ### D4.3 End-to-End Smoke Test
 - One automated test that:
