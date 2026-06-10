@@ -133,6 +133,20 @@ will then have real failure modes to chase instead of imagined ones.
   - how to start the example host,
   - how to send a test message,
   - how to read the audit log.
+  **Landed (v0):**
+  `security-foundations/integrations/mcp/example/README.md` is the
+  operator-facing runbook walking from `git clone` to a passing
+  smoke test in six steps. `example/gen_keys.py` mints three
+  deterministic Ed25519 keypairs (client, host, capability issuer)
+  and writes `workload-manifest.json` +
+  `issuer-manifest.json` consumable by `FileSystemTrustStore` and
+  `IssuerTrustStore` respectively. `example/_gen_sample_audit.py`
+  drives one happy-path round trip with a deterministic-clock
+  audit sink and produces `sample-audit.jsonl` as a reference
+  hash-chained audit trail; re-running it leaves the working tree
+  clean. A new shape test (`test_runbook.RunbookArtifactsTests`)
+  asserts every named artifact exists so a future agent can't
+  accidentally drift the runbook away from the files it points at.
 
 ---
 

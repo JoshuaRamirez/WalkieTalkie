@@ -26,3 +26,21 @@ Each phase document includes:
 - test strategy,
 - risks and exit gates,
 - closeout artifact checklist.
+
+## Phase 4 close-out note
+
+Phase 4 shipped exactly what its plan called for: the substrate
+primitives compose end-to-end against an in-process MCP host, the
+reply re-verifies independently, and an operator can reproduce the
+loop from a clean `git clone` in well under 15 minutes via
+`security-foundations/integrations/mcp/example/README.md`. What
+running the substrate against a real MCP host taught us, in one
+paragraph: the host's audit emissions had been using the wrong
+outcome alphabet (`"ok"` instead of `"allow"`) — a real defect
+that no unit test caught because no unit test sent traffic through
+the audit pipe. The smoke test surfaced it immediately. That's
+exactly the value Phase 4 was supposed to deliver: forcing the
+primitives to actually compose under load reveals shape mismatches
+that primitive-level testing can't. Phase 5, if it exists, should
+be scoped from operational learnings of this kind, not from another
+round of primitive design.
