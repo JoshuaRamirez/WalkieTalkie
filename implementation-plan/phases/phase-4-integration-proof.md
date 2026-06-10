@@ -111,6 +111,20 @@ will then have real failure modes to chase instead of imagined ones.
   - asserts the audit log has the expected event chain
     (`envelope.verify` ok → `capability.verify` ok → tool dispatch →
     output scan clean → egress allow → outbound envelope sign).
+  **Landed (v0):** `security-foundations/integrations/mcp/test_smoke.py`
+  drives a signed MCP envelope through the full substrate pipeline
+  end-to-end with real Ed25519 keypairs and a real `CapabilityIssuer`.
+  Happy path asserts the reply envelope independently verifies via
+  `verify_envelope`, the response payload carries the tool output,
+  the audit chain hash-validates via `verify_chain`, and the
+  expected event sequence (`capability.issue`, `envelope.verify`,
+  `tool.gate`, `egress.evaluate`, all `allow`) appears. Three sad
+  paths pin: empty-capability rejection without nonce burn,
+  post-signing payload mutation rejection, and CRITICAL tool without
+  step-up → `TOOL_STEP_UP_REQUIRED`. The host gained a
+  `reply_capability_minter` hook so replies carry payload-bound cap
+  tokens and verify end-to-end. The new proof obligation
+  `mcp_smoke_round_trip_verifies` pins this as a CI gate.
 
 ### D4.4 Integration Runbook
 - A README under `security-foundations/integrations/mcp/` covering:

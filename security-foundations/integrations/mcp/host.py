@@ -110,6 +110,10 @@ class HostConfig:
     )
     reply_ttl: timedelta = field(default_factory=lambda: timedelta(minutes=5))
     capability_token_for_reply: str = "reply"
+    # When set, replies carry a REAL capability token bound to the
+    # reply's payload digest (input: hex digest, output: token). This
+    # makes the reply verifiable end-to-end via verify_envelope.
+    reply_capability_minter: Callable[[str], str] | None = None
     reply_purpose: str = "invoke_tool"
 
     def __post_init__(self) -> None:
@@ -291,7 +295,7 @@ class ExampleMCPHost:
         )
         self._emit(
             event_type="egress.evaluate",
-            outcome="ok" if egress_decision.action is EgressAction.ALLOW else "deny",
+            outcome="allow" if egress_decision.action is EgressAction.ALLOW else "deny",
             reason=egress_decision.reason,
             reason_code=egress_decision.reason_code,
             envelope=envelope,
@@ -343,7 +347,7 @@ class ExampleMCPHost:
         )
         self._emit(
             event_type="tool.gate",
-            outcome="ok" if decision.allowed else "deny",
+            outcome="allow" if decision.allowed else "deny",
             reason=decision.reason,
             reason_code=decision.reason_code,
             envelope=envelope,
@@ -359,12 +363,22 @@ class ExampleMCPHost:
         opts: HandleOptions,
     ) -> dict[str, Any]:
         payload = mcp_response_to_payload(response)
+        # If the operator wired a minter, attach a real capability
+        # token bound to the reply's payload digest so the reply is
+        # verifiable end-to-end through verify_envelope. Otherwise
+        # fall back to the placeholder string (the original peer
+        # may then choose to skip cap-token validation on replies).
+        if self.config.reply_capability_minter is not None:
+            payload_digest = hashlib.sha256(jcs.canonicalize(payload)).hexdigest()
+            cap_token = self.config.reply_capability_minter(payload_digest)
+        else:
+            cap_token = self.config.capability_token_for_reply
         fields = EnvelopeFields(
             sender_spiffe_id=self.config.host_iss,
             recipient_spiffe_id=envelope["sender_spiffe_id"],
             purpose_of_use=self.config.reply_purpose,
             kid=self.config.host_kid,
-            capability_token=self.config.capability_token_for_reply,
+            capability_token=cap_token,
             message_id=opts.reply_message_id or _derive_reply_id(envelope),
             nonce=opts.reply_nonce or _derive_reply_nonce(envelope),
             issued_at=now,
