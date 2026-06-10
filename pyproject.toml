@@ -18,7 +18,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["security-foundations/envelope"]
+packages = ["security-foundations/envelope", "security-foundations/integrations"]
 
 [tool.ruff]
 target-version = "py311"

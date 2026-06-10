@@ -501,6 +501,22 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             ".test_tampered_vector_fails_signature_check"
         ),
     ),
+    # ----- Phase 4 D4.1: MCP envelope adapter -----
+    ProofObligation(
+        name="mcp_adapter_emits_schema_complete_envelope",
+        phase=Phase.PHASE_3,  # nearest peer; Phase enum not yet extended for Phase 4
+        track="D",
+        statement=(
+            "The MCP envelope adapter's build_envelope+sign_envelope output "
+            "carries exactly the field set declared 'required' in "
+            "schema-v0.json — no missing fields, no extras. The verifier "
+            "and the adapter cannot drift apart without failing CI."
+        ),
+        canonical_test=(
+            "test_envelope_adapter.IntegrationWithVerifierTests"
+            ".test_adapter_output_passes_schema_required_fields"
+        ),
+    ),
     # ----- Phase 3 B3 deferred-half circle-back: capacity rebalancer -----
     ProofObligation(
         name="rebalancer_preserves_non_preemptible_floor",
