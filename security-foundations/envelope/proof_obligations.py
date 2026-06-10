@@ -517,6 +517,21 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             ".test_adapter_output_passes_schema_required_fields"
         ),
     ),
+    # ----- Phase 4 D4.2: example MCP host -----
+    ProofObligation(
+        name="example_host_under_500_lines",
+        phase=Phase.PHASE_3,  # nearest peer; Phase enum not yet extended for Phase 4
+        track="D",
+        statement=(
+            "The example MCP host stays within the Phase 4 §6 "
+            "acceptance criterion #4 ceiling of 500 lines. Growing "
+            "past it means we're solving Phase 5 problems early — "
+            "the test fails CI and forces an explicit decision."
+        ),
+        canonical_test=(
+            "test_host.HostLineCountTests.test_host_module_under_500_lines"
+        ),
+    ),
     # ----- Phase 3 B3 deferred-half circle-back: capacity rebalancer -----
     ProofObligation(
         name="rebalancer_preserves_non_preemptible_floor",
