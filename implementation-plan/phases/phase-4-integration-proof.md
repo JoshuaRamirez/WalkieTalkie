@@ -64,6 +64,20 @@ will then have real failure modes to chase instead of imagined ones.
   emits a wire-ready envelope.
 - Inbound parser that takes a wire envelope and exposes the MCP
   payload after `verify_envelope` accepts it.
+  **Landed (v0):** `security-foundations/integrations/mcp/envelope_adapter.py`
+  ships the bidirectional translation. `MCPRequest`/`MCPResponse`
+  dataclasses normalize JSON-RPC 2.0; `mcp_request_to_payload` /
+  `payload_to_mcp_request` (plus response equivalents) handle the
+  payload-level translation. `EnvelopeFields` carries operator-
+  supplied envelope metadata. `build_envelope()` assembles an
+  unsigned envelope dict whose required-field set exactly matches
+  `schema-v0.json`. `sign_envelope()` attaches an Ed25519 signature
+  over the JCS canonical body (same convention `_regen_vectors.py`
+  uses). `unwrap_request` / `unwrap_response` pull the MCP message
+  out after `verify_envelope` succeeds. 27 unit tests pin payload
+  round-trips, schema field coverage, signature validity, and JSON
+  transport. `pyproject.toml` adds `security-foundations/integrations`
+  to the wheel build.
 
 ### D4.2 Example MCP Host
 - A minimal Python MCP server that accepts envelope-wrapped
