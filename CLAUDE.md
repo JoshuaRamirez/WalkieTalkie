@@ -4,7 +4,9 @@ This file is the cold-start brief for an agent picking up the
 WalkieTalkie security substrate. Read this once; read
 `security-foundations/README.md` for the full primitive inventory;
 read `implementation-plan/phases/*.md` for the phase plans and
-landed-status annotations.
+landed-status annotations; read the **most recent** brief in
+`docs/agent-handoffs/` for the moment-in-time framing the previous
+session ended on.
 
 ## What this repo is
 
