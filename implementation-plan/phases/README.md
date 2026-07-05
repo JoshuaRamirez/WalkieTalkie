@@ -45,3 +45,34 @@ primitives to actually compose under load reveals shape mismatches
 that primitive-level testing can't. Phase 5, if it exists, should
 be scoped from operational learnings of this kind, not from another
 round of primitive design.
+
+## Phase 5 close-out note
+
+Phase 5 ("The Fabric") did the one thing the Phase 4 note warned
+against — it went back to primitive design — but for a defensible
+reason: a gap analysis against the `SECURITY_FIRST_P2P_MCP_PLAN.md`
+vision showed the kernel had the *hard* parts (signed envelopes,
+capabilities, delegation, safe-mode) but was missing the *connective*
+Layer A identity, the Layer C policy engine, and the §5 mesh that turn
+a pile of primitives into a fabric. Phase 5 built exactly those and
+nothing more: real Ed25519 X.509 SVIDs, deny-by-default peer admission,
+a native decision-ID'd policy engine, and a two-node authenticated mesh
+that completes a signed round trip over both an in-memory transport and
+real loopback TCP — with both audit chains hash-validating.
+
+What building the fabric taught us, in one paragraph: **the honesty
+label was the load-bearing design decision.** Forcing every slice to
+declare [RUNNABLE] vs [REFERENCE] up front stopped the mesh and runtime
+work from quietly overclaiming. `runtime_profile.py` /
+`generate_seccomp` / `image_attestation.py` are genuinely useful — they
+produce loadable seccomp documents and verify real attestations — but
+none of them *enforce* anything in-process, and saying so plainly (in
+the docstrings, the plan, the threat model, and the compliance mapping)
+is what keeps the substrate trustworthy as an inventory. The proof-
+obligations registry grew from 34 to 40; every new *machine-checkable*
+invariant got one, and the [REFERENCE] generators deliberately did not
+(a seccomp document's shape is testable; claiming it's an *enforcement*
+invariant would be the lie the labels exist to prevent). Phase 6, if it
+exists, is the deployment-enforcement frontier catalogued in
+`DEFERRED.md` — kernel sandbox, image admission, mTLS, PKI custody,
+mesh scale — none of which the in-process kernel can be.
