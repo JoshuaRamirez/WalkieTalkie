@@ -637,6 +637,23 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             ".test_binding_check_passes_when_expected_matches"
         ),
     ),
+    ProofObligation(
+        name="unadmitted_peer_denied",
+        phase=Phase.PHASE_5,
+        track="A",
+        statement=(
+            "Peer admission is deny-by-default: an identity not on the "
+            "allowlist is denied (admission_peer_not_allowed), an "
+            "allowlisted identity presenting on the wrong env tier is "
+            "denied (admission_tier_mismatch), and a pinned peer "
+            "presenting the wrong key is denied "
+            "(admission_cert_pin_mismatch). This is vision §8.1 — an "
+            "unauthorized peer cannot join the mesh."
+        ),
+        canonical_test=(
+            "test_peer_admission.AdmissionTests.test_deny_by_default"
+        ),
+    ),
 )
 
 

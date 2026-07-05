@@ -159,6 +159,13 @@ keeps the plan doc and the task list updated after every iteration.
   (`SVID_*`) per failure. Proof obligation `svid_binding_verified`.
   10 tests.
 - **A3** `peer_admission.py`: deny-by-default admission. [RUNNABLE]
+  **Landed (v0):** `PeerAdmissionPolicy` is a closed allowlist of
+  `AdmissionRule(spiffe_id, env_tier, pinned_fingerprint?)`.
+  `admit_peer()` denies unknown identities
+  (`ADMISSION_PEER_NOT_ALLOWED`), wrong-tier presentation
+  (`ADMISSION_TIER_MISMATCH`), and pin mismatches
+  (`ADMISSION_CERT_PIN_MISMATCH`). Proof obligation
+  `unadmitted_peer_denied` (vision §8.1). 13 tests.
 
 ### Track B — Policy Engine
 - **B1** `policy_engine.py`: ABC + `NativePolicyEngine` + decision IDs. [RUNNABLE]
