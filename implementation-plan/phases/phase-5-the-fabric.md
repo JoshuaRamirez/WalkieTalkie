@@ -207,6 +207,17 @@ keeps the plan doc and the task list updated after every iteration.
   unadmitted peer is not learned. Proof obligation
   `mesh_authenticate_then_authorize`. 18 tests.
 - **C3** two-node round-trip test (D5.5) + `LocalSocketTransport`. [RUNNABLE]
+  **Landed (v0):** `LocalSocketTransport` is a real loopback-TCP
+  implementation of the `Transport` ABC (length-prefixed framing,
+  daemon listener thread). `test_mesh_round_trip` proves the fabric
+  works as a system: two mutually-admitted nodes complete a signed
+  round trip — A's envelope crosses the transport, B runs the full
+  `verify_envelope` stack, B's reply crosses back, A re-verifies, both
+  audit chains validate. Sad paths: unadmitted peer has nowhere to
+  route (§8.1), replayed envelope rejected at the receiver (§8.2).
+  The same signed envelope verifies after crossing a real socket
+  (transport-agnosticism). Proof obligation `mesh_round_trip_verifies`.
+  5 tests. **Track C complete.**
 
 ### Track D — Runtime Tiers
 - **D1** `runtime_profile.py`: tier model. [REFERENCE]
