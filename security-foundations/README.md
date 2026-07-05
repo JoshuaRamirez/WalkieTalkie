@@ -337,6 +337,24 @@ the approved plan.
   `test_discovery_test_vectors` suite asserts the verifier accepts
   the valid one and rejects the tampered one, keeping the vectors
   coherent across regenerations.
+- **Example MCP host integration v0** (`integrations/mcp/`, Phase 4):
+  `envelope_adapter.py` translates MCP JSON-RPC 2.0 messages to/from
+  the signed envelope schema. `host.py` (`ExampleMCPHost`) runs the
+  full substrate pipeline for one inbound message — verify_envelope
+  (signature + window + replay + capability binding + **revocation**
+  when a `revocation_list` is wired) → **post-auth rate limit** →
+  tool policy gate → tool dispatch → output scan → egress policy →
+  signed reply — emitting a hash-chained audit event at every
+  decision. `HostConfig` exposes optional `rate_limiter` and
+  `revocation_list`; the smoke fixtures gate issuance with an
+  `AllowlistPolicy`. `test_smoke.py` drives real Ed25519 round trips
+  including the **revoke-then-reject capability lifecycle** and the
+  **post-auth rate-limit** invariant (a spoofed sender burns none of
+  the victim's allowance). The host stays under a 500-line ceiling
+  pinned by `test_host.HostLineCountTests`; demo tools and pure
+  helpers live in `demo_tools.py` / `host_support.py`. Runbook +
+  deterministic key/manifest/sample-audit generators under
+  `integrations/mcp/example/`.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root

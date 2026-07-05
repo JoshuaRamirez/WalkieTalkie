@@ -23,19 +23,19 @@ sys.path.insert(
 )
 
 from audit import InMemoryAuditSink
+from demo_tools import DEMO_TOOLS, tool_exec_sql, tool_read_file
 from egress_policy import EgressAction, EgressMatrixCell, MatrixEgressPolicy
 from host import (
-    DEMO_TOOLS,
     ExampleMCPHost,
     ExampleMCPHostError,
     HandleOptions,
     HostConfig,
-    _derive_reply_id,
-    _derive_reply_nonce,
-    _exc_reason_code,
-    _request_id_from_envelope,
-    _tool_exec_sql,
-    _tool_read_file,
+)
+from host_support import (
+    derive_reply_id,
+    derive_reply_nonce,
+    exc_reason_code,
+    request_id_from_envelope,
 )
 from output_scanning import PatternRegistry, RiskLevel
 from tool_policy_gate import RiskTier, ToolPolicy, ToolRule
@@ -116,18 +116,18 @@ class HostConstructionTests(unittest.TestCase):
 
 class DemoToolShapeTests(unittest.TestCase):
     def test_read_file_returns_path_and_contents(self):
-        out = _tool_read_file({"path": "/etc/hosts"})
+        out = tool_read_file({"path": "/etc/hosts"})
         self.assertEqual(out["path"], "/etc/hosts")
         self.assertIn("contents", out)
         self.assertIn("/etc/hosts", out["contents"])
 
     def test_read_file_tolerates_missing_params(self):
-        out = _tool_read_file({})
+        out = tool_read_file({})
         self.assertEqual(out["path"], "")
         self.assertIn("no path", out["contents"])
 
     def test_exec_sql_returns_rows(self):
-        out = _tool_exec_sql({"query": "SELECT 1"})
+        out = tool_exec_sql({"query": "SELECT 1"})
         self.assertEqual(out["query"], "SELECT 1")
         self.assertIsInstance(out["rows"], list)
         self.assertGreater(len(out["rows"]), 0)
@@ -138,32 +138,32 @@ class HelperFunctionTests(unittest.TestCase):
         env = {
             "payload": {"jsonrpc": "2.0", "method": "x", "id": 42},
         }
-        self.assertEqual(_request_id_from_envelope(env), 42)
+        self.assertEqual(request_id_from_envelope(env), 42)
 
     def test_request_id_returns_none_for_non_dict_envelope(self):
-        self.assertIsNone(_request_id_from_envelope(None))  # type: ignore[arg-type]
-        self.assertIsNone(_request_id_from_envelope({"payload": "junk"}))
+        self.assertIsNone(request_id_from_envelope(None))  # type: ignore[arg-type]
+        self.assertIsNone(request_id_from_envelope({"payload": "junk"}))
 
     def test_exc_reason_code_handles_missing_reason(self):
         exc = EnvelopeVerificationError("naked exception", reason=None)
-        self.assertEqual(_exc_reason_code(exc), "")
+        self.assertEqual(exc_reason_code(exc), "")
 
     def test_derive_reply_id_is_deterministic(self):
         env = {"message_id": "01900000-0000-7000-8000-aaaaaaaaaaa1"}
-        self.assertEqual(_derive_reply_id(env), _derive_reply_id(env))
+        self.assertEqual(derive_reply_id(env), derive_reply_id(env))
 
     def test_derive_reply_id_differs_from_input(self):
         env = {"message_id": "01900000-0000-7000-8000-aaaaaaaaaaa1"}
-        self.assertNotEqual(_derive_reply_id(env), env["message_id"])
+        self.assertNotEqual(derive_reply_id(env), env["message_id"])
 
     def test_derive_reply_id_falls_back_for_invalid_input(self):
         env = {"message_id": "not-a-uuid"}
-        out = _derive_reply_id(env)
+        out = derive_reply_id(env)
         self.assertEqual(len(out), 36)  # still UUIDv7-shaped
 
     def test_derive_reply_nonce_format(self):
         env = {"message_id": "01900000-0000-7000-8000-aaaaaaaaaaa1"}
-        nonce = _derive_reply_nonce(env)
+        nonce = derive_reply_nonce(env)
         self.assertTrue(nonce.startswith("replynonce-"))
 
 
@@ -174,6 +174,31 @@ class DemoToolsRegistryTests(unittest.TestCase):
     def test_demo_tools_are_callable(self):
         for name, tool in DEMO_TOOLS.items():
             self.assertTrue(callable(tool), f"{name} not callable")
+
+
+class SecurityConfigFieldTests(unittest.TestCase):
+    """The rate_limiter and revocation_list config fields default to
+    None (disabled) and are accepted when supplied. Full behavioral
+    lifecycle coverage lives in test_smoke.py."""
+
+    def test_rate_limiter_and_revocation_default_none(self):
+        config = _config()
+        self.assertIsNone(config.rate_limiter)
+        self.assertIsNone(config.revocation_list)
+
+    def test_rate_limiter_and_revocation_accepted_when_set(self):
+        from datetime import timedelta
+
+        from rate_limiter import IdentityRateLimiter
+        from revocation_list import InMemoryRevocationList
+        base = _config()
+        base.rate_limiter = IdentityRateLimiter(
+            limit=5, window=timedelta(minutes=1)
+        )
+        base.revocation_list = InMemoryRevocationList()
+        host = ExampleMCPHost(base)
+        self.assertIsNotNone(host.config.rate_limiter)
+        self.assertIsNotNone(host.config.revocation_list)
 
 
 class HandleOptionsTests(unittest.TestCase):

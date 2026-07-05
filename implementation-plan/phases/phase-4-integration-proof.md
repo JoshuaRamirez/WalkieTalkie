@@ -148,6 +148,39 @@ will then have real failure modes to chase instead of imagined ones.
   asserts every named artifact exists so a future agent can't
   accidentally drift the runbook away from the files it points at.
 
+### D4.5 Host security-feature coverage (follow-up)
+- The D4.1-D4.4 host exercised the message-path core but skipped
+  three Phase 1 security features that a production deployment would
+  enable: per-identity rate limiting, capability revocation, and
+  gated issuance. This follow-up wires all three.
+  **Landed (v0):**
+  - **Rate limiting.** `HostConfig.rate_limiter: IdentityRateLimiter |
+    None` (default None). `handle()` runs the limiter POST-auth (step
+    1b) on the authenticated `sender_spiffe_id`, emits a
+    `rate_limit.check` audit event, and returns a signed
+    `rate_limited` error reply on deny. `RateLimitLifecycleTests`
+    demonstrates the limit AND the post-auth invariant (a
+    badly-signed victim-spoof consumes none of the victim's
+    allowance) end-to-end.
+  - **Capability revocation.** `HostConfig.revocation_list:
+    RevocationList | None` (default None), threaded into
+    `verify_envelope` so a revoked jti is rejected with
+    `CAP_REVOKED`. `RevocationLifecycleTests` demonstrates the
+    marquee revoke-then-reject lifecycle: a capability that verified
+    a moment ago is rejected on its next use once its jti is revoked,
+    with no host code change.
+  - **Gated issuance.** The smoke `_Stage` and
+    `example/_gen_sample_audit.py` issuers now run an
+    `AllowlistPolicy` (only the client→host and host→client
+    `invoke_tool` grants), so issuance is least-privilege rather than
+    `AllowAllPolicy`.
+  - To fit under the 500-line host ceiling, the demo tools and pure
+    helpers were extracted to `demo_tools.py` / `host_support.py`.
+    Two new proof obligations (`host_revocation_lifecycle_enforced`,
+    `host_rate_limit_enforced_post_auth`) pin the lifecycle
+    invariants as CI gates. Enabled-feature count in the running
+    host: 12 → 15.
+
 ---
 
 ## 4) Integration Architecture
