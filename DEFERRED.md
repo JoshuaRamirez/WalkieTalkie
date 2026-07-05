@@ -166,12 +166,34 @@ instances at a higher layer.
 
 ---
 
-## Items routed to Phase 4 (planned, not yet implemented)
+## Phase 4 (complete) — example host feature coverage
 
-`implementation-plan/phases/phase-4-integration-proof.md` ships the
-minimum integration loop. None of its WBS items are landed yet.
-Phase 4 itself is in scope; everything below this line is what
-Phase 4 specifically does NOT cover.
+`implementation-plan/phases/phase-4-integration-proof.md` shipped in
+full (D4.1-D4.5). The running example host
+(`security-foundations/integrations/mcp/host.py`) now exercises,
+end-to-end through a signed message: envelope verification,
+capability tokens + gated issuance (`AllowlistPolicy`),
+**capability revocation** (revoke-then-reject lifecycle),
+**post-auth rate limiting**, replay cache, trust stores, tool policy
+gate + step-up, output scanning, egress policy, and hash-chained
+audit.
+
+Substrate features that remain **host-dormant** (built + unit-tested
++ CI-pinned, but no message flows through them in the example host
+because a single-host demo has nowhere to put them):
+
+- Phase 2: delegation receipts, retrieval policy, prompt assembly,
+  instruction isolation (no LLM prompt is composed in the demo),
+  reviewer workflow (egress QUARANTINE currently just denies),
+  checkpointed execution, session tokens.
+- Phase 3: every mesh/operational primitive — sybil deterrence,
+  eclipse resistance, discovery propagation, capacity budgets +
+  rebalancer, safe-mode engine, key rotation, revocation
+  convergence, recovery re-admission.
+
+Wiring any of these into a running system is a real-integration task
+(needs delegation chains, multi-turn LLM sessions, a mesh, etc.),
+not a substrate gap. Pick them up when a real deployment needs them.
 
 ## Items routed to Phase 5 (deferred from Phase 3, surfaced after Phase 4)
 

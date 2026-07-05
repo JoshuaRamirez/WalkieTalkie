@@ -46,6 +46,7 @@ import jcs
 from audit import AuditSink, InMemoryAuditSink
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from data_classification import DataClass
+from demo_tools import DEMO_TOOLS
 from egress_policy import EgressAction, EgressPolicy
 from envelope_adapter import (
     EnvelopeFields,
@@ -56,7 +57,15 @@ from envelope_adapter import (
     sign_envelope,
     unwrap_request,
 )
+from host_support import (
+    derive_reply_id,
+    derive_reply_nonce,
+    exc_reason_code,
+    request_id_from_envelope,
+)
 from output_scanning import PatternRegistry, scan
+from rate_limiter import IdentityRateLimiter
+from revocation_list import RevocationList
 from tool_policy_gate import (
     StepUpAttestation,
     ToolCall,
@@ -79,6 +88,7 @@ _JSONRPC_INTERNAL_ERROR = -32603
 _APP_ENVELOPE_DENIED = -32001
 _APP_TOOL_DENIED = -32002
 _APP_EGRESS_DENIED = -32003
+_APP_RATE_LIMITED = -32004
 
 
 class ExampleMCPHostError(RuntimeError):
@@ -104,6 +114,12 @@ class HostConfig:
     egress_policy: EgressPolicy
     audit_sink: AuditSink = field(default_factory=InMemoryAuditSink)
     verify_config: VerificationConfig = field(default_factory=VerificationConfig)
+    # Optional per-identity rate limiter, checked POST-auth on the
+    # authenticated sender (see the step-1b comment in handle()).
+    rate_limiter: IdentityRateLimiter | None = None
+    # Optional capability-revocation list threaded into verify_envelope;
+    # a revoked jti is rejected with CAP_REVOKED.
+    revocation_list: RevocationList | None = None
     output_data_class: DataClass = DataClass.INTERNAL
     pattern_registry: PatternRegistry = field(
         default_factory=PatternRegistry.builtin
@@ -131,34 +147,6 @@ class HandleOptions:
     step_up: StepUpAttestation | None = None
     reply_message_id: str = ""
     reply_nonce: str = ""
-
-
-# ---------------------------------------------------------------------
-# Demo tools — pure functions, no I/O. Operators replace these for
-# their actual workloads.
-# ---------------------------------------------------------------------
-
-
-def _tool_read_file(params: dict[str, Any]) -> dict[str, Any]:
-    path = params.get("path", "") if isinstance(params, dict) else ""
-    return {
-        "path": path,
-        "contents": f"demo body for {path or '<no path>'}",
-    }
-
-
-def _tool_exec_sql(params: dict[str, Any]) -> dict[str, Any]:
-    query = params.get("query", "") if isinstance(params, dict) else ""
-    return {
-        "query": query,
-        "rows": [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
-    }
-
-
-DEMO_TOOLS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
-    "read_file": _tool_read_file,
-    "exec_sql": _tool_exec_sql,
-}
 
 
 # ---------------------------------------------------------------------
@@ -202,10 +190,9 @@ class ExampleMCPHost:
         opts = options or HandleOptions()
         now = (opts.now or datetime.now(UTC)).astimezone(UTC)
 
-        # Step 1: envelope verification.
-        # Capability claims are returned by verify_envelope; the demo
-        # host doesn't consume them but the verifier still binds them
-        # to the envelope as a side effect (and audits them).
+        # Step 1: envelope verification (signature, time window, replay,
+        # capability binding, and — with a revocation_list — the
+        # revoked-jti check that raises CAP_REVOKED).
         try:
             verify_envelope(
                 envelope,
@@ -215,17 +202,43 @@ class ExampleMCPHost:
                 config=self.config.verify_config,
                 now=now,
                 audit_sink=self.config.audit_sink,
+                revocation_list=self.config.revocation_list,
             )
         except EnvelopeVerificationError as exc:
             return self._error_reply(
                 envelope=envelope,
-                request_id=_request_id_from_envelope(envelope),
+                request_id=request_id_from_envelope(envelope),
                 code=_APP_ENVELOPE_DENIED,
                 message=f"envelope denied: {exc}",
-                reason_code=_exc_reason_code(exc),
+                reason_code=exc_reason_code(exc),
                 now=now,
                 opts=opts,
             )
+
+        # Step 1b: post-auth rate limit. Runs on the AUTHENTICATED sender
+        # so a spoofed sender_spiffe_id (rejected above) never reaches
+        # here and cannot burn a victim's allowance.
+        if self.config.rate_limiter is not None:
+            rl = self.config.rate_limiter.check(
+                envelope["sender_spiffe_id"], now=now
+            )
+            self._emit(
+                event_type="rate_limit.check",
+                outcome="allow" if rl.allowed else "deny",
+                reason=rl.reason,
+                reason_code="rate_limited" if not rl.allowed else "ok",
+                envelope=envelope,
+            )
+            if not rl.allowed:
+                return self._error_reply(
+                    envelope=envelope,
+                    request_id=request_id_from_envelope(envelope),
+                    code=_APP_RATE_LIMITED,
+                    message=f"rate limited: {rl.reason}",
+                    reason_code="rate_limited",
+                    now=now,
+                    opts=opts,
+                )
 
         # Step 2: unwrap to MCP request.
         try:
@@ -233,7 +246,7 @@ class ExampleMCPHost:
         except Exception as exc:  # noqa: BLE001 — translation failure
             return self._error_reply(
                 envelope=envelope,
-                request_id=_request_id_from_envelope(envelope),
+                request_id=request_id_from_envelope(envelope),
                 code=_JSONRPC_INVALID_REQUEST,
                 message=f"payload is not a JSON-RPC request: {exc}",
                 reason_code="invalid_request",
@@ -379,8 +392,8 @@ class ExampleMCPHost:
             purpose_of_use=self.config.reply_purpose,
             kid=self.config.host_kid,
             capability_token=cap_token,
-            message_id=opts.reply_message_id or _derive_reply_id(envelope),
-            nonce=opts.reply_nonce or _derive_reply_nonce(envelope),
+            message_id=opts.reply_message_id or derive_reply_id(envelope),
+            nonce=opts.reply_nonce or derive_reply_nonce(envelope),
             issued_at=now,
             ttl=self.config.reply_ttl,
         )
@@ -445,43 +458,6 @@ class ExampleMCPHost:
             recipient=str(env.get("recipient_spiffe_id", "")),
             envelope_kid=str(env.get("kid", "")),
         )
-
-
-# ---------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------
-
-
-def _request_id_from_envelope(envelope: dict[str, Any]) -> int | str | None:
-    if not isinstance(envelope, dict):
-        return None
-    payload = envelope.get("payload")
-    if not isinstance(payload, dict):
-        return None
-    return payload.get("id")
-
-
-def _exc_reason_code(exc: EnvelopeVerificationError) -> str:
-    return exc.reason.value if getattr(exc, "reason", None) is not None else ""
-
-
-def _derive_reply_id(envelope: dict[str, Any]) -> str:
-    """Derive a UUIDv7-shaped reply id deterministically from the
-    inbound envelope's message_id. Real operators pick this from a
-    monotonic clock; the demo uses derive-from-input for reproducibility."""
-    base = envelope.get("message_id", "00000000-0000-7000-8000-000000000000")
-    if not isinstance(base, str) or len(base) != 36:
-        base = "00000000-0000-7000-8000-000000000000"
-    # Replace the last hex group with a deterministic permutation so
-    # the reply id is distinct but still UUIDv7-shaped.
-    head = base[:-12]
-    return head + base[-12:][::-1]
-
-
-def _derive_reply_nonce(envelope: dict[str, Any]) -> str:
-    msg = envelope.get("message_id", "") if isinstance(envelope, dict) else ""
-    digest = hashlib.sha256(f"reply::{msg}".encode()).hexdigest()
-    return f"replynonce-{digest[:20]}"
 
 
 __all__ = [

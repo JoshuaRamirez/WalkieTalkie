@@ -27,3 +27,4 @@ A new agent picking up the work should:
 | File | Hand-off moment |
 |---|---|
 | [2026-06-phase-4-close.md](./2026-06-phase-4-close.md) | Phase 4 (integration proof) closed; substrate now has an operator runbook. Pivot options: integrate against a real MCP host, write Phase 5, or wire audit emission for the Phase 2 primitives that lack it. |
+| [2026-06-host-security-features.md](./2026-06-host-security-features.md) | **(most recent)** Example host now wires rate limiting, capability revocation, and gated issuance; revoke-then-reject lifecycle demonstrated end-to-end. Enabled-feature count 12 → 15. |

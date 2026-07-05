@@ -552,6 +552,42 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             ".test_round_trip_succeeds_and_reply_is_verifiable"
         ),
     ),
+    # ----- Phase 4 host security features (rate limit + revocation) -----
+    ProofObligation(
+        name="host_revocation_lifecycle_enforced",
+        phase=Phase.PHASE_3,  # nearest peer; Phase enum not yet extended for Phase 4
+        track="D",
+        statement=(
+            "A capability that the example host accepted a moment ago is "
+            "rejected on its next use once its jti is entered into the "
+            "revocation list the host consults — no host code change, "
+            "just an out-of-band revocation. The envelope.verify audit "
+            "event records capability_revoked as the machine-readable "
+            "cause. This is the substrate's revoke-then-reject lifecycle "
+            "demonstrated end-to-end."
+        ),
+        canonical_test=(
+            "test_smoke.RevocationLifecycleTests"
+            ".test_revoked_capability_rejected_on_next_use"
+        ),
+    ),
+    ProofObligation(
+        name="host_rate_limit_enforced_post_auth",
+        phase=Phase.PHASE_3,  # nearest peer; Phase enum not yet extended for Phase 4
+        track="D",
+        statement=(
+            "The example host's per-identity rate limiter runs AFTER "
+            "envelope authentication, so a badly-signed envelope claiming "
+            "a victim's SPIFFE ID is rejected before the limiter runs and "
+            "consumes none of the victim's allowance — the Phase 1 "
+            "hardening invariant, demonstrated end-to-end through the "
+            "running host."
+        ),
+        canonical_test=(
+            "test_smoke.RateLimitLifecycleTests"
+            ".test_spoofed_sender_does_not_burn_victim_allowance"
+        ),
+    ),
     # ----- Phase 3 B3 deferred-half circle-back: capacity rebalancer -----
     ProofObligation(
         name="rebalancer_preserves_non_preemptible_floor",

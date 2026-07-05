@@ -93,6 +93,26 @@ The three sad-path tests pin: empty capability rejection (no nonce
 burn), post-signing payload mutation rejection, and CRITICAL tool
 (`exec_sql`) without step-up → `tool_step_up_required`.
 
+Two lifecycle tests exercise the security features a production
+deployment enables via `HostConfig`:
+
+- **Revoke-then-reject** (`RevocationLifecycleTests`): a capability
+  that verified a moment ago is rejected on its next use once its
+  jti is entered into the `revocation_list` the host consults — no
+  host code change, just an out-of-band revocation. The
+  `envelope.verify` audit event records `capability_revoked`.
+- **Post-auth rate limit** (`RateLimitLifecycleTests`): requests
+  past the per-identity limit are denied with `rate_limited`, and a
+  badly-signed envelope claiming a victim's SPIFFE ID is rejected at
+  `envelope.verify` **before** the limiter runs — so it consumes
+  none of the victim's allowance.
+
+To enable these in your own host, set `HostConfig.rate_limiter`
+(an `IdentityRateLimiter`) and `HostConfig.revocation_list` (a
+`RevocationList`), and give your `CapabilityIssuer` an
+`AllowlistPolicy` so issuance is least-privilege. All three default
+to off/permissive so the minimal demo stays minimal.
+
 ## Step 5 — Inspect the sample audit log
 
 ```bash

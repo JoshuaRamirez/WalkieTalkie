@@ -62,7 +62,10 @@ from envelope_adapter import (
     unwrap_response,
 )
 from host import ExampleMCPHost, HandleOptions, HostConfig
+from issuance_policy import AllowlistPolicy
 from output_scanning import PatternRegistry, RiskLevel
+from rate_limiter import IdentityRateLimiter
+from revocation_list import InMemoryRevocationList
 from tool_policy_gate import RiskTier, ToolPolicy, ToolRule
 from verify_envelope import (
     EnvelopeVerificationError,
@@ -98,7 +101,7 @@ class _Stage:
     trust stores, the issuer, the host. Each test instantiates its
     own to keep state isolated."""
 
-    def __init__(self):
+    def __init__(self, *, rate_limit: int = 100):
         self.client_priv, self.client_pem = _make_keypair()
         self.host_priv, self.host_pem = _make_keypair()
         self.issuer_priv, self.issuer_pem = _make_keypair()
@@ -117,6 +120,11 @@ class _Stage:
         self.replay_cache = InMemoryReplayCache()
         self.audit_sink = InMemoryAuditSink()
 
+        # Gated issuance: only the two (sub, aud, scope) grants this
+        # demo actually mints are allowed. The request direction
+        # (client -> host) and the reply direction (host -> client),
+        # both at scope "invoke_tool". Anything else is refused at
+        # mint time with IssuancePolicyError.
         self.issuer = CapabilityIssuer(
             iss=_ISSUER_ISS,
             kid=_ISSUER_KID,
@@ -124,6 +132,15 @@ class _Stage:
             default_ttl=timedelta(minutes=5),
             clock_skew=timedelta(seconds=30),
             audit_sink=self.audit_sink,
+            policy=AllowlistPolicy(
+                allowed_grants=frozenset(
+                    {
+                        (_CLIENT_ISS, _HOST_ISS, "invoke_tool"),
+                        (_HOST_ISS, _CLIENT_ISS, "invoke_tool"),
+                    }
+                ),
+                max_ttl=timedelta(minutes=5),
+            ),
         )
 
         # Tool policy: read_file LOW (no step-up), exec_sql CRITICAL
@@ -155,6 +172,14 @@ class _Stage:
             )
         )
 
+        # A revocation list + rate limiter the tests can drive. The host
+        # holds a reference to the same objects, so revoking / consuming
+        # after construction takes effect on the next handle().
+        self.revocation_list = InMemoryRevocationList()
+        self.rate_limiter = IdentityRateLimiter(
+            limit=rate_limit, window=timedelta(minutes=1)
+        )
+
         self.config = HostConfig(
             host_iss=_HOST_ISS,
             host_kid=_HOST_KID,
@@ -165,6 +190,8 @@ class _Stage:
             tool_policy=self.tool_policy,
             egress_policy=self.egress_policy,
             audit_sink=self.audit_sink,
+            rate_limiter=self.rate_limiter,
+            revocation_list=self.revocation_list,
             output_data_class=DataClass.INTERNAL,
             pattern_registry=PatternRegistry.builtin(),
             reply_capability_minter=self._reply_capability_minter,
@@ -206,6 +233,7 @@ class _Stage:
         message_id: str,
         nonce: str,
         capability_token: str | None = None,
+        capability_jti: str | None = None,
         sender_iss: str = _CLIENT_ISS,
         sender_kid: str = _CLIENT_KID,
         purpose: str = "invoke_tool",
@@ -220,6 +248,7 @@ class _Stage:
                 aud=_HOST_ISS,
                 scope=purpose,
                 envelope_digest=payload_digest,
+                jti=capability_jti,
                 now=_NOW,
             )
         fields = EnvelopeFields(
@@ -385,6 +414,164 @@ class CriticalToolWithoutStepUpTests(unittest.TestCase):
         self.assertEqual(
             tool_gate_events[-1].reason_code, "tool_step_up_required"
         )
+
+
+# ---------------------------------------------------------------------
+# Marquee: revoke-then-reject capability lifecycle
+# ---------------------------------------------------------------------
+
+
+class RevocationLifecycleTests(unittest.TestCase):
+    """The substrate's headline claim, end-to-end: a capability that
+    verified cleanly a moment ago is rejected once its jti is revoked,
+    with no code change to the host — just an entry in the revocation
+    list the host was already consulting."""
+
+    _JTI = "01900000-0000-7000-8000-cafe00000001"
+
+    def test_revoked_capability_rejected_on_next_use(self):
+        stage = _Stage()
+        params = {"path": "/etc/motd"}
+
+        # 1. Mint a token with a known jti and send it — succeeds.
+        first = stage.build_request_envelope(
+            method="read_file",
+            params=params,
+            message_id="01900000-0000-7000-8000-aaaaaaaaaab1",
+            nonce="client-nonce-revoke0001",
+            capability_jti=self._JTI,
+        )
+        reply1 = stage.host.handle(first, options=HandleOptions(now=_NOW))
+        resp1 = unwrap_response(reply1)
+        self.assertIsNone(
+            resp1.error, "first use of a valid capability must succeed"
+        )
+
+        # Grab the exact token the host just accepted so we replay the
+        # SAME credential (same jti, same payload-digest binding).
+        cap_token = first["capability_token"]
+
+        # 2. Operator revokes the capability out of band.
+        stage.revocation_list.revoke(self._JTI, reason="key compromise")
+
+        # 3. Re-send the same credential (fresh nonce + message_id so
+        # only the revocation — not replay — is the reason for denial).
+        second = stage.build_request_envelope(
+            method="read_file",
+            params=params,
+            message_id="01900000-0000-7000-8000-aaaaaaaaaab2",
+            nonce="client-nonce-revoke0002",
+            capability_token=cap_token,
+        )
+        reply2 = stage.host.handle(second, options=HandleOptions(now=_NOW))
+        resp2 = unwrap_response(reply2)
+        self.assertIsNotNone(
+            resp2.error, "a revoked capability must be rejected"
+        )
+
+        # The envelope.verify audit event for the second send records
+        # the revocation as the machine-readable cause.
+        verify_events = [
+            e
+            for e in stage.audit_sink.events
+            if e.event_type == "envelope.verify"
+        ]
+        self.assertTrue(verify_events)
+        self.assertEqual(verify_events[-1].outcome, "deny")
+        self.assertEqual(verify_events[-1].reason_code, "capability_revoked")
+
+    def test_unrevoked_sibling_capability_still_works(self):
+        # Revoking one jti must not affect a different, unrelated
+        # capability. Confirms revocation is jti-scoped, not blanket.
+        stage = _Stage()
+        stage.revocation_list.revoke(self._JTI, reason="unrelated")
+        request = stage.build_request_envelope(
+            method="read_file",
+            params={"path": "/etc/motd"},
+            message_id="01900000-0000-7000-8000-aaaaaaaaaab3",
+            nonce="client-nonce-revoke0003",
+            capability_jti="01900000-0000-7000-8000-cafe00000002",
+        )
+        reply = stage.host.handle(request, options=HandleOptions(now=_NOW))
+        self.assertIsNone(unwrap_response(reply).error)
+
+
+# ---------------------------------------------------------------------
+# Rate-limit lifecycle (post-auth)
+# ---------------------------------------------------------------------
+
+
+class RateLimitLifecycleTests(unittest.TestCase):
+    def _valid_request(self, stage, *, n: int) -> dict:
+        return stage.build_request_envelope(
+            method="read_file",
+            params={"path": f"/etc/motd-{n}"},
+            message_id=f"01900000-0000-7000-8000-bbbb0000000{n}",
+            nonce=f"client-nonce-rl00000{n}",
+        )
+
+    def test_requests_beyond_limit_are_denied(self):
+        stage = _Stage(rate_limit=2)
+        # First two authenticated requests pass.
+        for i in (1, 2):
+            reply = stage.host.handle(
+                self._valid_request(stage, n=i), options=HandleOptions(now=_NOW)
+            )
+            self.assertIsNone(
+                unwrap_response(reply).error, f"request {i} should pass"
+            )
+        # The third exceeds the per-identity window limit.
+        reply3 = stage.host.handle(
+            self._valid_request(stage, n=3), options=HandleOptions(now=_NOW)
+        )
+        resp3 = unwrap_response(reply3)
+        self.assertIsNotNone(resp3.error)
+
+        rl_events = [
+            e
+            for e in stage.audit_sink.events
+            if e.event_type == "rate_limit.check"
+        ]
+        self.assertTrue(rl_events)
+        self.assertEqual(rl_events[-1].outcome, "deny")
+        self.assertEqual(rl_events[-1].reason_code, "rate_limited")
+
+    def test_spoofed_sender_does_not_burn_victim_allowance(self):
+        # The Phase 1 hardening invariant, demonstrated end-to-end: a
+        # badly-signed envelope claiming the victim's SPIFFE ID is
+        # rejected at envelope.verify BEFORE the rate limiter runs, so
+        # it consumes none of the victim's allowance.
+        stage = _Stage(rate_limit=2)
+
+        good = self._valid_request(stage, n=1)
+        spoof = dict(good)
+        # Same length, wrong bytes → signature verification fails.
+        spoof["signature"] = "A" * len(good["signature"])
+        spoof["nonce"] = "client-nonce-spoof0001"
+        spoof["message_id"] = "01900000-0000-7000-8000-bbbbffff0001"
+        spoof_reply = stage.host.handle(spoof, options=HandleOptions(now=_NOW))
+        self.assertIsNotNone(unwrap_response(spoof_reply).error)
+
+        # The rate limiter never saw the spoof: no rate_limit.check event
+        # was emitted for it (the flow bailed at envelope.verify).
+        rl_events = [
+            e
+            for e in stage.audit_sink.events
+            if e.event_type == "rate_limit.check"
+        ]
+        self.assertEqual(
+            len(rl_events), 0, "spoof must not reach the post-auth limiter"
+        )
+
+        # The victim can now use their FULL allowance of 2.
+        for i in (2, 3):
+            reply = stage.host.handle(
+                self._valid_request(stage, n=i), options=HandleOptions(now=_NOW)
+            )
+            self.assertIsNone(
+                unwrap_response(reply).error,
+                f"victim request {i} should pass; allowance was not burned",
+            )
 
 
 if __name__ == "__main__":

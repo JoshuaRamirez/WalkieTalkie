@@ -40,6 +40,7 @@ from envelope_adapter import (  # noqa: E402
     sign_envelope,
 )
 from host import ExampleMCPHost, HandleOptions, HostConfig  # noqa: E402
+from issuance_policy import AllowlistPolicy  # noqa: E402
 from issuer_trust_store import IssuerTrustStore  # noqa: E402
 from output_scanning import PatternRegistry, RiskLevel  # noqa: E402
 from tool_policy_gate import RiskTier, ToolPolicy, ToolRule  # noqa: E402
@@ -93,6 +94,15 @@ def main() -> None:
         default_ttl=timedelta(minutes=5),
         clock_skew=timedelta(seconds=30),
         audit_sink=audit_sink,
+        policy=AllowlistPolicy(
+            allowed_grants=frozenset(
+                {
+                    (_CLIENT_ISS, _HOST_ISS, "invoke_tool"),
+                    (_HOST_ISS, _CLIENT_ISS, "invoke_tool"),
+                }
+            ),
+            max_ttl=timedelta(minutes=5),
+        ),
     )
 
     tool_policy = ToolPolicy(
