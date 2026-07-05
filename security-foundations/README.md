@@ -423,6 +423,26 @@ the approved plan.
   runtime + network policy + secrets manager (deployment layer,
   Phase 6). The value is a single authoritative, type-checked,
   versioned source for the enforcement layer to consume.
+- **Seccomp generation v0** (`envelope/runtime_profile.py`
+  `generate_seccomp` / `seccomp_to_json`, Phase 5 Track D,
+  **[REFERENCE]**): renders a `RuntimeProfile`'s `allowed_syscalls`
+  into the exact OCI/Docker seccomp document a kernel loads —
+  deny-by-default `SCMP_ACT_ERRNO`, the x86_64/x86/x32 architecture
+  list, one sorted `SCMP_ACT_ALLOW` rule. Generation is deterministic
+  and testable in-process; *loading* it into a kernel is the
+  operator's runtime.
+- **Image signature attestation v0** (`envelope/image_attestation.py`,
+  Phase 5 Track D, **[REFERENCE]**): `ImageSignature` (typ
+  `wt-image-sig/v0`) is a cosign-style detached Ed25519 signature
+  binding a SPIFFE signer to one image digest, following the signed-
+  artifact pattern. `verify_image_signature(sig, expected_digest,
+  issuer_lookup)` fails fast — shape → exact digest match → signer-key
+  lookup → signature — with distinct deny reasons
+  (`IMAGE_SIG_MALFORMED` / `IMAGE_SIG_DIGEST_MISMATCH` /
+  `IMAGE_SIG_UNKNOWN_SIGNER` / `IMAGE_SIG_INVALID`). Proof obligation
+  `image_signature_binds_digest_to_signer`. Verifying attestation is
+  in-process; the admission gate that refuses to *run* an unattested
+  image is deployment-layer.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root

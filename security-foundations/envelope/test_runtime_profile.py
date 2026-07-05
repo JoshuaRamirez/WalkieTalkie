@@ -6,12 +6,16 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
+import json
+
 from runtime_profile import (
     EgressPolicy,
     RuntimeProfile,
     RuntimeProfileError,
     TrustTier,
+    generate_seccomp,
     limited_trust_profile,
+    seccomp_to_json,
     standard_profile,
     strict_profile,
 )
@@ -82,6 +86,45 @@ class BuiltinProfileTests(unittest.TestCase):
         p = strict_profile()
         with self.assertRaises(FrozenInstanceError):
             p.egress = EgressPolicy.ALLOW_ALL  # type: ignore[misc]
+
+
+class SeccompGenerationTests(unittest.TestCase):
+    def test_document_shape_is_oci_deny_by_default(self):
+        doc = generate_seccomp(strict_profile())
+        self.assertEqual(doc["defaultAction"], "SCMP_ACT_ERRNO")
+        self.assertIn("SCMP_ARCH_X86_64", doc["architectures"])
+        self.assertEqual(len(doc["syscalls"]), 1)
+        rule = doc["syscalls"][0]
+        self.assertEqual(rule["action"], "SCMP_ACT_ALLOW")
+        self.assertIn("read", rule["names"])
+        self.assertIn("write", rule["names"])
+
+    def test_allowlist_is_sorted_and_deterministic(self):
+        p = limited_trust_profile(allowed_syscalls=frozenset({"getpid", "connect"}))
+        names = generate_seccomp(p)["syscalls"][0]["names"]
+        self.assertEqual(names, sorted(names))
+        # Same profile → byte-identical JSON.
+        self.assertEqual(seccomp_to_json(p), seccomp_to_json(p))
+
+    def test_only_profile_syscalls_are_allowed(self):
+        p = strict_profile()
+        allowed = set(generate_seccomp(p)["syscalls"][0]["names"])
+        self.assertEqual(allowed, set(p.allowed_syscalls))
+        # A syscall the profile never granted is absent (deny-by-default).
+        self.assertNotIn("ptrace", allowed)
+
+    def test_empty_allowlist_yields_empty_allow_rule(self):
+        doc = generate_seccomp(RuntimeProfile(tier=TrustTier.STRICT))
+        self.assertEqual(doc["syscalls"][0]["names"], [])
+        self.assertEqual(doc["defaultAction"], "SCMP_ACT_ERRNO")
+
+    def test_seccomp_to_json_is_parseable(self):
+        parsed = json.loads(seccomp_to_json(strict_profile()))
+        self.assertEqual(parsed, generate_seccomp(strict_profile()))
+
+    def test_non_profile_rejected(self):
+        with self.assertRaises(RuntimeProfileError):
+            generate_seccomp({"tier": "strict"})  # type: ignore[arg-type]
 
 
 if __name__ == "__main__":

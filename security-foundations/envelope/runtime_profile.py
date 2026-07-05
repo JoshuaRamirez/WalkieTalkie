@@ -36,6 +36,7 @@ kernel can load; loading it is the operator's runtime.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -164,3 +165,64 @@ def limited_trust_profile(
         egress=EgressPolicy.DENY_ALL,
         secret_scopes=secret_scopes,
     )
+
+
+# --- Seccomp generation (Phase 5 Track D, D5.6) ---------------------------
+#
+# A :class:`RuntimeProfile`'s ``allowed_syscalls`` is the source of truth
+# for the seccomp allowlist. :func:`generate_seccomp` renders it into the
+# OCI runtime-spec / Docker seccomp document a kernel actually loads:
+# deny-by-default (``SCMP_ACT_ERRNO``), an explicit architecture list, and
+# one allow-rule naming every permitted syscall. This is still [REFERENCE]
+# — the substrate emits the document; a container runtime loads it.
+
+# The architectures a generated profile applies to. x86_64 hosts run 64-bit,
+# 32-bit, and x32 ABIs; naming all three prevents an attacker from evading
+# the filter by invoking a syscall through a different ABI.
+_SECCOMP_ARCHITECTURES = (
+    "SCMP_ARCH_X86_64",
+    "SCMP_ARCH_X86",
+    "SCMP_ARCH_X32",
+)
+
+# Deny-by-default: a syscall not on the allowlist returns EPERM rather than
+# killing the process, matching Docker's default posture. ERRNO (not KILL)
+# keeps a mis-scoped profile debuggable instead of silently crashing.
+_SECCOMP_DEFAULT_ACTION = "SCMP_ACT_ERRNO"
+_SECCOMP_ALLOW_ACTION = "SCMP_ACT_ALLOW"
+
+
+def generate_seccomp(profile: RuntimeProfile) -> dict:
+    """Render a profile's syscall allowlist as an OCI seccomp document.
+
+    The returned dict is the exact shape ``runc``/Docker load via
+    ``--security-opt seccomp=<file>``: a deny-by-default ``defaultAction``,
+    the target ``architectures``, and a single ``syscalls`` allow-rule
+    listing every permitted name in sorted (deterministic) order.
+
+    An empty allowlist yields a document with an empty allow-rule — a
+    profile that denies *every* syscall. That is a valid, if unusable,
+    kernel document; callers that want a runnable workload put a base set
+    on the profile (the built-in profiles do, via ``_BASE_SYSCALLS``).
+    """
+    if not isinstance(profile, RuntimeProfile):
+        raise RuntimeProfileError(
+            f"generate_seccomp expects a RuntimeProfile: {profile!r}"
+        )
+    return {
+        "defaultAction": _SECCOMP_DEFAULT_ACTION,
+        "architectures": list(_SECCOMP_ARCHITECTURES),
+        "syscalls": [
+            {
+                "names": sorted(profile.allowed_syscalls),
+                "action": _SECCOMP_ALLOW_ACTION,
+            }
+        ],
+    }
+
+
+def seccomp_to_json(profile: RuntimeProfile) -> str:
+    """Serialize :func:`generate_seccomp` as a stable JSON string (sorted
+    keys, no incidental whitespace) suitable for writing to a file the
+    container runtime loads."""
+    return json.dumps(generate_seccomp(profile), sort_keys=True, separators=(",", ":"))

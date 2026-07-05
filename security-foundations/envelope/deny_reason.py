@@ -212,3 +212,9 @@ class DenyReason(StrEnum):
     ADMISSION_PEER_NOT_ALLOWED = "admission_peer_not_allowed"
     ADMISSION_TIER_MISMATCH = "admission_tier_mismatch"
     ADMISSION_CERT_PIN_MISMATCH = "admission_cert_pin_mismatch"
+
+    # --- Image attestation (Phase 5 Track D) ---
+    IMAGE_SIG_MALFORMED = "image_sig_malformed"
+    IMAGE_SIG_INVALID = "image_sig_invalid"
+    IMAGE_SIG_DIGEST_MISMATCH = "image_sig_digest_mismatch"
+    IMAGE_SIG_UNKNOWN_SIGNER = "image_sig_unknown_signer"
