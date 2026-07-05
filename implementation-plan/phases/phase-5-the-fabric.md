@@ -189,6 +189,13 @@ keeps the plan doc and the task list updated after every iteration.
 
 ### Track C — The Mesh
 - **C1** `mesh/transport.py`: `Transport` ABC + `InMemoryTransport`. [RUNNABLE]
+  **Landed (v0):** `Transport` ABC (`address`, `send(dest, payload)`,
+  `receive() -> Frame | None`) — a transport moves bytes and does no
+  verification (identity comes from the signed envelope inside the
+  frame). `InMemoryTransport` + `Switchboard` give a deterministic
+  in-process transport for tests and the round trip. New
+  `security-foundations/mesh/` package added to the wheel build. 10
+  tests.
 - **C2** `mesh/node.py`: `MeshNode` discovery + routing + admission. [RUNNABLE]
 - **C3** two-node round-trip test (D5.5) + `LocalSocketTransport`. [RUNNABLE]
 
