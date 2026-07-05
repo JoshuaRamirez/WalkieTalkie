@@ -198,3 +198,17 @@ class DenyReason(StrEnum):
     SAFE_MODE_ARTIFACT_SIGNATURE_INVALID = "safe_mode_artifact_signature_invalid"
     SAFE_MODE_ARTIFACT_UNKNOWN_ISSUER = "safe_mode_artifact_unknown_issuer"
     SAFE_MODE_ARTIFACT_EXPIRED = "safe_mode_artifact_expired"
+
+    # --- Workload identity / SVID (Phase 5 Track A) ---
+    SVID_MALFORMED = "svid_malformed"
+    SVID_SIGNATURE_INVALID = "svid_signature_invalid"
+    SVID_EXPIRED = "svid_expired"
+    SVID_NOT_YET_VALID = "svid_not_yet_valid"
+    SVID_SPIFFE_MISMATCH = "svid_spiffe_mismatch"
+    SVID_UNTRUSTED_ROOT = "svid_untrusted_root"
+    SVID_KEY_USAGE_INVALID = "svid_key_usage_invalid"
+
+    # --- Peer admission (Phase 5 Track A) ---
+    ADMISSION_PEER_NOT_ALLOWED = "admission_peer_not_allowed"
+    ADMISSION_TIER_MISMATCH = "admission_tier_mismatch"
+    ADMISSION_CERT_PIN_MISMATCH = "admission_cert_pin_mismatch"

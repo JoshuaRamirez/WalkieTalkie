@@ -355,6 +355,16 @@ the approved plan.
   helpers live in `demo_tools.py` / `host_support.py`. Runbook +
   deterministic key/manifest/sample-audit generators under
   `integrations/mcp/example/`.
+- **Workload CA + X.509 SVID v0** (`envelope/workload_ca.py`, Phase 5
+  Track A): `WorkloadCA` mints short-lived Ed25519 X.509 SVIDs binding
+  a workload's key to its `spiffe://` id via a critical URI SAN,
+  signed by a self-signed internal root (the trust anchor a verifier
+  loads out-of-band). A CA cannot issue outside its own trust domain.
+  `verify_svid()` validates chain-to-root, time window, key usage
+  (leaf may not sign certs), and the SPIFFE-SAN binding, with a
+  distinct `SVID_*` `DenyReason` per failure. **[RUNNABLE reference
+  CA]** — real verifiable id↔key binding, but not production PKI (no
+  HSM/KMS custody, no OCSP/CRL, no intermediates; those are Phase 6).
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root

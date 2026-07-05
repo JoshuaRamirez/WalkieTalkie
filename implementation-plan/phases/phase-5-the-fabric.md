@@ -152,6 +152,12 @@ keeps the plan doc and the task list updated after every iteration.
   cross-trust-domain issuance rejected, `svid_spiffe_id()` extracts
   the bound id. 17 tests.
 - **A2** SVID verification + chain + SPIFFE-SAN binding. [RUNNABLE]
+  **Landed (v0):** `verify_svid()` validates shape (one SPIFFE URI
+  SAN) → signature under the trusted root → time window → key usage
+  (digital_signature set, key_cert_sign forbidden) → optional
+  expected-id binding, fail-fast with a distinct `DenyReason`
+  (`SVID_*`) per failure. Proof obligation `svid_binding_verified`.
+  10 tests.
 - **A3** `peer_admission.py`: deny-by-default admission. [RUNNABLE]
 
 ### Track B — Policy Engine
