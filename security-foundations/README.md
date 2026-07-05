@@ -373,6 +373,17 @@ the approved plan.
   presentation, and cert-pin mismatches with distinct `ADMISSION_*`
   reasons. This is vision §8.1 ("unauthorized peer cannot join the
   mesh") at admission scope. `require_admission()` raises on denial.
+- **Policy engine v0** (`envelope/policy_engine.py`, Phase 5 Track B):
+  `PolicyEngine.decide(PolicyRequest)` is the uniform authZ decision
+  authority the vision's Layer C calls for. `NativePolicyEngine` is a
+  first-match, deny-by-default evaluator over
+  `PolicyRule(principal, action, resource, conditions)` with wildcard
+  matching and typed conditions (equals / in / not_in) over the
+  request context. Every decision returns a `PolicyDecision` carrying
+  a UUIDv7 `decision_id` for the forensic trace (vision: "every tool
+  invocation must carry a provable chain … policy decision ID").
+  Structured evaluator, not a Rego/Cedar DSL parser; syntax interop
+  is deferred behind the `PolicyEngine` ABC.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root

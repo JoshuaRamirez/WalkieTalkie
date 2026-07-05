@@ -169,6 +169,14 @@ keeps the plan doc and the task list updated after every iteration.
 
 ### Track B — Policy Engine
 - **B1** `policy_engine.py`: ABC + `NativePolicyEngine` + decision IDs. [RUNNABLE]
+  **Landed (v0):** `PolicyEngine.decide(PolicyRequest)` →
+  `PolicyDecision(effect, decision_id, matched_rule, reason)`.
+  `NativePolicyEngine` is a first-match, deny-by-default evaluator
+  over `PolicyRule(principal, action, resource, conditions)` with
+  wildcard (`*`) matching and typed `Condition`s
+  (equals/not_equals/in/not_in) over the request context. Every
+  decision carries a UUIDv7 `decision_id`. Structured, not a DSL;
+  Cedar/Rego interop deferred behind the `PolicyEngine` ABC. 15 tests.
 - **B2** baseline policy library + `policy.decide` audit wiring. [RUNNABLE]
 
 ### Track C — The Mesh
