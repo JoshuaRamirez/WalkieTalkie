@@ -413,6 +413,16 @@ the approved plan.
   crossing a real socket. This is vision §8 re-proven at mesh scope
   (Phase 4 proved it at single-host scope). Loopback / single-host
   only — a planet-scale mesh (NAT, wire TLS, pooling) is Phase 6.
+- **Runtime trust tiers v0** (`envelope/runtime_profile.py`, Phase 5
+  Track D, **[REFERENCE]**): `RuntimeProfile(tier, allowed_syscalls,
+  writable_paths, egress, egress_allowlist, secret_scopes)` is the
+  declarative model for the vision's Layer E trust tiers, with
+  built-ins `strict_profile` / `standard_profile` /
+  `limited_trust_profile`. **This declares constraints; it does not
+  enforce them** — actual confinement needs a kernel + container
+  runtime + network policy + secrets manager (deployment layer,
+  Phase 6). The value is a single authoritative, type-checked,
+  versioned source for the enforcement layer to consume.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root

@@ -221,6 +221,15 @@ keeps the plan doc and the task list updated after every iteration.
 
 ### Track D — Runtime Tiers
 - **D1** `runtime_profile.py`: tier model. [REFERENCE]
+  **Landed (v0):** `RuntimeProfile(tier, allowed_syscalls,
+  writable_paths, egress, egress_allowlist, secret_scopes)` is the
+  declarative model for the vision's Layer E trust tiers, with
+  built-ins `strict_profile` / `standard_profile` /
+  `limited_trust_profile`. The module docstring states the
+  enforcement boundary explicitly: a profile *declares* constraints;
+  actual confinement needs a kernel + container runtime + network
+  policy + secrets manager. No proof obligation (nothing is
+  machine-enforced here — that would overclaim). 10 tests.
 - **D2** `generate_seccomp` + reference profiles for the three tiers. [REFERENCE]
 - **D3** `image_attestation.py`: image-signature verification. [REFERENCE]
 
