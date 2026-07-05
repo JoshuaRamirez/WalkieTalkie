@@ -115,14 +115,27 @@ When integrating against a real MCP host, **start from the smoke
 test fixtures in `test_smoke.py:_Stage` or `example/_gen_sample_audit.py`**
 — they're the two places that wire a complete host end-to-end.
 
-For what's NOT covered (compound-failure drills, observability,
-distributed deployment, etc.), see `DEFERRED.md`. There is no
-Phase 5 plan yet.
+## Phase 5 status
+
+Phase 5 (**The Fabric**) is **in progress**. See
+`implementation-plan/phases/phase-5-the-fabric.md`. It closes the gap
+between the kernel and the `SECURITY_FIRST_P2P_MCP_PLAN.md` vision:
+real X.509 identity (Layer A), a structured policy engine with
+decision IDs (Layer C engine), an authenticated overlay mesh (§5),
+runtime trust tiers (Layer E, reference enforcement), and the §9
+evidence artifacts (threat model, compliance mapping, protocol spec).
+
+Every slice is labeled **[RUNNABLE]** (real tested code, no infra) or
+**[REFERENCE]** (data model / generator / verifier that is runnable
+and tested, but whose enforcement needs deployment infrastructure —
+a kernel, a container runtime, a real network). No slice claims
+enforcement it doesn't have.
 
 Phase 3 §§6–8 + §11 (drills, isolation tests, observability,
 phase-close artifacts) and the audit-emission-wiring for Phase 2
-primitives that lack it are explicitly deferred to Phase 5; see
-DEFERRED.md.
+primitives that lack it remain deferred; see DEFERRED.md. They plus
+kernel-sandbox enforcement, PKI custody, and mesh scale are the
+Phase 6 candidate pool.
 
 ## Anti-patterns
 
