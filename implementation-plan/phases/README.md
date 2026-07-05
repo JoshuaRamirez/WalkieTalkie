@@ -7,6 +7,7 @@ This directory contains execution-focused plans for each build phase:
 3. [Phase 2 — Controlled Autonomy](./phase-2-controlled-autonomy.md)
 4. [Phase 3 — Resilience and Scale](./phase-3-resilience-and-scale.md)
 5. [Phase 4 — Integration Proof](./phase-4-integration-proof.md)
+6. [Phase 5 — The Fabric](./phase-5-the-fabric.md)
 
 ## Plan quality and verification
 - [Plan Verification Report](./plan-verification-report.md)
