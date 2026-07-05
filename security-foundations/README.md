@@ -365,6 +365,14 @@ the approved plan.
   distinct `SVID_*` `DenyReason` per failure. **[RUNNABLE reference
   CA]** — real verifiable id↔key binding, but not production PKI (no
   HSM/KMS custody, no OCSP/CRL, no intermediates; those are Phase 6).
+- **Peer admission v0** (`envelope/peer_admission.py`, Phase 5 Track
+  A): `PeerAdmissionPolicy` is a deny-by-default allowlist of
+  `AdmissionRule(spiffe_id, env_tier, pinned_fingerprint?)`. After an
+  SVID verifies, `admit_peer()` decides whether that authenticated
+  identity may join — denying unknown peers, wrong-env-tier
+  presentation, and cert-pin mismatches with distinct `ADMISSION_*`
+  reasons. This is vision §8.1 ("unauthorized peer cannot join the
+  mesh") at admission scope. `require_admission()` raises on denial.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root
