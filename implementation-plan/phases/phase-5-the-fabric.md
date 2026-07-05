@@ -146,6 +146,11 @@ keeps the plan doc and the task list updated after every iteration.
 
 ### Track A — Real Identity
 - **A1** `workload_ca.py`: `WorkloadCA`, SVID issuance. [RUNNABLE]
+  **Landed (v0):** `WorkloadCA` mints Ed25519 X.509 SVIDs with a
+  critical SPIFFE URI SAN, signed by a self-signed internal root
+  (cached `root_cert`). Default 1-hour TTL ("hours, not weeks"),
+  cross-trust-domain issuance rejected, `svid_spiffe_id()` extracts
+  the bound id. 17 tests.
 - **A2** SVID verification + chain + SPIFFE-SAN binding. [RUNNABLE]
 - **A3** `peer_admission.py`: deny-by-default admission. [RUNNABLE]
 
