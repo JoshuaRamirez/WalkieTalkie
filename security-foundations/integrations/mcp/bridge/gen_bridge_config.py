@@ -97,9 +97,20 @@ def generate(out_dir: pathlib.Path, names: list[str]) -> None:
     print(f"\nGenerated {len(names)} identities in {out_dir}", file=sys.stderr)
 
 
+# Default home: user-scoped ~/.claude/mesh so two local Claude instances
+# share one discovery/trust/mailbox location out of the box. It MUST be a
+# shared, user-scoped dir (not a per-project .claude) because the two
+# bridges rendezvous through it — and private keys must never live in a
+# git-tracked project dir.
+DEFAULT_CONFIG_DIR = pathlib.Path.home() / ".claude" / "mesh"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--out", required=True, type=pathlib.Path, help="config dir")
+    ap.add_argument(
+        "--out", type=pathlib.Path, default=DEFAULT_CONFIG_DIR,
+        help=f"config dir (default: {DEFAULT_CONFIG_DIR})",
+    )
     ap.add_argument(
         "--agents", nargs="+", default=["alice", "bob"], help="agent names"
     )

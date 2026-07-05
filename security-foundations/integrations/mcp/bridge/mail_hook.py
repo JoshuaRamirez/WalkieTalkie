@@ -15,7 +15,9 @@ Pure stdlib — no crypto imports — so it stays cheap to run on every turn.
 Wire it up in settings.json (see bridge/README.md):
 
     {"hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command",
-      "command": "python /abs/path/mail_hook.py --name alice --config /abs/path/mesh-config"}]}]}}
+      "command": "python /abs/path/mail_hook.py --name alice"}]}]}}
+
+Config defaults to ~/.claude/mesh (override with --config).
 """
 
 from __future__ import annotations
@@ -47,10 +49,13 @@ def read_unread(inbox: pathlib.Path) -> list[dict]:
             fcntl.flock(lf, fcntl.LOCK_UN)
 
 
+_DEFAULT_CONFIG_DIR = pathlib.Path.home() / ".claude" / "mesh"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--name", required=True)
-    ap.add_argument("--config", required=True, type=pathlib.Path)
+    ap.add_argument("--config", type=pathlib.Path, default=_DEFAULT_CONFIG_DIR)
     args = ap.parse_args()
 
     # Claude Code passes hook JSON on stdin; we don't need it, but drain it

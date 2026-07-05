@@ -33,16 +33,27 @@ Use the **absolute path** to `.venv/bin/python` in the commands below.
 
 ```bash
 .venv/bin/python security-foundations/integrations/mcp/bridge/gen_bridge_config.py \
-    --out ~/mesh-config --agents alice bob
+    --agents alice bob
 ```
 
-This writes, into `~/mesh-config/`:
+By default everything lands in **`~/.claude/mesh/`** — the natural
+user-scoped home, shared by every Claude instance on the machine:
 - `trust.json` — the **shared, public** trust manifest (both agents' public keys).
 - `alice.private.json`, `bob.private.json` — each agent's **private** keys (chmod 600).
+- at runtime: `inbox-<name>.jsonl` (the mailboxes), `rt-<name>.addr`
+  (rendezvous), `audit-<name>.jsonl` (the hash-chained audit log).
 
 `trust.json` is what makes the two sides trust each other. In a real
 deployment you'd distribute it out-of-band; here both instances just read
 the same folder.
+
+> **Where this must live.** Use a **user-scoped** dir (`~/.claude/mesh/`),
+> not a per-project `.claude/`. The two bridges rendezvous through this
+> folder, so both instances must see the *same* one — separate project
+> dirs can't find each other. And it holds **private keys**, so never
+> point `--config` at a git-tracked project `.claude/`. Override the
+> location with `--config <dir>` on every command if you want a different
+> shared spot.
 
 ## 2. Register the bridge with each Claude Code instance
 
@@ -54,7 +65,7 @@ as an MCP server, with **its** name and **its** peer:
 claude mcp add mesh -- \
     /abs/path/.venv/bin/python \
     /abs/path/security-foundations/integrations/mcp/bridge/mesh_mcp_bridge.py \
-    --name alice --peer bob --config /abs/path/mesh-config
+    --name alice --peer bob
 ```
 
 **Instance B (bob):**
@@ -62,8 +73,11 @@ claude mcp add mesh -- \
 claude mcp add mesh -- \
     /abs/path/.venv/bin/python \
     /abs/path/security-foundations/integrations/mcp/bridge/mesh_mcp_bridge.py \
-    --name bob --peer alice --config /abs/path/mesh-config
+    --name bob --peer alice
 ```
+
+(Both default to `--config ~/.claude/mesh`; pass `--config` explicitly only
+if you generated the config elsewhere.)
 
 Now each Claude has two tools: **`send_message`** and **`check_inbox`**.
 Ask alice's Claude to *"send a message to bob saying hello"* and ask bob's
@@ -87,7 +101,7 @@ Add to each instance's `settings.json` (use that instance's `--name`):
         "hooks": [
           {
             "type": "command",
-            "command": "/abs/path/.venv/bin/python /abs/path/security-foundations/integrations/mcp/bridge/mail_hook.py --name bob --config /abs/path/mesh-config"
+            "command": "/abs/path/.venv/bin/python /abs/path/security-foundations/integrations/mcp/bridge/mail_hook.py --name bob"
           }
         ]
       }
