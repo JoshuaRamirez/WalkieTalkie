@@ -31,7 +31,8 @@ MCP server. It does NOT add TLS on the wire, NAT traversal, or PKI custody
 — those are the Phase 6 deployment frontier (see ``DEFERRED.md``).
 
 Usage (per agent):
-    python mesh_mcp_bridge.py --name alice --peer bob --config ./mesh-config
+    python mesh_mcp_bridge.py --name alice --peer bob
+    # --config defaults to ~/.claude/mesh (shared, user-scoped)
 """
 
 from __future__ import annotations
@@ -77,6 +78,10 @@ _MSG_SCOPE = "agent_message"
 _MSG_METHOD = "agent_message"
 _SEND_RETRY_SECONDS = 3.0
 _PROTOCOL_FALLBACK = "2025-06-18"
+
+# Shared, user-scoped home so two local Claude instances find each other +
+# their mailboxes without any path wiring. See gen_bridge_config.py.
+DEFAULT_CONFIG_DIR = pathlib.Path.home() / ".claude" / "mesh"
 
 
 def _log(msg: str) -> None:
@@ -451,7 +456,10 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="WalkieTalkie mesh MCP bridge")
     ap.add_argument("--name", required=True, help="this agent's name (in trust.json)")
     ap.add_argument("--peer", required=True, help="default peer agent name")
-    ap.add_argument("--config", required=True, type=pathlib.Path, help="config dir")
+    ap.add_argument(
+        "--config", type=pathlib.Path, default=DEFAULT_CONFIG_DIR,
+        help=f"config dir (default: {DEFAULT_CONFIG_DIR})",
+    )
     args = ap.parse_args()
 
     cfg = BridgeConfig(args.config, args.name)
