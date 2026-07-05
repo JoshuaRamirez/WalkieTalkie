@@ -393,6 +393,19 @@ the approved plan.
   mirroring the Phase 2 gates (low-risk-tool permit, step-up-required
   deny, deny-by-default), so the deny-by-default posture an operator
   tunes is uniform engine rules instead of bespoke gate code.
+- **Mesh v0** (`security-foundations/mesh/`, Phase 5 Track C): the
+  vision's §5 zero-trust overlay mesh. `transport.py` makes transport
+  a swappable seam — `Transport` ABC (moves bytes, does no
+  verification; identity comes from the signed envelope inside the
+  frame) with a deterministic `InMemoryTransport`/`Switchboard`.
+  `node.py` (`MeshNode`) is one authenticated participant:
+  `learn_peer()` verifies a signed `DiscoveryRecord` then admits it
+  through a deny-by-default `PeerAdmissionPolicy` (authentication ≠
+  authorization — a verified-but-unadmitted peer is not learned);
+  `routing_table()` selects peers via `eclipse_resistance` for
+  diversity; `send_to()` routes signed envelope bytes to an admitted
+  peer. A real `LocalSocketTransport` + the two-node round-trip proof
+  land in C3.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root

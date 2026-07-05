@@ -197,6 +197,15 @@ keeps the plan doc and the task list updated after every iteration.
   `security-foundations/mesh/` package added to the wheel build. 10
   tests.
 - **C2** `mesh/node.py`: `MeshNode` discovery + routing + admission. [RUNNABLE]
+  **Landed (v0):** `MeshNode.learn_peer()` verifies a signed
+  `DiscoveryRecord` (`verify_record`) → admits via
+  `PeerAdmissionPolicy` (deny-by-default) → records the peer with its
+  transport address from the record's endpoints. `routing_table()`
+  applies `eclipse_resistance.select_neighbors` for diversity;
+  `send_to()` routes signed envelope bytes to an admitted peer over
+  the transport. Authentication ≠ authorization: a verified-but-
+  unadmitted peer is not learned. Proof obligation
+  `mesh_authenticate_then_authorize`. 18 tests.
 - **C3** two-node round-trip test (D5.5) + `LocalSocketTransport`. [RUNNABLE]
 
 ### Track D — Runtime Tiers

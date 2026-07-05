@@ -12,8 +12,8 @@ import sys
 import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-# Also expose Phase 4+ integration test modules so canonical_test
-# strings can point at them.
+# Also expose Phase 4+ integration and Phase 5 mesh test modules so
+# canonical_test strings can point at them.
 sys.path.insert(
     0,
     str(
@@ -21,6 +21,9 @@ sys.path.insert(
         / "integrations"
         / "mcp"
     ),
+)
+sys.path.insert(
+    0, str(pathlib.Path(__file__).resolve().parent.parent / "mesh")
 )
 
 from proof_obligations import (
