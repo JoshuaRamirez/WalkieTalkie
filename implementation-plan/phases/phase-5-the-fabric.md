@@ -255,6 +255,16 @@ keeps the plan doc and the task list updated after every iteration.
 
 ### Track E — Evidence
 - **E1** `docs/threat-model.md` (STRIDE). [DOCS]
+  **Landed (v0):** `docs/threat-model.md` maps all eight vision threat
+  classes (§1) through the STRIDE lens, each with an attack tree, the
+  substrate control that answers it, the pinning proof obligation(s),
+  and an explicit [RUNNABLE]/[REFERENCE] enforcement boundary. A
+  coverage-summary table reads the state honestly: classes 1–3 and 8
+  enforced in-process, class 4 minus network egress, class 5 measured
+  against the finite corpus, classes 6–7 the deployment-dependent
+  frontier. Cross-references every cited module path and obligation
+  name; a maintenance note ties updates to the proof-obligations
+  workflow.
 - **E2** `docs/compliance-mapping.md`. [DOCS]
 - **E3** `docs/protocol-spec-v0.1.md`. [DOCS]
 
