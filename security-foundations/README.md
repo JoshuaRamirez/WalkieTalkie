@@ -355,6 +355,19 @@ the approved plan.
   helpers live in `demo_tools.py` / `host_support.py`. Runbook +
   deterministic key/manifest/sample-audit generators under
   `integrations/mcp/example/`.
+- **Mesh MCP bridge (runnable example)** (`integrations/mcp/bridge/`):
+  a real MCP server over stdio that lets two Claude Code instances
+  exchange **signed, verified** messages over the mesh. `Claude A →
+  bridge A → signed envelope / loopback TCP → bridge B → Claude B`.
+  Exposes `send_message` / `check_inbox` MCP tools; a background thread
+  runs `verify_envelope` on every inbound frame before it reaches a
+  file-backed inbox, and `mail_hook.py` (a UserPromptSubmit hook)
+  surfaces verified mail so Claude "receives" without polling. Security
+  reuses the already-pinned `verify_envelope` invariants — no new
+  crypto. `test_bridge.py` proves the MCP handshake, verified delivery,
+  and **replay + forgery rejection** end-to-end; `demo_conversation.py`
+  runs the whole path headless. **[RUNNABLE]** demo; loopback/single-
+  host, no wire TLS/PKI (Phase 6). See `bridge/README.md`.
 - **Workload CA + X.509 SVID v0** (`envelope/workload_ca.py`, Phase 5
   Track A): `WorkloadCA` mints short-lived Ed25519 X.509 SVIDs binding
   a workload's key to its `spiffe://` id via a critical URI SAN,
