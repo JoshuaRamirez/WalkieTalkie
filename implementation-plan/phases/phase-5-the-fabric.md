@@ -231,7 +231,27 @@ keeps the plan doc and the task list updated after every iteration.
   policy + secrets manager. No proof obligation (nothing is
   machine-enforced here — that would overclaim). 10 tests.
 - **D2** `generate_seccomp` + reference profiles for the three tiers. [REFERENCE]
+  **Landed (v0):** `generate_seccomp(profile)` renders a profile's
+  `allowed_syscalls` into the exact OCI/Docker seccomp document a
+  kernel loads — deny-by-default `SCMP_ACT_ERRNO`, the x86_64/x86/x32
+  architecture list (so an ABI-swap can't evade the filter), and one
+  sorted `SCMP_ACT_ALLOW` rule. `seccomp_to_json` gives a stable
+  serialization. Generation is deterministic and testable in-process;
+  *loading* the document into a kernel is the operator's runtime
+  (why it stays [REFERENCE]). 6 tests.
 - **D3** `image_attestation.py`: image-signature verification. [REFERENCE]
+  **Landed (v0):** `ImageSignature` is a signed artifact (typ
+  `wt-image-sig/v0`) binding a SPIFFE signer to one image digest,
+  following the substrate's frozen-dataclass + JCS-body +
+  sign/verify/from_json/to_json pattern with keys resolved through the
+  usual `IssuerTrustStore` shape. `verify_image_signature()` fails
+  fast: shape → exact digest match → signer-key lookup → signature,
+  with distinct deny reasons (`IMAGE_SIG_MALFORMED`,
+  `IMAGE_SIG_DIGEST_MISMATCH`, `IMAGE_SIG_UNKNOWN_SIGNER`,
+  `IMAGE_SIG_INVALID`). Proof obligation
+  `image_signature_binds_digest_to_signer` pins the digest→signer
+  binding; the runtime gate that refuses to *run* an unattested image
+  is [REFERENCE] deployment. 11 tests.
 
 ### Track E — Evidence
 - **E1** `docs/threat-model.md` (STRIDE). [DOCS]

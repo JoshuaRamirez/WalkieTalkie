@@ -708,6 +708,26 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             ".test_two_node_signed_round_trip"
         ),
     ),
+    ProofObligation(
+        name="image_signature_binds_digest_to_signer",
+        phase=Phase.PHASE_5,
+        track="D",
+        statement=(
+            "An image signature verifies only when it covers exactly the "
+            "expected image digest AND validates under a key the trust "
+            "store resolves for the signer. A digest that differs from the "
+            "signed one is denied (IMAGE_SIG_DIGEST_MISMATCH); a signature "
+            "over a tampered digest fails cryptographically "
+            "(IMAGE_SIG_INVALID); an unknown signer key is denied "
+            "(IMAGE_SIG_UNKNOWN_SIGNER). This pins the attestation half of "
+            "the vision's Layer E image-provenance control — the runtime "
+            "gate that refuses unattested images is [REFERENCE] deployment."
+        ),
+        canonical_test=(
+            "test_image_attestation.DenialTests"
+            ".test_digest_mismatch_rejected"
+        ),
+    ),
 )
 
 
