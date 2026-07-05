@@ -690,6 +690,24 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             ".test_verified_but_unadmitted_peer_rejected"
         ),
     ),
+    ProofObligation(
+        name="mesh_round_trip_verifies",
+        phase=Phase.PHASE_5,
+        track="C",
+        statement=(
+            "Two mutually-admitted mesh nodes complete a signed round "
+            "trip: A's signed envelope crosses the transport, B verifies "
+            "it with the full substrate stack (signature + window + "
+            "replay + capability binding), B's signed reply crosses back, "
+            "A re-verifies it independently, and both nodes' audit chains "
+            "hash-validate. This is vision §8 re-proven at mesh scope — "
+            "the fabric works as a system."
+        ),
+        canonical_test=(
+            "test_mesh_round_trip.RoundTripTests"
+            ".test_two_node_signed_round_trip"
+        ),
+    ),
 )
 
 

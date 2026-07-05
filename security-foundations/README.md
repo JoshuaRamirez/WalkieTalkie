@@ -404,8 +404,15 @@ the approved plan.
   authorization — a verified-but-unadmitted peer is not learned);
   `routing_table()` selects peers via `eclipse_resistance` for
   diversity; `send_to()` routes signed envelope bytes to an admitted
-  peer. A real `LocalSocketTransport` + the two-node round-trip proof
-  land in C3.
+  peer. `socket_transport.py` (`LocalSocketTransport`) is a real
+  loopback-TCP implementation of the same `Transport` ABC.
+  `test_mesh_round_trip` is the **fabric-works-as-a-system proof**:
+  two mutually-admitted nodes complete a signed round trip (A →
+  transport → B verifies full stack → reply → A re-verifies), both
+  audit chains validate, and the same envelope verifies after
+  crossing a real socket. This is vision §8 re-proven at mesh scope
+  (Phase 4 proved it at single-host scope). Loopback / single-host
+  only — a planet-scale mesh (NAT, wire TLS, pooling) is Phase 6.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root
