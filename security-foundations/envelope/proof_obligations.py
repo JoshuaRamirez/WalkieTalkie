@@ -50,6 +50,8 @@ class Phase(StrEnum):
     PHASE_1 = "phase-1"
     PHASE_2 = "phase-2"
     PHASE_3 = "phase-3"
+    PHASE_4 = "phase-4"
+    PHASE_5 = "phase-5"
 
 
 @dataclass(frozen=True)
@@ -615,6 +617,24 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
         canonical_test=(
             "test_capacity_rebalancer.ApplyTests"
             ".test_apply_preserves_oversubscription_cap"
+        ),
+    ),
+    # ----- Phase 5 Track A: real X.509 identity -----
+    ProofObligation(
+        name="svid_binding_verified",
+        phase=Phase.PHASE_5,
+        track="A",
+        statement=(
+            "An X.509 SVID verifies only when its signature chains to "
+            "the trusted root, its time window is current, its key "
+            "usage forbids cert-signing, and (when supplied) its "
+            "SPIFFE-SAN id matches the expected id. A cert signed by a "
+            "different root key fails with svid_signature_invalid; a "
+            "mismatched id fails with svid_spiffe_mismatch."
+        ),
+        canonical_test=(
+            "test_verify_svid.HappyPathTests"
+            ".test_binding_check_passes_when_expected_matches"
         ),
     ),
 )

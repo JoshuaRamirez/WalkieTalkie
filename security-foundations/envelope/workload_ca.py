@@ -43,16 +43,34 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 from cryptography import x509
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
 from cryptography.x509.oid import NameOID
+from deny_reason import DenyReason
 from verify_envelope import SPIFFE_ID_RE
 
 
 class WorkloadCAError(ValueError):
     """Raised when CA issuance inputs violate v0 invariants."""
+
+
+class SvidVerificationError(ValueError):
+    """Raised when an SVID fails verification.
+
+    Carries a :class:`~deny_reason.DenyReason` for machine-readable
+    matching, mirroring :class:`verify_envelope.EnvelopeVerificationError`.
+    """
+
+    def __init__(self, message: str, *, reason: DenyReason) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+    @property
+    def reason_code(self) -> str:
+        return self.reason.value
 
 
 # A short default so an operator who forgets to set a lifetime still
@@ -234,3 +252,105 @@ def svid_spiffe_id(cert: x509.Certificate) -> str:
             f"{len(spiffe_uris)}"
         )
     return spiffe_uris[0]
+
+
+def verify_svid(
+    cert: x509.Certificate,
+    *,
+    root_cert: x509.Certificate,
+    current: datetime,
+    expected_spiffe_id: str | None = None,
+) -> str:
+    """Verify an SVID against a trusted root and return its SPIFFE id.
+
+    Checks, fail-fast in order:
+
+    1. **Shape.** Exactly one ``spiffe://`` URI SAN.
+    2. **Signature.** The leaf's signature verifies under
+       ``root_cert``'s public key (single-level chain: this reference
+       CA has no intermediates).
+    3. **Time window.** ``not_before <= current <= not_after``.
+    4. **Key usage.** ``digital_signature`` set, ``key_cert_sign``
+       NOT set (a leaf must not be able to sign other certs).
+    5. **Binding.** If ``expected_spiffe_id`` is given, the SAN id must
+       equal it — this is the check a peer runs to confirm "the cert
+       you presented actually claims the identity I expect."
+
+    Raises :class:`SvidVerificationError` with a distinct
+    :class:`DenyReason` on each failure. Returns the verified SPIFFE
+    id on success.
+    """
+    if not isinstance(current, datetime) or current.tzinfo is None:
+        raise SvidVerificationError(
+            "current must be a timezone-aware datetime",
+            reason=DenyReason.SVID_MALFORMED,
+        )
+
+    # 1. Shape.
+    try:
+        spiffe_id = svid_spiffe_id(cert)
+    except WorkloadCAError as exc:
+        raise SvidVerificationError(
+            f"malformed SVID: {exc}", reason=DenyReason.SVID_MALFORMED
+        ) from exc
+
+    # 2. Signature under the trusted root.
+    root_pub = root_cert.public_key()
+    if not isinstance(root_pub, Ed25519PublicKey):
+        raise SvidVerificationError(
+            "root cert does not carry an Ed25519 key",
+            reason=DenyReason.SVID_UNTRUSTED_ROOT,
+        )
+    if cert.issuer != root_cert.subject:
+        raise SvidVerificationError(
+            f"SVID issuer {cert.issuer.rfc4514_string()!r} does not match "
+            f"root subject {root_cert.subject.rfc4514_string()!r}",
+            reason=DenyReason.SVID_UNTRUSTED_ROOT,
+        )
+    try:
+        root_pub.verify(cert.signature, cert.tbs_certificate_bytes)
+    except InvalidSignature as exc:
+        raise SvidVerificationError(
+            "SVID signature does not verify under the trusted root",
+            reason=DenyReason.SVID_SIGNATURE_INVALID,
+        ) from exc
+
+    # 3. Time window.
+    current_utc = current.astimezone(UTC)
+    if current_utc < cert.not_valid_before_utc:
+        raise SvidVerificationError(
+            f"SVID not yet valid (not_before={cert.not_valid_before_utc.isoformat()}, "
+            f"current={current_utc.isoformat()})",
+            reason=DenyReason.SVID_NOT_YET_VALID,
+        )
+    if current_utc > cert.not_valid_after_utc:
+        raise SvidVerificationError(
+            f"SVID expired (not_after={cert.not_valid_after_utc.isoformat()}, "
+            f"current={current_utc.isoformat()})",
+            reason=DenyReason.SVID_EXPIRED,
+        )
+
+    # 4. Key usage.
+    try:
+        ku = cert.extensions.get_extension_for_class(x509.KeyUsage).value
+    except x509.ExtensionNotFound as exc:
+        raise SvidVerificationError(
+            "SVID has no KeyUsage extension",
+            reason=DenyReason.SVID_KEY_USAGE_INVALID,
+        ) from exc
+    if not ku.digital_signature or ku.key_cert_sign:
+        raise SvidVerificationError(
+            "SVID key usage invalid: must set digital_signature and must "
+            "NOT set key_cert_sign",
+            reason=DenyReason.SVID_KEY_USAGE_INVALID,
+        )
+
+    # 5. Binding.
+    if expected_spiffe_id is not None and spiffe_id != expected_spiffe_id:
+        raise SvidVerificationError(
+            f"SVID spiffe id {spiffe_id!r} does not match expected "
+            f"{expected_spiffe_id!r}",
+            reason=DenyReason.SVID_SPIFFE_MISMATCH,
+        )
+
+    return spiffe_id
