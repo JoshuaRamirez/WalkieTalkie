@@ -654,6 +654,24 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "test_peer_admission.AdmissionTests.test_deny_by_default"
         ),
     ),
+    # ----- Phase 5 Track B: policy engine + forensic decision IDs -----
+    ProofObligation(
+        name="policy_decision_in_trace",
+        phase=Phase.PHASE_5,
+        track="B",
+        statement=(
+            "Every policy decision emits a policy.decide audit event "
+            "whose hashed reason field embeds the decision's UUIDv7 "
+            "decision_id, so the id is tamper-evident and the audit "
+            "chain still validates. This is the vision's 'every tool "
+            "invocation must carry a provable chain … policy decision "
+            "ID' at forensic scope."
+        ),
+        canonical_test=(
+            "test_policy_audit.DecideAndAuditTests"
+            ".test_decision_id_survives_chain_validation"
+        ),
+    ),
 )
 
 
