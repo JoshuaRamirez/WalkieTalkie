@@ -266,7 +266,22 @@ keeps the plan doc and the task list updated after every iteration.
   name; a maintenance note ties updates to the proof-obligations
   workflow.
 - **E2** `docs/compliance-mapping.md`. [DOCS]
+  **Landed (v0):** `docs/compliance-mapping.md` maps all 40 proof
+  obligations to SOC 2 (Trust Services Criteria), ISO/IEC 27001:2022
+  Annex A, and GDPR controls, grouped by control theme (identity,
+  message integrity, authorization, data governance, content trust,
+  availability, controlled degradation, supply-chain, forensics). A
+  "coverage gaps" section names what the substrate does *not* supply
+  (organizational controls, [REFERENCE] enforcement, transport
+  encryption, corpus completeness, load-testing) so no row is
+  mistaken for a certification. Row count equals obligation count (40).
 - **E3** `docs/protocol-spec-v0.1.md`. [DOCS]
+  **Landed (v0):** `docs/protocol-spec-v0.1.md` consolidates the five
+  frozen Phase 1 contracts, the complete signed-artifact identifier
+  registry (17 `typ`/wire identifiers), the Phase 5 additions (SVID,
+  image signature), and the normative end-to-end mesh exchange flow
+  with per-step proof-obligation pins. Index+delta, not a replacement:
+  the `contracts/` schemas stay the field-level normative source.
 
 ---
 
@@ -334,3 +349,28 @@ enforcement, production PKI custody, a planet-scale deployed mesh,
 post-quantum signatures, or a load/chaos program. Those, plus the
 Phase 3 §§6–8 + §11 operational-evidence gaps already in
 DEFERRED.md, are the Phase 6 candidate pool.
+
+---
+
+## 10) Close-out status
+
+**Phase 5 is COMPLETE.** All Track A–E deliverables merged on `main`:
+
+| Track | Deliverables | Status |
+|---|---|---|
+| A — Real Identity | A1 workload_ca, A2 verify_svid, A3 peer_admission | ✅ [RUNNABLE] |
+| B — Policy Engine | B1 policy_engine + decision IDs, B2 policy_audit | ✅ [RUNNABLE] |
+| C — The Mesh | C1 transport, C2 node, C3 two-node round trip + socket | ✅ [RUNNABLE] |
+| D — Runtime Tiers | D1 runtime_profile, D2 seccomp gen, D3 image_attestation | ✅ [REFERENCE] |
+| E — Evidence | E1 threat-model, E2 compliance-mapping, E3 protocol-spec | ✅ [DOCS] |
+
+Acceptance criteria 1–6: all met. The two-node signed round trip
+passes over both in-memory and real-socket transports; an unadmitted
+peer has nowhere to route; every authorization emits a `policy.decide`
+event with a decision ID in the trace; `generate_seccomp` output is
+shape-validated and bad image signatures are rejected; the full suite
+is green (794 envelope + 23 mesh + 61 mcp) and ruff clean with 40
+proof obligations all resolving; the three evidence docs exist and
+cross-reference the registry. Exit gates 1–5 satisfied (see the Phase 5
+close-out note in `implementation-plan/phases/README.md` and the
+handoff brief `docs/agent-handoffs/2026-07-phase-5-close.md`).

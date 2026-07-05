@@ -236,13 +236,67 @@ events. Wiring the rest is an additive slice.
 
 ---
 
+## Phase 5 (complete) — the deployment-enforcement frontier
+
+Phase 5 ("The Fabric") shipped the substrate half of the vision's
+Layer A identity, Layer C policy engine, the §5 mesh, Layer E
+runtime tiers, and the §9 evidence docs. What it deliberately did
+**not** do — the Phase 6 candidate pool — is the *enforcement* that
+requires infrastructure the in-process kernel cannot be:
+
+### Kernel-level sandbox enforcement (Out of substrate scope)
+`runtime_profile.py` + `generate_seccomp` produce a real, loadable
+OCI seccomp document and a declarative confinement profile; nothing
+in-process *loads* it into a kernel or confines a filesystem /
+network. That is a container runtime + mount namespaces + network
+policy — a deployment concern, labelled [REFERENCE] throughout.
+
+### Image-admission enforcement (Out of substrate scope)
+`image_attestation.verify_image_signature()` proves an image digest
+was attested; refusing to *run* an unattested image is an admission
+webhook / runtime policy, not the kernel.
+
+### Transport security — mTLS / TLS 1.3 (Out of substrate scope)
+The substrate binds identity + integrity at the envelope layer
+(proven transport-agnostic over in-memory and real-socket
+transports). Wire confidentiality and the mTLS handshake the vision
+Layer A also names are the deployment transport.
+
+### Production PKI custody + issuance operations (Out of substrate scope)
+`workload_ca.py` mints and verifies SVIDs against a self-signed
+root; HSM custody of the root key, the real issuance/attestation
+workflow (SPIRE-style), and operational rotation are the identity
+plane's, consumed here through `IssuerTrustStore`.
+
+### Mesh scale — gossip, routing at size, distributed consensus (Deferred / Out of scope)
+The discovery *record* format and a two-node authenticated exchange
+are specified and proven; the gossip protocol that disseminates
+records, routing at scale, partition behavior, and DDoS absorption
+are distributed-systems infrastructure.
+
+### Native-engine → Cedar/Rego interop (Deferred, follow-up viable)
+`policy_engine.py` is a structured native evaluator with decision
+IDs — deliberately not a DSL parser. Interop with Cedar or Rego
+(so operators reuse existing policy corpora) is a viable follow-up.
+
+### Post-quantum signatures, load / chaos program (Beyond v0 commitment)
+Ed25519 everywhere; a PQ migration and any load/fuzz/chaos program
+are beyond the v0 commitment.
+
+Together with the Phase 3 §§6–8 + §11 operational-evidence gaps and
+the Phase 2 audit-emission wiring above, these are the Phase 6 pool.
+
+---
+
 ## Phase numbering
 
-Plans now run Phase 0 through Phase 4. Phase 4 is the integration
-proof. Phase 5 (if it exists) will draw from the deferred items
-above PLUS whatever the Phase 4 close-out note in
-`implementation-plan/phases/README.md` says the operator learned
-about real failure modes.
+Plans run Phase 0 through Phase 5; Phase 5 ("The Fabric") is
+complete. Phase 6, if it exists, draws from the Phase 6 candidate
+pool above (the deployment-enforcement frontier) PLUS the Phase 3
+operational-evidence gaps and the Phase 2 audit-emission wiring —
+and whatever the Phase 5 close-out note in
+`implementation-plan/phases/README.md` records about what building
+the fabric taught us.
 
 Do not start refactoring or rewriting v0 modules without an
 explicit reason. The v0 contract is "this is what the substrate

@@ -27,4 +27,5 @@ A new agent picking up the work should:
 | File | Hand-off moment |
 |---|---|
 | [2026-06-phase-4-close.md](./2026-06-phase-4-close.md) | Phase 4 (integration proof) closed; substrate now has an operator runbook. Pivot options: integrate against a real MCP host, write Phase 5, or wire audit emission for the Phase 2 primitives that lack it. |
-| [2026-06-host-security-features.md](./2026-06-host-security-features.md) | **(most recent)** Example host now wires rate limiting, capability revocation, and gated issuance; revoke-then-reject lifecycle demonstrated end-to-end. Enabled-feature count 12 → 15. |
+| [2026-06-host-security-features.md](./2026-06-host-security-features.md) | Example host now wires rate limiting, capability revocation, and gated issuance; revoke-then-reject lifecycle demonstrated end-to-end. Enabled-feature count 12 → 15. |
+| [2026-07-phase-5-close.md](./2026-07-phase-5-close.md) | **(most recent)** Phase 5 "The Fabric" complete: real X.509 SVID identity, deny-by-default admission, native decision-ID policy engine, and a two-node authenticated mesh completing a signed round trip over in-memory + real TCP. 40 proof obligations. Phase 6 = the deployment-enforcement frontier. |

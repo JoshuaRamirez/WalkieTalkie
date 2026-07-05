@@ -117,19 +117,42 @@ test fixtures in `test_smoke.py:_Stage` or `example/_gen_sample_audit.py`**
 
 ## Phase 5 status
 
-Phase 5 (**The Fabric**) is **in progress**. See
-`implementation-plan/phases/phase-5-the-fabric.md`. It closes the gap
-between the kernel and the `SECURITY_FIRST_P2P_MCP_PLAN.md` vision:
-real X.509 identity (Layer A), a structured policy engine with
-decision IDs (Layer C engine), an authenticated overlay mesh (§5),
-runtime trust tiers (Layer E, reference enforcement), and the §9
-evidence artifacts (threat model, compliance mapping, protocol spec).
+Phase 5 (**The Fabric**) is **complete**. See
+`implementation-plan/phases/phase-5-the-fabric.md` (§10 close-out) and
+the handoff brief `docs/agent-handoffs/2026-07-phase-5-close.md`. It
+closed the gap between the kernel and the
+`SECURITY_FIRST_P2P_MCP_PLAN.md` vision. The deliverables that landed:
+
+- **Track A — Real Identity [RUNNABLE]:** `workload_ca.py` (Ed25519
+  X.509 SVIDs with a critical SPIFFE URI SAN, 1-hour TTL, `verify_svid`
+  fail-fast chain), `peer_admission.py` (deny-by-default admission with
+  cert pinning).
+- **Track B — Policy Engine [RUNNABLE]:** `policy_engine.py` (structured
+  first-match deny-by-default evaluator with UUIDv7 decision IDs — a
+  native engine, not a DSL), `policy_audit.py` (`policy.decide` events
+  with the decision ID in the forensic trace).
+- **Track C — The Mesh [RUNNABLE]:** `mesh/` package — `transport.py`
+  (`Transport` ABC + `InMemoryTransport`), `node.py` (authenticate-
+  then-authorize `MeshNode`), `socket_transport.py` (real loopback TCP).
+  The two-node signed round trip verifies over both transports.
+- **Track D — Runtime Tiers [REFERENCE]:** `runtime_profile.py` (trust-
+  tier model + `generate_seccomp` OCI document), `image_attestation.py`
+  (cosign-style image-signature verification).
+- **Track E — Evidence [DOCS]:** `docs/threat-model.md` (STRIDE),
+  `docs/compliance-mapping.md` (obligations → SOC 2 / ISO 27001 /
+  GDPR), `docs/protocol-spec-v0.1.md` (consolidated wire spec).
 
 Every slice is labeled **[RUNNABLE]** (real tested code, no infra) or
 **[REFERENCE]** (data model / generator / verifier that is runnable
 and tested, but whose enforcement needs deployment infrastructure —
 a kernel, a container runtime, a real network). No slice claims
-enforcement it doesn't have.
+enforcement it doesn't have. The proof-obligations registry now holds
+40 obligations, all resolving.
+
+When integrating a real mesh deployment, **start from
+`mesh/test_mesh_round_trip.py:_Fabric`** — it wires two complete
+`MeshNode`s end-to-end (discovery → admission → signed request →
+verify → authorize → reply → re-verify, both audit chains validating).
 
 Phase 3 §§6–8 + §11 (drills, isolation tests, observability,
 phase-close artifacts) and the audit-emission-wiring for Phase 2
