@@ -672,6 +672,24 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             ".test_decision_id_survives_chain_validation"
         ),
     ),
+    # ----- Phase 5 Track C: the mesh -----
+    ProofObligation(
+        name="mesh_authenticate_then_authorize",
+        phase=Phase.PHASE_5,
+        track="C",
+        statement=(
+            "A MeshNode learns a peer only when its discovery record "
+            "verifies (signature + window) AND the peer passes "
+            "deny-by-default admission. A peer that authenticates "
+            "cryptographically but is not on the admission allowlist is "
+            "NOT added to the routing table — authentication is not "
+            "authorization."
+        ),
+        canonical_test=(
+            "test_node.LearnPeerTests"
+            ".test_verified_but_unadmitted_peer_rejected"
+        ),
+    ),
 )
 
 
