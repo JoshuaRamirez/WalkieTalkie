@@ -384,6 +384,15 @@ the approved plan.
   invocation must carry a provable chain … policy decision ID").
   Structured evaluator, not a Rego/Cedar DSL parser; syntax interop
   is deferred behind the `PolicyEngine` ABC.
+- **Policy audit wiring v0** (`envelope/policy_audit.py`, Phase 5
+  Track B): `decide_and_audit()` runs a `PolicyEngine` and emits a
+  `policy.decide` hash-chained audit event whose `reason` embeds the
+  `decision_id` — so the decision id is tamper-evident (it lives in a
+  hashed field) and the chain still validates. `build_baseline_engine()`
+  expresses the vision's "baseline policy library" as engine rules
+  mirroring the Phase 2 gates (low-risk-tool permit, step-up-required
+  deny, deny-by-default), so the deny-by-default posture an operator
+  tunes is uniform engine rules instead of bespoke gate code.
 - **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
   `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
   domain. `verify_bundle()` validates shape + signature against a root

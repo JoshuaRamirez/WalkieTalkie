@@ -178,6 +178,14 @@ keeps the plan doc and the task list updated after every iteration.
   decision carries a UUIDv7 `decision_id`. Structured, not a DSL;
   Cedar/Rego interop deferred behind the `PolicyEngine` ABC. 15 tests.
 - **B2** baseline policy library + `policy.decide` audit wiring. [RUNNABLE]
+  **Landed (v0):** `decide_and_audit()` runs the engine and emits a
+  `policy.decide` audit event whose hashed `reason` embeds the
+  `decision_id` — tamper-evident by construction, chain still
+  validates. `build_baseline_engine()` assembles the vision's
+  "baseline policy library" as engine rules mirroring the Phase 2
+  gates (low-risk tool permit, step-up-required deny, deny-by-
+  default). Proof obligation `policy_decision_in_trace`. 7 tests.
+  Track B complete.
 
 ### Track C — The Mesh
 - **C1** `mesh/transport.py`: `Transport` ABC + `InMemoryTransport`. [RUNNABLE]
