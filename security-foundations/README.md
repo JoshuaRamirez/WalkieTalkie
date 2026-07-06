@@ -440,6 +440,18 @@ the approved plan.
   bundle the material. Loopback mTLS is real TLS — the same handshake,
   cipher negotiation, and encryption as a WAN address; loopback bounds
   scale, not realness.
+- **Gossip membership v0** (`mesh/membership.py`, Phase 6 Track B):
+  `SwimMembership` is a SWIM-style membership protocol closing the
+  vision's §5 "nodes discover each other" requirement without a central
+  registry. Join-via-seed, ping/ack failure detection
+  (ALIVE→SUSPECT→DEAD), gossip dissemination piggybacked on every
+  message (state spreads epidemically), and incarnation-based
+  refutation (a wrongly-suspected node out-incarnates the rumor so a
+  transient hiccup can't permanently evict it). Transport-agnostic —
+  runs over `InMemoryTransport` or `TlsSocketTransport`. Membership
+  answers *"who is reachable"*, not *"who is allowed"* (that's
+  `peer_admission`). Proof obligations `gossip_membership_converges`,
+  `gossip_detects_downed_node`.
 - **Runtime trust tiers v0** (`envelope/runtime_profile.py`, Phase 5
   Track D, **[REFERENCE]**): `RuntimeProfile(tier, allowed_syscalls,
   writable_paths, egress, egress_allowlist, secret_scopes)` is the

@@ -157,6 +157,18 @@ this plan doc and the task list updated after every iteration.
   (`mtls_two_layer_round_trip_verifies`,
   `mtls_unauthenticated_peer_rejected`); registry now 42.
 - **B1 (D6.3)** `membership.py` — SWIM-style gossip membership. [RUNNABLE]
+  **Landed (v0):** `SwimMembership` — join-via-seed, ping/ack failure
+  detection (ALIVE→SUSPECT→DEAD), gossip dissemination piggybacked on
+  every message, and incarnation-based self-refutation (a wrongly
+  suspected node out-incarnates the rumor). Transport-agnostic (runs
+  over `InMemoryTransport` or `TlsSocketTransport`). A 4-node cluster
+  converges purely by gossip (learning peers it was never seeded with)
+  and detects a downed node as DEAD cluster-wide, with no false
+  positives while everyone is live. v0 probes all non-dead peers per
+  tick (O(N²)); one-random-probe + indirect ping-req are documented
+  deferrals. 8 tests; 2 proof obligations
+  (`gossip_membership_converges`, `gossip_detects_downed_node`);
+  registry now 44.
 - **B2 (D6.4)** Gossip-driven discovery + admission integration. [RUNNABLE]
 - **C1 (D6.5)** `routing.py` — routing table + multi-hop forwarding. [RUNNABLE]
 - **C2 (D6.6)** 3-node multi-hop secure round trip. [RUNNABLE]
