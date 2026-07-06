@@ -762,6 +762,36 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             ".test_unauthenticated_peer_cannot_deliver_over_mtls"
         ),
     ),
+    ProofObligation(
+        name="gossip_membership_converges",
+        phase=Phase.PHASE_6,
+        track="B",
+        statement=(
+            "A node joins the cluster by contacting a seed and, via gossip "
+            "dissemination alone, converges on a complete membership view — "
+            "learning peers it was never configured with. This is the §5 "
+            "'nodes discover each other' requirement without a central "
+            "registry or shared config file."
+        ),
+        canonical_test=(
+            "test_membership.ConvergenceTests.test_cluster_converges_via_gossip"
+        ),
+    ),
+    ProofObligation(
+        name="gossip_detects_downed_node",
+        phase=Phase.PHASE_6,
+        track="B",
+        statement=(
+            "A node that stops responding is marked SUSPECT and then DEAD "
+            "across the whole cluster: failure detection escalates locally "
+            "(missed acks) and spreads by gossip, and nobody refutes a "
+            "genuinely-down node (no incarnation bump appears). Liveness "
+            "failure is detected, not silently tolerated."
+        ),
+        canonical_test=(
+            "test_membership.FailureDetectionTests.test_downed_node_is_detected_dead"
+        ),
+    ),
 )
 
 
