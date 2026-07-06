@@ -792,6 +792,24 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "test_membership.FailureDetectionTests.test_downed_node_is_detected_dead"
         ),
     ),
+    ProofObligation(
+        name="gossiped_peer_still_gated_by_admission",
+        phase=Phase.PHASE_6,
+        track="B",
+        statement=(
+            "Discovery is not authorization at network scope. A peer that "
+            "gossip reports as ALIVE and reachable is routable ONLY if it "
+            "also passes the deny-by-default admission policy on its "
+            "(spiffe_id, env_tier). A reachable-but-unadmitted peer (a rogue "
+            "on nobody's allowlist, an unknown tier, or a self-asserted "
+            "escalated tier) is denied a place in the routing table. Vision "
+            "§8.1 enforced against gossiped membership."
+        ),
+        canonical_test=(
+            "test_gossip_discovery.GossipAdmissionTests"
+            ".test_reachable_rogue_is_not_routable"
+        ),
+    ),
 )
 
 
