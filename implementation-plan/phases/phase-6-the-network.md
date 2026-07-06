@@ -219,6 +219,18 @@ this plan doc and the task list updated after every iteration.
   (per-dest lock deferred). 5 tests (50 frames over 1 connection,
   recovery after a dropped link, LRU eviction, validation).
 - **E1 (D6.8)** `docs/deployment-networking.md` — WAN frontier. [REFERENCE/DOCS]
+  **Landed (v0):** `docs/deployment-networking.md` maps the five
+  deployment frontiers (NAT traversal, TLS-at-scale tuning, PKI custody
+  + issuance ops, membership/routing at scale, edge bootstrap/DoS),
+  each with what it needs, why it's infrastructure the kernel can't be,
+  and **which existing seam** the runnable core attaches through (the
+  `Transport` ABC, the `IssuerTrustStore` callable,
+  `SwimMembership(seeds=...)`, the `Router` `next_hop` resolver). Opens
+  with the load-bearing boundary: **loopback bounds scale and
+  reachability, not security** — every Phase 6 security property holds
+  identically over a WAN. A summary table pairs each in-process (tested)
+  capability with its deployment counterpart. Cited primitives verified
+  present (`rate_limiter`, `bootstrap_bundle`, `key_rotation`).
 - **E2 (D6.9)** Phase 6 close. [DOCS]
 
 ## 5) Acceptance Criteria
