@@ -286,3 +286,30 @@ Phase 6 deliberately does NOT deliver: real multi-host/WAN deployment,
 NAT traversal, production CA custody, or planet-scale operation. Those,
 plus the still-open Phase 3 §§6–8 + §11 operational-evidence gaps and
 the Phase 2 audit-emission wiring, are the Phase 7 candidate pool.
+
+---
+
+## 10) Close-out status
+
+**Phase 6 is COMPLETE.** All D6.1–D6.9 deliverables merged on `main`:
+
+| Track | Deliverables | Status |
+|---|---|---|
+| A — mTLS | A1 `tls_transport`, A2 mTLS round trip | ✅ [RUNNABLE] |
+| B — Gossip | B1 `membership`, B2 `gossip_discovery` | ✅ [RUNNABLE] |
+| C — Routing | C1 `routing`, C2 3-node multi-hop over mTLS | ✅ [RUNNABLE] |
+| D — Connections | D1 `connection_pool` | ✅ [RUNNABLE] |
+| E — Evidence | E1 `deployment-networking.md`, E2 close | ✅ [REFERENCE/DOCS] |
+
+Acceptance criteria 1–7: all met. Two nodes complete the signed round
+trip over real mTLS and an unauthenticated peer can't handshake; an
+N-node gossip cluster converges and detects a downed node; a
+gossiped-but-unadmitted peer isn't routable; a 3-node multi-hop round
+trip verifies end-to-end and the forwarder can't forge; the connection
+pool sustains 50 frames over one connection and recovers from a dropped
+link; the full suite is green (mesh 53 + envelope 794 + mcp 61) and ruff
+clean with **48** proof obligations all resolving (8 new in Phase 6);
+the deployment-networking reference doc states the WAN boundary honestly.
+Exit gates 1–5 satisfied (see the Phase 6 close-out note in
+`implementation-plan/phases/README.md` and the handoff brief
+`docs/agent-handoffs/2026-07-phase-6-close.md`).
