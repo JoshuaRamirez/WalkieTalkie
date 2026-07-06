@@ -133,6 +133,18 @@ this plan doc and the task list updated after every iteration.
 
 - **0** Ship this plan (plan-only PR).
 - **A1 (D6.1)** `tls_transport.py` — mTLS transport with SVID peer auth. [RUNNABLE]
+  **Landed (v0):** `TlsSocketTransport` implements the `Transport` ABC
+  over mutual **TLS 1.3** (verified: OpenSSL 3.0.13, Ed25519 SVIDs).
+  Each endpoint presents its Phase 5 SVID; on every handshake the peer
+  cert is verified twice — by TLS (chains to the trusted root,
+  `CERT_REQUIRED`) and by the substrate's `verify_svid` (window + key
+  usage + SPIFFE SAN), which yields the peer's SPIFFE id used as the
+  `Frame.source`. A peer whose SVID chains to an untrusted root cannot
+  complete the handshake, so its bytes never reach the envelope layer.
+  `TlsIdentity` + `mint_identity(ca, spiffe_id)` bundle the material;
+  hostname check is off (identity is the URI SAN, checked by the
+  substrate). 4 tests (valid exchange, untrusted-CA rejected, expired
+  SVID dropped, context manager).
 - **A2 (D6.2)** Signed round trip over mTLS; two-layer security proof. [RUNNABLE]
 - **B1 (D6.3)** `membership.py` — SWIM-style gossip membership. [RUNNABLE]
 - **B2 (D6.4)** Gossip-driven discovery + admission integration. [RUNNABLE]
