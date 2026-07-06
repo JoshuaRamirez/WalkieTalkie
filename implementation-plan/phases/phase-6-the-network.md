@@ -146,6 +146,16 @@ this plan doc and the task list updated after every iteration.
   substrate). 4 tests (valid exchange, untrusted-CA rejected, expired
   SVID dropped, context manager).
 - **A2 (D6.2)** Signed round trip over mTLS; two-layer security proof. [RUNNABLE]
+  **Landed (v0):** `test_mtls_round_trip` re-runs the Phase 5 signed
+  round trip (reusing `_Fabric` verbatim) over `TlsSocketTransport`.
+  The same envelope verifies after crossing the encrypted,
+  mutually-authenticated channel, and the two layers **agree on
+  identity** — the TLS-verified peer SPIFFE id equals the envelope's
+  signed sender. Plus: an impostor with an SVID from an untrusted root
+  cannot complete the handshake, so its bytes never reach the envelope
+  verifier. Two proof obligations added
+  (`mtls_two_layer_round_trip_verifies`,
+  `mtls_unauthenticated_peer_rejected`); registry now 42.
 - **B1 (D6.3)** `membership.py` — SWIM-style gossip membership. [RUNNABLE]
 - **B2 (D6.4)** Gossip-driven discovery + admission integration. [RUNNABLE]
 - **C1 (D6.5)** `routing.py` — routing table + multi-hop forwarding. [RUNNABLE]
