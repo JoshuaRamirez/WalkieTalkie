@@ -170,6 +170,16 @@ this plan doc and the task list updated after every iteration.
   (`gossip_membership_converges`, `gossip_detects_downed_node`);
   registry now 44.
 - **B2 (D6.4)** Gossip-driven discovery + admission integration. [RUNNABLE]
+  **Landed (v0):** `GossipDiscovery` couples the `SwimMembership` view
+  to a Phase 5 `PeerAdmissionPolicy`: `routable_peers()` is the
+  intersection of *reachable* (gossip ALIVE) and *allowed* (admission
+  permits the peer's `(spiffe_id, env_tier)`). A rogue that gossip
+  reports as alive is **not routable**; an unknown tier denies by
+  default; a self-asserted escalated tier matches no rule and is denied
+  (the spiffe_id itself is SVID-proven at the mTLS handshake, not
+  self-asserted). Discovery ≠ authorization at network scope — vision
+  §8.1. Proof obligation `gossiped_peer_still_gated_by_admission`;
+  registry now 45. 3 tests.
 - **C1 (D6.5)** `routing.py` — routing table + multi-hop forwarding. [RUNNABLE]
 - **C2 (D6.6)** 3-node multi-hop secure round trip. [RUNNABLE]
 - **D1 (D6.7)** `connection_pool.py` — pooled/keepalive/reconnect transport. [RUNNABLE]

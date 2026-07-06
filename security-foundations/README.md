@@ -452,6 +452,15 @@ the approved plan.
   answers *"who is reachable"*, not *"who is allowed"* (that's
   `peer_admission`). Proof obligations `gossip_membership_converges`,
   `gossip_detects_downed_node`.
+- **Gossip discovery + admission v0** (`mesh/gossip_discovery.py`,
+  Phase 6 Track B): `GossipDiscovery` couples the membership view to a
+  `PeerAdmissionPolicy` — `routable_peers()` is the intersection of
+  *reachable* (gossip ALIVE) and *allowed* (admission permits the
+  peer's `(spiffe_id, env_tier)`). **Discovery is not authorization:** a
+  rogue that gossip reports as alive is not routable; an unknown or
+  self-asserted-escalated tier is denied (the spiffe_id is SVID-proven
+  at the mTLS handshake, not self-asserted). Vision §8.1 at network
+  scope. Proof obligation `gossiped_peer_still_gated_by_admission`.
 - **Runtime trust tiers v0** (`envelope/runtime_profile.py`, Phase 5
   Track D, **[REFERENCE]**): `RuntimeProfile(tier, allowed_syscalls,
   writable_paths, egress, egress_allowlist, secret_scopes)` is the
