@@ -149,6 +149,38 @@ class SecureDeliveryTests(unittest.TestCase):
                 alice.close()
                 bob.close()
 
+    def test_peer_name_is_case_insensitive(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            cfgdir = _mkconfig(pathlib.Path(td))
+            alice, bob, *_ = self._pair(cfgdir)
+            try:
+                # A model naturally writes "Bob"; must still resolve to "bob".
+                info = alice.send_message("hi via capitalized name", to="Bob")
+                self.assertIn("sent to bob", info)
+                entries = _wait_inbox(bob.cfg.inbox_path(), 1)
+                self.assertEqual(len(entries), 1)
+                self.assertEqual(entries[0]["body"], "hi via capitalized name")
+            finally:
+                alice.close()
+                bob.close()
+
+    def test_unknown_peer_error_lists_known_peers(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            cfgdir = _mkconfig(pathlib.Path(td))
+            alice, bob, *_ = self._pair(cfgdir)
+            try:
+                with self.assertRaises(KeyError) as ctx:
+                    alice.send_message("nope", to="charlie")
+                self.assertIn("known peers", str(ctx.exception))
+                self.assertIn("bob", str(ctx.exception))
+            finally:
+                alice.close()
+                bob.close()
+
     def test_replayed_message_rejected(self):
         import tempfile
 

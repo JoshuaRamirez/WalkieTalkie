@@ -145,10 +145,21 @@ class BridgeConfig:
             raise EnvelopeVerificationError(f"unknown issuer: {iss!r}/{kid!r}")
         return pem.encode()
 
+    def resolve_name(self, name: str) -> str:
+        """Return the canonical agent name for ``name``, matching
+        case-insensitively. Models naturally write "Bob"; the manifest
+        stores "bob". Raises with the known peers listed on a miss."""
+        if name in self.agents:
+            return name
+        lowered = {n.lower(): n for n in self.agents}
+        if isinstance(name, str) and name.lower() in lowered:
+            return lowered[name.lower()]
+        raise KeyError(
+            f"unknown peer {name!r}; known peers: {sorted(self.agents)}"
+        )
+
     def spiffe_of(self, name: str) -> str:
-        if name not in self.agents:
-            raise KeyError(f"unknown peer {name!r}")
-        return self.agents[name]["spiffe_id"]
+        return self.agents[self.resolve_name(name)]["spiffe_id"]
 
     def name_of_spiffe(self, spiffe_id: str) -> str:
         for n, a in self.agents.items():
@@ -274,7 +285,9 @@ class MeshBridge:
 
     # ----- outbound: sign a message and ship it to the peer ---------------
     def send_message(self, body: str, to: str | None = None) -> str:
-        target = to or self.peer
+        # Resolve to the canonical name so a case variant ("Bob") maps to
+        # the manifest entry ("bob") for the spiffe id AND the rendezvous file.
+        target = self.cfg.resolve_name(to or self.peer)
         recipient = self.cfg.spiffe_of(target)
         now = datetime.now(UTC)
 
