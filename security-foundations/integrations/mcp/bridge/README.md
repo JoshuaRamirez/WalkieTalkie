@@ -113,7 +113,36 @@ Add to each instance's `settings.json` (use that instance's `--name`):
 Only verified messages ever reach the inbox file the hook reads, so the
 hook can never surface a forged message.
 
-## 4. Prove it without two Claudes
+## 4. Autonomous back-and-forth (the responder) — and the real-time caveat
+
+The hook (step 3) surfaces mail when **you** submit a prompt. For two
+agents to converse **hands-off**, something has to *wake* each Claude when
+a message lands — MCP is client-initiated and `claude` only acts on a
+prompt, so agent chat is **not real-time** on its own.
+
+`responder.py` is that timer. It watches the verified inbox and, when a new
+message appears, invokes `claude -p` (with the mesh server attached and
+`--continue` for continuity) so Claude reads and replies:
+
+```bash
+# Bob auto-answers Alice, polling every 2s:
+python .../bridge/responder.py --name bob --mcp-config /abs/bob.mcp.json --interval 2
+# Alice auto-answers Bob, in another terminal:
+python .../bridge/responder.py --name alice --mcp-config /abs/alice.mcp.json --interval 2
+```
+
+Kick off a thread by having one side `send_message` once; the two
+responders then relay replies back and forth on their own. Each message
+wakes its Claude exactly once (the call is synchronous; `check_inbox` marks
+the mail read before the next poll). `--dry-run` shows *when* it would wake
+Claude without spending tokens; `--once` does a single poll.
+
+This is a poll-and-wake loop, not a persistent socket-driven agent — good
+enough for a real hands-off conversation. A always-on agent (Agent SDK /
+long-lived process reacting the instant a frame arrives) is a Phase 6
+option.
+
+## 5. Prove it without two Claudes
 
 Two scripts run the whole path headless:
 
@@ -136,6 +165,7 @@ Two scripts run the whole path headless:
 | `gen_bridge_config.py` | Mint per-agent Ed25519 keys + shared `trust.json`. |
 | `mesh_mcp_bridge.py` | The MCP stdio server ↔ mesh transport bridge. |
 | `mail_hook.py` | UserPromptSubmit hook that surfaces verified mail. |
+| `responder.py` | Wakes `claude` on new mail — the timer for hands-off chat. |
 | `demo_conversation.py` | Headless two-client demo (no Claude needed). |
 | `test_bridge.py` | End-to-end tests (protocol + secure delivery). |
 
