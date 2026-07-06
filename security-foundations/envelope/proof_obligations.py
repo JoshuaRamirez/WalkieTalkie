@@ -52,6 +52,7 @@ class Phase(StrEnum):
     PHASE_3 = "phase-3"
     PHASE_4 = "phase-4"
     PHASE_5 = "phase-5"
+    PHASE_6 = "phase-6"
 
 
 @dataclass(frozen=True)
@@ -726,6 +727,39 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
         canonical_test=(
             "test_image_attestation.DenialTests"
             ".test_digest_mismatch_rejected"
+        ),
+    ),
+    ProofObligation(
+        name="mtls_two_layer_round_trip_verifies",
+        phase=Phase.PHASE_6,
+        track="A",
+        statement=(
+            "A signed envelope round trip completes over a mutual TLS 1.3 "
+            "channel, and the two security layers agree on identity: the "
+            "TLS-verified peer SPIFFE id (channel auth) equals the "
+            "envelope's independently-verified signed sender (message "
+            "auth). Defense in depth — either layer alone authenticates; "
+            "together they are the vision's Layer A composed with Layer B."
+        ),
+        canonical_test=(
+            "test_mtls_round_trip.MtlsRoundTripTests"
+            ".test_signed_round_trip_over_mtls_two_layers_agree"
+        ),
+    ),
+    ProofObligation(
+        name="mtls_unauthenticated_peer_rejected",
+        phase=Phase.PHASE_6,
+        track="A",
+        statement=(
+            "A peer whose SVID chains to an untrusted CA root cannot "
+            "complete the mTLS handshake, so its bytes never reach the "
+            "envelope verifier. Channel-layer peer authentication fails "
+            "closed — unauthenticated traffic is dropped at the transport, "
+            "before any message-layer processing."
+        ),
+        canonical_test=(
+            "test_mtls_round_trip.MtlsRoundTripTests"
+            ".test_unauthenticated_peer_cannot_deliver_over_mtls"
         ),
     ),
 )
