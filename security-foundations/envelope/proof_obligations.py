@@ -841,6 +841,26 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "test_routing.LoopSafetyTests.test_duplicate_message_id_is_dropped"
         ),
     ),
+    ProofObligation(
+        name="mesh_multihop_round_trip_verifies",
+        phase=Phase.PHASE_6,
+        track="C",
+        statement=(
+            "A signed envelope travels A → B → C where A and C are not "
+            "directly connected, each hop its own mutual-TLS connection, "
+            "and C verifies A's signature end-to-end. Channel identity and "
+            "message identity legitimately differ at the forwarding hop (C's "
+            "TLS peer is the relay B, but the envelope names A→C), so the "
+            "relay moves bytes without gaining authority — and a relay that "
+            "tampers with the opaque payload fails C's envelope verification. "
+            "The full Phase 6 stack (mTLS + routing + signed envelope) "
+            "composed end to end."
+        ),
+        canonical_test=(
+            "test_mtls_multihop.MultiHopRoundTripTests"
+            ".test_signed_envelope_reaches_far_node_through_relay"
+        ),
+    ),
 )
 
 

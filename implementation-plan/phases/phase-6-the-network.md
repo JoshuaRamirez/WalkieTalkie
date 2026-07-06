@@ -195,6 +195,16 @@ this plan doc and the task list updated after every iteration.
   (`mesh_forwarding_deny_by_default`, `mesh_forwarding_loop_safe`);
   registry now 47.
 - **C2 (D6.6)** 3-node multi-hop secure round trip. [RUNNABLE]
+  **Landed (v0):** `test_mtls_multihop` composes the whole stack — a
+  signed envelope travels A → relay → C where A and C are not directly
+  connected, **each hop its own mutual-TLS connection**, and C verifies
+  A's signature end-to-end (reply re-verifies at A). Proves the
+  load-bearing insight: at a forwarding hop **channel identity and
+  message identity legitimately differ** (C's TLS peer is the relay, but
+  the envelope names A→C), so the relay moves bytes without gaining
+  authority — and a relay that tampers the payload fails C's envelope
+  verification. Reuses `_Fabric` for the A↔C envelope. Proof obligation
+  `mesh_multihop_round_trip_verifies`; registry now 48. 2 tests.
 - **D1 (D6.7)** `connection_pool.py` — pooled/keepalive/reconnect transport. [RUNNABLE]
 - **E1 (D6.8)** `docs/deployment-networking.md` — WAN frontier. [REFERENCE/DOCS]
 - **E2 (D6.9)** Phase 6 close. [DOCS]
