@@ -288,15 +288,52 @@ the Phase 2 audit-emission wiring above, these are the Phase 6 pool.
 
 ---
 
+## Phase 6 (complete) — what the network stack resolved, and what didn't
+
+Phase 6 ("The Network") turned the mesh into a real network stack, all
+[RUNNABLE] and loopback-tested. It **resolved** two items from the Phase 5
+pool above, and **sharpened** the boundary on the rest:
+
+### Resolved by Phase 6
+- **Transport security — mTLS / TLS 1.3.** `mesh/tls_transport.py`
+  (`TlsSocketTransport`) is genuine mutual TLS 1.3 with SVID peer
+  verification. This is no longer deferred at the substrate level —
+  loopback mTLS is real TLS. (WAN *tuning* — session resumption, cipher
+  policy — remains deployment; see `docs/deployment-networking.md`.)
+- **Mesh — gossip + routing (the runnable half).**
+  `mesh/membership.py` (SWIM-style convergence + failure detection) and
+  `mesh/routing.py` (multi-hop, loop-safe, deny-by-default) are shipped
+  and tested. What remains deferred is the *scale* half (below).
+
+### Still deferred / out of scope after Phase 6 (the Phase 7 pool)
+- **Kernel-level sandbox enforcement** — unchanged (Phase 5 item).
+- **Image-admission enforcement** — unchanged (Phase 5 item).
+- **NAT traversal / real WAN reachability** — STUN/TURN/ICE, relays.
+  Loopback has no NAT; this needs public hosts. See
+  `docs/deployment-networking.md` §1. Out of substrate scope.
+- **Production PKI custody + issuance ops** — unchanged; HSM/KMS root,
+  SPIRE-style attestation, rotation ops. Out of substrate scope.
+- **Membership/routing at scale** — SWIM indirect probing (ping-req via
+  k relays), O(N) probe load, route *computation* protocol
+  (distance-vector/link-state), partition behavior. The *forwarding
+  security* invariants hold regardless of table computation; the scale
+  refinements need many real hosts + real loss to test. Deferred.
+- **Native-engine → Cedar/Rego interop** — unchanged, follow-up viable.
+- **Post-quantum signatures, load/chaos program** — unchanged, beyond v0.
+- **Fleet-wide observability aggregation** — per-node hash-chained audit
+  exists; cross-fleet metrics/tracing is deployment.
+
+---
+
 ## Phase numbering
 
-Plans run Phase 0 through Phase 5; Phase 5 ("The Fabric") is
-complete. Phase 6, if it exists, draws from the Phase 6 candidate
-pool above (the deployment-enforcement frontier) PLUS the Phase 3
-operational-evidence gaps and the Phase 2 audit-emission wiring —
-and whatever the Phase 5 close-out note in
-`implementation-plan/phases/README.md` records about what building
-the fabric taught us.
+Plans run Phase 0 through Phase 6; Phase 5 ("The Fabric") and Phase 6
+("The Network") are complete. Phase 7, if it exists, draws from the
+Phase 7 pool above (kernel sandbox, image admission, NAT/WAN, PKI
+custody, mesh scale) PLUS the still-open Phase 3 operational-evidence
+gaps and the Phase 2 audit-emission wiring — and whatever the Phase 6
+close-out note in `implementation-plan/phases/README.md` records about
+what building the network taught us.
 
 Do not start refactoring or rewriting v0 modules without an
 explicit reason. The v0 contract is "this is what the substrate

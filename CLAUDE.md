@@ -156,9 +156,50 @@ verify → authorize → reply → re-verify, both audit chains validating).
 
 Phase 3 §§6–8 + §11 (drills, isolation tests, observability,
 phase-close artifacts) and the audit-emission-wiring for Phase 2
-primitives that lack it remain deferred; see DEFERRED.md. They plus
-kernel-sandbox enforcement, PKI custody, and mesh scale are the
-Phase 6 candidate pool.
+primitives that lack it remain deferred; see DEFERRED.md.
+
+## Phase 6 status
+
+Phase 6 (**The Network**) is **complete**. See
+`implementation-plan/phases/phase-6-the-network.md` (§10 close-out) and
+the handoff brief `docs/agent-handoffs/2026-07-phase-6-close.md`. It
+turned the Phase 5 mesh (connection-per-frame loopback, file discovery,
+direct-only) into a **real network stack**, all [RUNNABLE] and tested on
+loopback:
+
+- **Track A — mTLS [RUNNABLE]:** `mesh/tls_transport.py`
+  (`TlsSocketTransport` — mutual TLS 1.3, each peer presents its Phase 5
+  SVID, verified by TLS *and* the substrate `verify_svid`). Signed round
+  trip verifies over the encrypted channel; the two layers agree on
+  identity.
+- **Track B — Gossip [RUNNABLE]:** `mesh/membership.py`
+  (`SwimMembership` — join/heartbeat/suspicion/failure-detection + gossip
+  + incarnation refutation) and `mesh/gossip_discovery.py`
+  (`GossipDiscovery` — discovery is not authorization: routable = alive ∩
+  admitted).
+- **Track C — Routing [RUNNABLE]:** `mesh/routing.py` (`Router` —
+  multi-hop forwarding, deny-by-default, loop-safe) with the 3-node
+  multi-hop signed round trip over mTLS (`test_mtls_multihop`).
+- **Track D — Connections [RUNNABLE]:** `mesh/connection_pool.py`
+  (`PooledSocketTransport` — persistent/keepalive/reconnect/bounded pool;
+  operational, no safety obligation).
+- **Track E — Frontier [DOCS]:** `docs/deployment-networking.md` — the
+  honest WAN boundary (NAT, PKI custody, scale) and which seam each
+  attaches through.
+
+**The load-bearing rule Phase 6 reinforced:** loopback bounds *scale and
+reachability, not security*. mTLS over `127.0.0.1` is real TLS; an
+in-process gossip cluster is a real protocol. What stays [REFERENCE] (the
+deployment-networking doc) is exactly the part that *is* infrastructure.
+The proof-obligations registry now holds **48** obligations, all
+resolving.
+
+When integrating a real WAN deployment, **start from
+`mesh/test_mtls_multihop.py`** (the full stack composed: mTLS + routing +
+signed envelope, A→relay→C) and attach the deployment pieces through the
+seams named in `docs/deployment-networking.md`. Kernel-sandbox
+enforcement, production PKI custody, real WAN/NAT, and mesh scale are the
+Phase 7 candidate pool.
 
 ## Anti-patterns
 

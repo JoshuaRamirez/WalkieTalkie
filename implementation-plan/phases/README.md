@@ -77,3 +77,38 @@ invariant would be the lie the labels exist to prevent). Phase 6, if it
 exists, is the deployment-enforcement frontier catalogued in
 `DEFERRED.md` — kernel sandbox, image admission, mTLS, PKI custody,
 mesh scale — none of which the in-process kernel can be.
+
+## Phase 6 close-out note
+
+Phase 6 ("The Network") took one item the Phase 5 note had parked as
+"deployment infrastructure the kernel can't be" — mTLS — and proved that
+framing was **too pessimistic**. The lesson: *loopback bounds scale and
+reachability, not security.* Real mutual TLS 1.3 over `127.0.0.1` runs
+the identical handshake, cipher negotiation, and record encryption as a
+WAN connection; an in-process 4-node gossip cluster runs the identical
+SWIM protocol as a 4-datacenter one. So Phase 6 built the whole
+security-bearing network stack as [RUNNABLE] — `TlsSocketTransport`
+(mutual TLS + SVID verify), `SwimMembership` (convergence + failure
+detection), `GossipDiscovery` (discovery ≠ authorization), `Router`
+(multi-hop, loop-safe, deny-by-default), `PooledSocketTransport`
+(operational reuse) — and culminated in a 3-node signed round trip
+where the envelope crosses A→relay→C, each hop its own mTLS connection,
+and the relay provably can't forge.
+
+What building the network taught us, in one paragraph: **the seams the
+substrate already had were exactly the right ones.** Every deployment
+concern that *is* genuinely infrastructure — NAT traversal, HSM key
+custody, routing at scale — attaches through a seam that already
+existed: the `Transport` ABC, the `IssuerTrustStore` callable, the
+`SwimMembership(seeds=...)` list, the `Router`'s `next_hop` resolver.
+Nothing had to reopen the kernel. That is the dividend of having kept
+security in the signed envelope and the SVID rather than in the wire:
+you can swap loopback for the internet by writing a new `Transport`, and
+the identity, admission, routing-authorization, and message-integrity
+guarantees come along unchanged. The registry grew 40 → 48; the one
+[RUNNABLE] slice that deliberately took **no** obligation was the
+connection pool — a reliability feature is not a safety invariant, and
+the honesty labels exist to keep that line sharp. Phase 7 is the part
+that truly needs infrastructure — real WAN/NAT, PKI custody, kernel
+sandbox, mesh scale — catalogued in `DEFERRED.md` and mapped to its
+attach-points in `docs/deployment-networking.md`.
