@@ -426,6 +426,20 @@ the approved plan.
   crossing a real socket. This is vision §8 re-proven at mesh scope
   (Phase 4 proved it at single-host scope). Loopback / single-host
   only — a planet-scale mesh (NAT, wire TLS, pooling) is Phase 6.
+- **mTLS transport v0** (`mesh/tls_transport.py`, Phase 6 Track A):
+  `TlsSocketTransport` implements the same `Transport` ABC over
+  **mutual TLS 1.3**, closing the vision's Layer A mTLS requirement.
+  Each node presents its Phase 5 SVID; every handshake verifies the
+  peer cert both via TLS (chain to trusted root, `CERT_REQUIRED`) and
+  via the substrate's `verify_svid` (window + key usage + SPIFFE SAN),
+  yielding the peer's SPIFFE id as `Frame.source`. **Defense in depth:**
+  TLS authenticates + encrypts the *channel*; the signed envelope still
+  authenticates the *message*. A peer without a CA-issued SVID cannot
+  complete the handshake, so unauthenticated bytes never reach the
+  envelope verifier. `TlsIdentity` + `mint_identity(ca, spiffe_id)`
+  bundle the material. Loopback mTLS is real TLS — the same handshake,
+  cipher negotiation, and encryption as a WAN address; loopback bounds
+  scale, not realness.
 - **Runtime trust tiers v0** (`envelope/runtime_profile.py`, Phase 5
   Track D, **[REFERENCE]**): `RuntimeProfile(tier, allowed_syscalls,
   writable_paths, egress, egress_allowlist, secret_scopes)` is the
