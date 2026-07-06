@@ -93,7 +93,9 @@ def run(args) -> int:
             else:
                 # Synchronous: Claude's check_inbox marks the mail read before
                 # we poll again, so each message wakes Claude exactly once.
-                subprocess.run(cmd, cwd=str(args.config))
+                # cwd is this agent's own dir so `--continue` resumes THIS
+                # agent's conversation, not the peer's.
+                subprocess.run(cmd, cwd=str(args.workdir))
                 woken = True
         if args.once:
             return 0
@@ -104,6 +106,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Wake Claude on new mesh mail")
     ap.add_argument("--name", required=True, help="this agent's name")
     ap.add_argument("--config", type=pathlib.Path, default=_DEFAULT_CONFIG_DIR)
+    ap.add_argument("--workdir", type=pathlib.Path, default=None,
+                    help="cwd for the claude session (its own conversation "
+                    "history lives here; default: --config dir)")
     ap.add_argument("--mcp-config", required=True, type=pathlib.Path,
                     help="the claude --mcp-config JSON for this agent")
     ap.add_argument("--interval", type=float, default=2.0)
@@ -112,7 +117,10 @@ def main() -> int:
     ap.add_argument("--once", action="store_true", help="one poll then exit")
     ap.add_argument("--dry-run", action="store_true",
                     help="print the claude command instead of running it")
-    return run(ap.parse_args())
+    args = ap.parse_args()
+    if args.workdir is None:
+        args.workdir = args.config
+    return run(args)
 
 
 if __name__ == "__main__":
