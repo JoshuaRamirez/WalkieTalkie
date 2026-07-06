@@ -810,6 +810,37 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             ".test_reachable_rogue_is_not_routable"
         ),
     ),
+    ProofObligation(
+        name="mesh_forwarding_deny_by_default",
+        phase=Phase.PHASE_6,
+        track="C",
+        statement=(
+            "A multi-hop forwarding node relays a message only toward a "
+            "next hop it is allowed to route to. Knowing a route is not "
+            "enough — if the next hop is not in the admitted/routable set, "
+            "the message is dropped. Forwarding grants no authority; an "
+            "intermediary never relays toward an unadmitted peer."
+        ),
+        canonical_test=(
+            "test_routing.DenyByDefaultForwardingTests"
+            ".test_forward_denied_to_unadmitted_next_hop"
+        ),
+    ),
+    ProofObligation(
+        name="mesh_forwarding_loop_safe",
+        phase=Phase.PHASE_6,
+        track="C",
+        statement=(
+            "Multi-hop forwarding cannot loop-amplify: every routed message "
+            "carries a TTL (decremented per hop, dropped at zero) and a "
+            "message id each node remembers, so a message that revisits a "
+            "node is dropped as a duplicate. A routing loop terminates "
+            "instead of multiplying traffic."
+        ),
+        canonical_test=(
+            "test_routing.LoopSafetyTests.test_duplicate_message_id_is_dropped"
+        ),
+    ),
 )
 
 

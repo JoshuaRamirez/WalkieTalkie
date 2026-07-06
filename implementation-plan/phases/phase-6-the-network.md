@@ -181,6 +181,19 @@ this plan doc and the task list updated after every iteration.
   §8.1. Proof obligation `gossiped_peer_still_gated_by_admission`;
   registry now 45. 3 tests.
 - **C1 (D6.5)** `routing.py` — routing table + multi-hop forwarding. [RUNNABLE]
+  **Landed (v0):** `Router.handle` returns a pure `RoutingDecision`
+  (deliver / forward / drop). Security-shaped forwarding: **deny by
+  default** (relays only toward a next hop in the admitted/routable
+  set), **loop-safe** (per-hop TTL + a per-node seen-set of message
+  ids), and the intermediary is never the envelope's recipient (moving
+  bytes grants no authority). `RoutedMessage` carries the opaque signed
+  envelope + routing metadata (dest/ttl/msg_id) with a JSON codec.
+  Transport-agnostic and pure — D6.6 wires it over the socket transport.
+  Route computation is an injected `next_hop` resolver (a full
+  distance-vector/link-state protocol is deferred; the forwarding
+  invariants hold regardless). 6 tests; 2 obligations
+  (`mesh_forwarding_deny_by_default`, `mesh_forwarding_loop_safe`);
+  registry now 47.
 - **C2 (D6.6)** 3-node multi-hop secure round trip. [RUNNABLE]
 - **D1 (D6.7)** `connection_pool.py` — pooled/keepalive/reconnect transport. [RUNNABLE]
 - **E1 (D6.8)** `docs/deployment-networking.md` — WAN frontier. [REFERENCE/DOCS]

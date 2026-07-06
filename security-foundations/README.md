@@ -461,6 +461,15 @@ the approved plan.
   self-asserted-escalated tier is denied (the spiffe_id is SVID-proven
   at the mTLS handshake, not self-asserted). Vision §8.1 at network
   scope. Proof obligation `gossiped_peer_still_gated_by_admission`.
+- **Multi-hop routing v0** (`mesh/routing.py`, Phase 6 Track C):
+  `Router.handle` forwards a message toward a far node through
+  intermediaries, returning a pure `RoutingDecision` (deliver / forward
+  / drop). Security-shaped: **deny-by-default forwarding** (relays only
+  toward an admitted/routable next hop), **loop-safe** (per-hop TTL +
+  a per-node seen-set of message ids), and the intermediary is never the
+  envelope's recipient — moving bytes grants no authority. `RoutedMessage`
+  wraps the opaque signed envelope with dest/ttl/msg_id. Proof
+  obligations `mesh_forwarding_deny_by_default`, `mesh_forwarding_loop_safe`.
 - **Runtime trust tiers v0** (`envelope/runtime_profile.py`, Phase 5
   Track D, **[REFERENCE]**): `RuntimeProfile(tier, allowed_syscalls,
   writable_paths, egress, egress_allowlist, secret_scopes)` is the
