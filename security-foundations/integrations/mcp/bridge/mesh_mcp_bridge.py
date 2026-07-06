@@ -231,9 +231,10 @@ def _append_inbox(inbox: pathlib.Path, entry: dict) -> None:
 
 
 class MeshBridge:
-    def __init__(self, cfg: BridgeConfig, peer: str) -> None:
+    def __init__(self, cfg: BridgeConfig, peer: str, *, send_only: bool = False) -> None:
         self.cfg = cfg
         self.peer = peer
+        self.send_only = send_only
         self.audit = JsonlAuditSink(cfg.audit_path())
         self.replay = InMemoryReplayCache()
         self._stop = threading.Event()
@@ -242,9 +243,19 @@ class MeshBridge:
         from socket_transport import LocalSocketTransport
 
         self.transport = LocalSocketTransport(source_address=cfg.name)
+
+        # send_only: a per-turn client bridge (e.g. one Claude spawns) that
+        # only SENDS + reads the shared inbox file. It must NOT claim the
+        # rendezvous address or run a receiver — the always-on daemon bridge
+        # owns those, so an ephemeral client can't hijack delivery. Without
+        # this, each Claude turn would overwrite rt-<name>.addr with a port
+        # that dies when the turn ends, breaking the next inbound message.
+        if send_only:
+            _log(f"{cfg.name} send-only client (peer={peer}); daemon owns the listener")
+            return
+
         cfg.addr_path(cfg.name).write_text(self.transport.address)
         _log(f"{cfg.name} listening on {self.transport.address} (peer={peer})")
-
         self._receiver = threading.Thread(target=self._receive_loop, daemon=True)
         self._receiver.start()
 
@@ -473,10 +484,15 @@ def main() -> None:
         "--config", type=pathlib.Path, default=DEFAULT_CONFIG_DIR,
         help=f"config dir (default: {DEFAULT_CONFIG_DIR})",
     )
+    ap.add_argument(
+        "--send-only", action="store_true",
+        help="client mode: send + read inbox, but don't own the listener "
+        "(use when an always-on daemon bridge is the receiver)",
+    )
     args = ap.parse_args()
 
     cfg = BridgeConfig(args.config, args.name)
-    bridge = MeshBridge(cfg, args.peer)
+    bridge = MeshBridge(cfg, args.peer, send_only=args.send_only)
     try:
         serve_stdio(bridge)
     finally:

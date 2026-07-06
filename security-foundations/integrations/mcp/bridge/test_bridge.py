@@ -204,6 +204,29 @@ class SecureDeliveryTests(unittest.TestCase):
                 alice.close()
                 bob.close()
 
+    def test_send_only_client_does_not_own_listener(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            cfgdir = _mkconfig(pathlib.Path(td))
+            bob_cfg = BridgeConfig(cfgdir, "bob")
+            alice_cfg = BridgeConfig(cfgdir, "alice")
+            bob = MeshBridge(bob_cfg, "alice")  # daemon: listens
+            alice = MeshBridge(alice_cfg, "bob", send_only=True)
+            try:
+                # A send-only client must NOT claim the rendezvous address —
+                # the daemon owns it, so an ephemeral per-turn client can't
+                # hijack delivery.
+                self.assertFalse(alice_cfg.addr_path("alice").exists())
+                # ...but it can still send, and the daemon receives it.
+                alice.send_message("via send-only client", to="bob")
+                entries = _wait_inbox(bob.cfg.inbox_path(), 1)
+                self.assertEqual(len(entries), 1)
+                self.assertEqual(entries[0]["body"], "via send-only client")
+            finally:
+                alice.close()
+                bob.close()
+
     def test_forged_message_rejected(self):
         import tempfile
 

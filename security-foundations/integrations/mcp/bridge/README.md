@@ -142,6 +142,25 @@ enough for a real hands-off conversation. A always-on agent (Agent SDK /
 long-lived process reacting the instant a frame arrives) is a Phase 6
 option.
 
+### Topology for the autonomous case
+
+Each `claude` turn spawns its own bridge and tears it down when the turn
+ends. If that per-turn bridge owned the rendezvous address, delivery would
+break the moment the turn finished (the address would point at a dead
+port). So the autonomous setup splits the two roles:
+
+- **One always-on daemon bridge per agent** — owns the listener + the
+  rendezvous address, receives inbound frames, writes the inbox. Keep it
+  alive: `tail -f /dev/null | python mesh_mcp_bridge.py --name bob --peer alice`.
+- **The per-turn Claude bridge runs `--send-only`** — it sends and reads
+  the shared inbox, but does **not** claim the listener. Point the
+  responder's `--mcp-config` at a server launched with `--send-only`.
+
+`--workdir` gives each responder its own cwd so `claude --continue`
+resumes *that* agent's conversation, not the peer's. This exact topology
+was used to run a live four-message Alice↔Bob exchange that self-wound-down,
+with both audit chains validating.
+
 ## 5. Prove it without two Claudes
 
 Two scripts run the whole path headless:
