@@ -470,6 +470,16 @@ the approved plan.
   envelope's recipient — moving bytes grants no authority. `RoutedMessage`
   wraps the opaque signed envelope with dest/ttl/msg_id. Proof
   obligations `mesh_forwarding_deny_by_default`, `mesh_forwarding_loop_safe`.
+- **Pooled connection transport v0** (`mesh/connection_pool.py`, Phase 6
+  Track D): `PooledSocketTransport` implements the `Transport` ABC with
+  **persistent, reused** connections (one TCP connection per destination
+  carries a frame stream instead of connect-per-frame), `SO_KEEPALIVE`,
+  **reconnect-with-backoff** on a dropped link, and a **bounded LRU
+  pool** as backpressure against fd exhaustion. This is an *operational*
+  layer — how bytes move, not what they mean — so it carries **no proof
+  obligation** (a reliability feature earns no safety claim, same honesty
+  rule as `runtime_profile`). Identity still comes from the signed
+  envelope / peer SVID.
 - **Runtime trust tiers v0** (`envelope/runtime_profile.py`, Phase 5
   Track D, **[REFERENCE]**): `RuntimeProfile(tier, allowed_syscalls,
   writable_paths, egress, egress_allowlist, secret_scopes)` is the

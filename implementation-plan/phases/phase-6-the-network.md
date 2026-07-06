@@ -206,6 +206,18 @@ this plan doc and the task list updated after every iteration.
   verification. Reuses `_Fabric` for the A↔C envelope. Proof obligation
   `mesh_multihop_round_trip_verifies`; registry now 48. 2 tests.
 - **D1 (D6.7)** `connection_pool.py` — pooled/keepalive/reconnect transport. [RUNNABLE]
+  **Landed (v0):** `PooledSocketTransport` implements the `Transport`
+  ABC with **persistent, reused** connections (one TCP connection per
+  destination carries a length-prefixed frame stream), `SO_KEEPALIVE`,
+  **reconnect-with-exponential-backoff** on a dropped link, and a
+  **bounded LRU pool** (`max_connections`, evict+close the
+  least-recently-used) as backpressure against fd exhaustion. Same wire
+  framing as the other transports. **No proof obligation** — this is an
+  *operational* layer (how bytes move), not a safety invariant (what
+  they mean); a reliability feature earns no safety claim, by the same
+  honesty rule as `runtime_profile`. v0 serializes sends with one lock
+  (per-dest lock deferred). 5 tests (50 frames over 1 connection,
+  recovery after a dropped link, LRU eviction, validation).
 - **E1 (D6.8)** `docs/deployment-networking.md` — WAN frontier. [REFERENCE/DOCS]
 - **E2 (D6.9)** Phase 6 close. [DOCS]
 
