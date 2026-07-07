@@ -33,10 +33,14 @@ _NEWS_FIELDS = ("branch", "note", "recent_commits", "changed_files")
 
 
 class WorkspaceWatcher:
-    def __init__(self, watcher_id: str, registry: pathlib.Path) -> None:
+    def __init__(self, watcher_id: str, registry: pathlib.Path, *, transport=None) -> None:
         self.watcher_id = watcher_id
         self.registry = pathlib.Path(registry)
-        self.transport = LocalSocketTransport(source_address=f"watcher-{watcher_id}")
+        # transport defaults to plain loopback; inject a TlsSocketTransport to
+        # have the server authorize on the mTLS-verified SVID instead.
+        self.transport = transport or LocalSocketTransport(
+            source_address=f"watcher-{watcher_id}"
+        )
         self._id = 0
         self._last: dict[str, dict] = {}
 

@@ -120,12 +120,24 @@ class WorkspaceServer:
         return status
 
     # ---- authorization + access logging -------------------------------
-    def handle_request(self, requester: str, tool: str) -> dict:
+    def handle_request(
+        self, requester: str, tool: str, *, verified_identity: str | None = None
+    ) -> dict:
         """Authorize, log, and answer. Deny-by-default; every attempt is
-        recorded so the owner sees who watched."""
-        granted = requester in self.allow
+        recorded so the owner sees who watched.
+
+        ``verified_identity``, when supplied by a transport that
+        cryptographically authenticates the peer (the mTLS `TlsSocketTransport`
+        yields the peer SVID as ``Frame.source``), OVERRIDES the
+        self-asserted ``requester`` — so a watcher cannot spoof another's id
+        onto the allow list. On a plain loopback transport that does not
+        verify the sender, ``requester`` is self-asserted (a known boundary;
+        see README). Authorization and the audit log always key on the
+        effective (verified-if-present) identity."""
+        effective = verified_identity if verified_identity is not None else requester
+        granted = effective in self.allow
         self.access_log.append(
-            AccessEvent(watcher=requester, when=self._now(), granted=granted)
+            AccessEvent(watcher=effective, when=self._now(), granted=granted)
         )
         if not granted:
             return {"error": "not authorized for this workspace", "denied": True}
@@ -143,13 +155,28 @@ class WorkspaceServer:
 
 
 class WorkspaceServerNode:
-    """Wraps a WorkspaceServer with a mesh transport + serve loop."""
+    """Wraps a WorkspaceServer with a mesh transport + serve loop.
 
-    def __init__(self, server: WorkspaceServer, registry: pathlib.Path) -> None:
+    ``transport`` defaults to a plain loopback socket. Pass a
+    `TlsSocketTransport` and ``trust_transport_identity=True`` and the
+    server authorizes on the mTLS-verified peer SVID (``Frame.source``)
+    instead of the self-asserted requester — spoof-resistant."""
+
+    def __init__(
+        self,
+        server: WorkspaceServer,
+        registry: pathlib.Path,
+        *,
+        transport=None,
+        trust_transport_identity: bool = False,
+    ) -> None:
         self.server = server
         self.registry = pathlib.Path(registry)
         self.registry.mkdir(parents=True, exist_ok=True)
-        self.transport = LocalSocketTransport(source_address=f"ws-{server.name}")
+        self.transport = transport or LocalSocketTransport(
+            source_address=f"ws-{server.name}"
+        )
+        self.trust_transport_identity = trust_transport_identity
         self._stop = threading.Event()
         (self.registry / f"workspace-{server.name}.json").write_text(
             json.dumps({"name": server.name, "address": self.transport.address})
@@ -169,9 +196,13 @@ class WorkspaceServerNode:
                 continue
             if req.get("op") != "call":
                 continue
+            # When the transport verifies the peer (mTLS), frame.source IS the
+            # authenticated SVID — use it, ignoring any self-asserted claim.
+            verified = frame.source if self.trust_transport_identity else None
             resp = self.server.handle_request(
                 requester=req.get("requester", "(anonymous)"),
                 tool=req.get("tool", ""),
+                verified_identity=verified,
             )
             resp["id"] = req.get("id")
             reply_to = req.get("reply_to")
