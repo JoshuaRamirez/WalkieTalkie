@@ -64,7 +64,33 @@ Claude session passively — no context switch for either dev.
 | `workspace_server.py` | The read-only, workspace-bounded, allow-listed status server + access log. |
 | `watch.py` | The teammate's async poller — pulls status, emits a digest only on change. |
 | `demo_workspace.py` | Headless end-to-end demo. |
-| `test_workspace.py` | Visibility gating, allow/deny, bounded surface, access logging, delivery. |
+| `test_workspace.py` | Core behavior: visibility gating, allow/deny, bounded surface, access logging, delivery. |
+| `test_workspace_exhaustive.py` | Adversarial verification of every guarantee (32 tests) — see below. |
+
+## Exhaustively tested
+
+`test_workspace_exhaustive.py` attacks each privacy guarantee (a failing
+test = a broken promise):
+
+- **Bounded surface** — a battery of malicious tool names (`read_file`,
+  `exec`, `../../etc/passwd`, …) all rejected; the status object never
+  carries a content-bearing key; a committed secret never appears.
+- **Workspace boundary** — a server on one repo never surfaces another
+  repo's data; a non-git dir is graceful and reads no files.
+- **Visibility** — exact per-level key sets, strict monotonic containment,
+  and **no level ever exposes file contents** (checked with a planted
+  marker across all three levels).
+- **Deny-by-default** — empty allow-list denies everyone; only an *exact*
+  id matches (10 near-misses — case, whitespace, prefix — all denied).
+- **Transparency** — every access, granted *and* denied, is logged with an
+  ISO-UTC timestamp; repeated access accumulates.
+- **Identity binding** — a verified peer id overrides a spoofed claim, and
+  a **full mTLS round trip** proves a watcher cannot spoof another's id
+  (the server keys on the SVID from the handshake, not the request body).
+- **Off means invisible**, **change-only digests**, **malformed/concurrent/
+  timeout** delivery, and **git edge cases** (empty repo, deletes,
+  untracked) are all covered.
+
 
 ## Where identity comes from
 
