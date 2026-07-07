@@ -368,6 +368,18 @@ the approved plan.
   and **replay + forgery rejection** end-to-end; `demo_conversation.py`
   runs the whole path headless. **[RUNNABLE]** demo; loopback/single-
   host, no wire TLS/PKI (Phase 6). See `bridge/README.md`.
+- **MCP federation (runnable example)** (`integrations/mcp/federation/`):
+  turns MCP from point-to-point into a *network*. Many backend tool
+  servers live on the mesh and **announce** themselves; one **gateway**
+  (an MCP stdio server) discovers them, aggregates their tools into a
+  single namespaced `tools/list` (`<server>__<tool>`), and **routes**
+  each `tools/call` to the owning backend over the mesh. A client
+  configures **one** endpoint and reaches all servers; adding a backend
+  appears in the next list with no client change. `test_federation.py`
+  proves the federation logic + a real cross-process MCP stdio handshake;
+  `demo_federation.py` runs it headless. This is the *coordination-fabric*
+  view of the substrate (discovery + routing), independent of the
+  security layer that composes on top. See `federation/README.md`.
 - **Workload CA + X.509 SVID v0** (`envelope/workload_ca.py`, Phase 5
   Track A): `WorkloadCA` mints short-lived Ed25519 X.509 SVIDs binding
   a workload's key to its `spiffe://` id via a critical URI SAN,
