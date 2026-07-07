@@ -1,0 +1,4 @@
+# Runtime artifacts from running the workspace server in-tree.
+ws-mesh/
+registry/
+workspace-*.json

@@ -380,6 +380,19 @@ the approved plan.
   `demo_federation.py` runs it headless. This is the *coordination-fabric*
   view of the substrate (discovery + routing), independent of the
   security layer that composes on top. See `federation/README.md`.
+- **Workspace status server (runnable example)**
+  (`integrations/mcp/workspace/`): a dev stands up a read-only status
+  server for a feature workspace; a teammate follows progress
+  asynchronously (owner never interrupted). The privacy model is
+  **structural, not a promise**: the only exposed op is `get_status`
+  (no file/command/path tool exists), facts are derived only from git in
+  the one configured directory, **visibility levels** (summary / standard
+  / detailed — never file contents) cap exposure, watchers are
+  **deny-by-default allow-listed**, and every access (granted *and*
+  denied) is logged so watching is reciprocally transparent. `watch.py`
+  emits a digest only when status changes (no noise). `test_workspace.py`
+  pins the gating, allow/deny, bounded surface, and access logging;
+  `demo_workspace.py` runs the whole story. See `workspace/README.md`.
 - **Workload CA + X.509 SVID v0** (`envelope/workload_ca.py`, Phase 5
   Track A): `WorkloadCA` mints short-lived Ed25519 X.509 SVIDs binding
   a workload's key to its `spiffe://` id via a critical URI SAN,
