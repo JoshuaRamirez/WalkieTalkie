@@ -261,7 +261,7 @@ HTTP / WebSocket / gRPC / QUIC is Phase 5's call.
 ### Track C — Smoke test + runbook
 
 #### C1. End-to-end smoke test
-- `test_mcp_smoke.py` runs the host in-process and exercises:
+- `test_smoke.py` runs the host in-process and exercises:
   - happy path: low-risk tool call succeeds, reply verifies.
   - sad path 1: missing capability → `CAP_MISSING` / `EnvelopeVerificationError`.
   - sad path 2: tampered envelope → signature failure.
