@@ -39,6 +39,15 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["security-foundations/envelope", "security-foundations/integrations", "security-foundations/mesh"]
+# Ship library code only. Tests, demos, and dev-time generators are part of
+# the source tree (and run in CI) but must not land in the installed wheel,
+# where they would bloat the package and pollute the top-level import namespace.
+exclude = [
+  "**/test_*.py",
+  "**/demo_*.py",
+  "**/_regen_*.py",
+  "**/gen_bridge_config.py",
+]
 
 [tool.ruff]
 target-version = "py311"

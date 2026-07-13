@@ -1,5 +1,7 @@
 # WalkieTalkie
 
+[![test](https://github.com/JoshuaRamirez/WalkieTalkie/actions/workflows/test.yml/badge.svg)](https://github.com/JoshuaRamirez/WalkieTalkie/actions/workflows/test.yml)
+
 A **security substrate for peer-to-peer, MCP-style AI-agent workloads** — a
 safety kernel that lets autonomous agents discover each other, exchange
 requests and responses, and cooperate, with security constraints kept primary
