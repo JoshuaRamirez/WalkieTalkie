@@ -1,9 +1,15 @@
-# Security Foundations Bootstrap (Phase 0)
+# Security Foundations — Primitive Inventory
 
-This directory starts implementation of **Phase 0 — Security Foundations** from
-the approved plan.
+This directory is the WalkieTalkie **security substrate**: the in-process safety
+kernel (`envelope/`) and the loopback-bound network stack (`mesh/`,
+`integrations/`) built on it. It began as the Phase 0 bootstrap and now spans
+**Phases 0–6** — see the phase plans in
+[`../implementation-plan/phases/`](../implementation-plan/phases/), the honesty
+model in [`../README.md`](../README.md), and the deferred frontier in
+[`../DEFERRED.md`](../DEFERRED.md). This file is the full primitive inventory;
+each entry names the module that implements it.
 
-## Implemented in this bootstrap
+## Implemented
 - Envelope schema v0 as a JSON Schema artifact.
 - Canonicalization contract pinned to **RFC 8785 (JCS)** — see
   `envelope/canonicalization.md`.
@@ -609,28 +615,43 @@ compatibility policy, schema test vectors, and change control.
   non-Ed25519 key rejection, JCS semantics, cross-process replay, and
   trust-store loading.
 
-## Out of scope for this bootstrap
-- Production PKI and mTLS wiring.
-- Workload-identity-bound trust store (replaces `FileSystemTrustStore` in
-  Phase 1+ Track A2).
-- Policy engine integration.
-- Runtime hardening controls.
-- Tamper-evident distributed audit pipeline.
+## Out of scope
+
+The substrate is the in-process kernel plus a **loopback-bound** network stack.
+Deployment-layer enforcement — production PKI/HSM key custody, NAT/WAN traversal,
+kernel sandboxing, image-admission enforcement, and mesh scale — is the Phase 7
+frontier, catalogued with reasoning in [`../DEFERRED.md`](../DEFERRED.md) and
+mapped to its attach-points in
+[`../docs/deployment-networking.md`](../docs/deployment-networking.md).
+
+Several items once listed here as out of scope have since shipped: mutual TLS 1.3
+(`mesh/tls_transport.py`, Phase 6), the native decision-ID'd policy engine
+(`envelope/policy_engine.py`, Phase 5), and workload-identity SVIDs
+(`envelope/workload_ca.py` + `IssuerTrustStore`). What remains deferred is
+*enforcement that needs real infrastructure*, not substrate primitives.
 
 ## Running tests
 
-From the repository root:
+From the repository root, with dev extras installed (`pip install -e ".[dev]"`),
+run every suite — each package/example is its own import root:
 
 ```sh
-pip install -e ".[dev]"
-python -m unittest discover -s security-foundations/envelope -t security-foundations/envelope -v
+for r in \
+  security-foundations/envelope \
+  security-foundations/mesh \
+  security-foundations/integrations/mcp \
+  security-foundations/integrations/mcp/bridge \
+  security-foundations/integrations/mcp/federation \
+  security-foundations/integrations/mcp/workspace ; do
+  python -m unittest discover -s "$r" -t "$r"
+done
 ```
 
-CI runs the same install + `python -m compileall`, `ruff check`, and the
-unittest suite on Python 3.11 and 3.12 — see `.github/workflows/test.yml`.
+CI runs the same install + `python -m compileall`, `ruff check`, and all six
+suites on Python 3.11 and 3.12 — see `.github/workflows/test.yml`.
 
 ## Next implementation targets
-1. Wire verifier into network ingress middleware.
-2. Add an external distributed replay backend option (e.g., Redis) for
-   multi-node deployments.
-3. Swap `FileSystemTrustStore` for a workload-identity-bound trust store.
+
+The remaining frontier is deployment enforcement, not substrate primitives — the
+Phase 7 pool in [`../DEFERRED.md`](../DEFERRED.md) (kernel sandbox, image
+admission, NAT/WAN, PKI custody, mesh scale).
