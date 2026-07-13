@@ -5,12 +5,32 @@ build-backend = "hatchling.build"
 [project]
 name = "walkietalkie-envelope"
 version = "0.0.1"
-description = "WalkieTalkie Phase 0 envelope verifier and trust store reference implementation."
+description = "WalkieTalkie — a security substrate for peer-to-peer, MCP-style AI-agent workloads: signed-envelope kernel, capability/policy layer, and a mutual-TLS gossip/routing mesh."
+readme = "README.md"
 requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Joshua Ramirez" }]
+keywords = ["mcp", "security", "peer-to-peer", "ai-agents", "mtls", "gossip", "capability-security"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Topic :: Security",
+  "Topic :: System :: Networking",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
 dependencies = [
-  "cryptography>=41",
+  # 42 is the floor: the X.509 layer uses the *_utc accessors
+  # (not_valid_before_utc / not_valid_after_utc) added in cryptography 42.
+  "cryptography>=42",
   "jcs>=0.2.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/JoshuaRamirez/WalkieTalkie"
+Repository = "https://github.com/JoshuaRamirez/WalkieTalkie"
+Issues = "https://github.com/JoshuaRamirez/WalkieTalkie/issues"
 
 [project.optional-dependencies]
 dev = [
