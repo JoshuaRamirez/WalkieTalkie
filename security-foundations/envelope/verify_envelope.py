@@ -7,11 +7,18 @@ import hashlib
 import re
 import sqlite3
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Any, Callable
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any
 
 import jcs
+from audit import AuditSink
+from deny_reason import DenyReason
+
+if TYPE_CHECKING:
+    from capability_token import CapabilityClaims
+    from revocation_list import RevocationList
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -22,19 +29,38 @@ UUID_V7_RE = re.compile(
 )
 SPIFFE_ID_RE = re.compile(r"^spiffe://[a-zA-Z0-9._/-]+$")
 NONCE_RE = re.compile(r"^[A-Za-z0-9._:-]{16,256}$")
+KID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 HEX_SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 
 ALLOWED_ALGORITHMS = {"Ed25519"}
 
 
 class EnvelopeVerificationError(ValueError):
-    """Raised when envelope verification fails."""
+    """Raised when envelope verification fails.
+
+    Carries an optional :class:`~deny_reason.DenyReason` for machine-readable
+    matching alongside the human message. Sites that pre-date the deny-reason
+    contract may construct without ``reason``; ``reason_code`` then returns
+    the empty string. New raise sites MUST pass a ``DenyReason``.
+    """
+
+    def __init__(self, message: str, *, reason: DenyReason | None = None) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+    @property
+    def reason_code(self) -> str:
+        return self.reason.value if self.reason is not None else ""
 
 
 @dataclass(frozen=True)
 class VerificationConfig:
     max_clock_skew: timedelta = timedelta(seconds=60)
     max_envelope_ttl: timedelta = timedelta(minutes=5)
+    max_capability_ttl: timedelta = timedelta(minutes=5)
+
+
+DEFAULT_CONFIG = VerificationConfig()
 
 
 class ReplayCache:
@@ -68,18 +94,18 @@ class InMemoryReplayCache(ReplayCache):
             del self._entries[key]
 
     def seen(self, sender: str, nonce: str) -> bool:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         with self._lock:
             self._purge(now)
             return (sender, nonce) in self._entries
 
     def mark(self, sender: str, nonce: str, ttl: timedelta) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         with self._lock:
             self._entries[(sender, nonce)] = now + ttl
 
     def mark_if_new(self, sender: str, nonce: str, ttl: timedelta) -> bool:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         with self._lock:
             self._purge(now)
             key = (sender, nonce)
@@ -117,7 +143,7 @@ class SQLiteReplayCache(ReplayCache):
 
     @staticmethod
     def _now_epoch() -> int:
-        return int(datetime.now(timezone.utc).timestamp())
+        return int(datetime.now(UTC).timestamp())
 
     def _purge(self, conn: sqlite3.Connection) -> None:
         conn.execute("DELETE FROM replay_nonces WHERE expires_at <= ?", (self._now_epoch(),))
@@ -150,15 +176,19 @@ class SQLiteReplayCache(ReplayCache):
             return cur.rowcount == 1
 
 
-def _parse_rfc3339(value: str) -> datetime:
+def parse_rfc3339(value: str) -> datetime:
     candidate = value.replace("Z", "+00:00")
     try:
         dt = datetime.fromisoformat(candidate)
     except ValueError as exc:
-        raise EnvelopeVerificationError("invalid timestamp format") from exc
+        raise EnvelopeVerificationError(
+            "invalid timestamp format", reason=DenyReason.INVALID_TIMESTAMP
+        ) from exc
     if dt.tzinfo is None:
-        raise EnvelopeVerificationError("timestamp must include timezone")
-    return dt.astimezone(timezone.utc)
+        raise EnvelopeVerificationError(
+            "timestamp must include timezone", reason=DenyReason.INVALID_TIMESTAMP
+        )
+    return dt.astimezone(UTC)
 
 
 def _canonical_json(value: Any) -> bytes:
@@ -171,34 +201,45 @@ def _digest_payload(payload: Any) -> str:
 
 def canonicalize_envelope_for_signing(envelope: dict[str, Any]) -> bytes:
     if "signature" not in envelope:
-        raise EnvelopeVerificationError("missing signature")
+        raise EnvelopeVerificationError(
+            "missing signature", reason=DenyReason.MISSING_SIGNATURE
+        )
     unsigned = {k: v for k, v in envelope.items() if k != "signature"}
     return _canonical_json(unsigned)
 
 
-def _decode_base64url(signature: str) -> bytes:
-    if not isinstance(signature, str) or not signature:
-        raise EnvelopeVerificationError("signature must be non-empty base64url")
-    padded = signature + ("=" * ((4 - len(signature) % 4) % 4))
+def decode_base64url(value: str) -> bytes:
+    if not isinstance(value, str) or not value:
+        raise EnvelopeVerificationError(
+            "signature must be non-empty base64url",
+            reason=DenyReason.SIGNATURE_ENCODING_INVALID,
+        )
+    padded = value + ("=" * ((4 - len(value) % 4) % 4))
     try:
         return base64.urlsafe_b64decode(padded.encode("ascii"))
     except Exception as exc:
-        raise EnvelopeVerificationError("invalid signature encoding") from exc
+        raise EnvelopeVerificationError(
+            "invalid signature encoding", reason=DenyReason.SIGNATURE_ENCODING_INVALID
+        ) from exc
 
 
-def _load_ed25519_public_key(public_key_pem: bytes) -> Ed25519PublicKey:
+def load_ed25519_public_key(public_key_pem: bytes) -> Ed25519PublicKey:
     try:
         key = serialization.load_pem_public_key(public_key_pem)
     except (ValueError, TypeError) as exc:
-        raise EnvelopeVerificationError("invalid public key") from exc
+        raise EnvelopeVerificationError(
+            "invalid public key", reason=DenyReason.INVALID_PUBLIC_KEY
+        ) from exc
     if not isinstance(key, Ed25519PublicKey):
-        raise EnvelopeVerificationError("invalid public key")
+        raise EnvelopeVerificationError(
+            "invalid public key", reason=DenyReason.INVALID_PUBLIC_KEY
+        )
     return key
 
 
 def _verify_ed25519_signature(signing_input: bytes, signature: str, public_key_pem: bytes) -> bool:
-    sig_bytes = _decode_base64url(signature)
-    key = _load_ed25519_public_key(public_key_pem)
+    sig_bytes = decode_base64url(signature)
+    key = load_ed25519_public_key(public_key_pem)
     try:
         key.verify(sig_bytes, signing_input)
     except InvalidSignature:
@@ -208,87 +249,203 @@ def _verify_ed25519_signature(signing_input: bytes, signature: str, public_key_p
 
 def _validate_static_fields(envelope: dict[str, Any]) -> None:
     if envelope["version"] != "v0":
-        raise EnvelopeVerificationError("unsupported version")
+        raise EnvelopeVerificationError(
+            "unsupported version", reason=DenyReason.UNSUPPORTED_VERSION
+        )
 
     if not UUID_V7_RE.match(envelope["message_id"]):
-        raise EnvelopeVerificationError("message_id must be UUIDv7")
+        raise EnvelopeVerificationError(
+            "message_id must be UUIDv7", reason=DenyReason.INVALID_MESSAGE_ID
+        )
 
     if not SPIFFE_ID_RE.match(envelope["sender_spiffe_id"]):
-        raise EnvelopeVerificationError("invalid sender_spiffe_id")
+        raise EnvelopeVerificationError(
+            "invalid sender_spiffe_id", reason=DenyReason.INVALID_SENDER_SPIFFE_ID
+        )
 
     if not SPIFFE_ID_RE.match(envelope["recipient_spiffe_id"]):
-        raise EnvelopeVerificationError("invalid recipient_spiffe_id")
+        raise EnvelopeVerificationError(
+            "invalid recipient_spiffe_id", reason=DenyReason.INVALID_RECIPIENT_SPIFFE_ID
+        )
 
     if not NONCE_RE.match(envelope["nonce"]):
-        raise EnvelopeVerificationError("invalid nonce format")
+        raise EnvelopeVerificationError(
+            "invalid nonce format", reason=DenyReason.INVALID_NONCE
+        )
+
+    if not isinstance(envelope["kid"], str) or not KID_RE.match(envelope["kid"]):
+        raise EnvelopeVerificationError(
+            "invalid kid format", reason=DenyReason.INVALID_KID
+        )
 
     if not HEX_SHA256_RE.match(envelope["payload_digest"]):
-        raise EnvelopeVerificationError("payload_digest must be hex sha256")
+        raise EnvelopeVerificationError(
+            "payload_digest must be hex sha256",
+            reason=DenyReason.INVALID_PAYLOAD_DIGEST,
+        )
 
     if envelope["alg"] not in ALLOWED_ALGORITHMS:
-        raise EnvelopeVerificationError("algorithm not allowed")
+        raise EnvelopeVerificationError(
+            "algorithm not allowed", reason=DenyReason.DISALLOWED_ALGORITHM
+        )
 
 
 def verify_envelope(
     envelope: dict[str, Any],
     *,
     key_lookup: Callable[[str], bytes],
+    issuer_lookup: Callable[[str, str], bytes],
     replay_cache: ReplayCache,
-    config: VerificationConfig = VerificationConfig(),
+    config: VerificationConfig = DEFAULT_CONFIG,
     now: datetime | None = None,
-) -> None:
-    required = {
-        "version",
-        "message_id",
-        "sender_spiffe_id",
-        "recipient_spiffe_id",
-        "issued_at",
-        "expires_at",
-        "nonce",
-        "capability_token",
-        "purpose_of_use",
-        "kid",
-        "alg",
-        "payload",
-        "payload_digest",
-        "signature",
+    audit_sink: AuditSink | None = None,
+    revocation_list: RevocationList | None = None,
+) -> CapabilityClaims:
+    # Deferred to avoid circular import (capability_token imports from this module).
+    from capability_token import verify_capability_token
+
+    audit_ctx = {
+        "message_id": envelope.get("message_id", "") if isinstance(envelope, dict) else "",
+        "sender": envelope.get("sender_spiffe_id", "") if isinstance(envelope, dict) else "",
+        "recipient": envelope.get("recipient_spiffe_id", "") if isinstance(envelope, dict) else "",
+        "envelope_kid": envelope.get("kid", "") if isinstance(envelope, dict) else "",
+        "issuer_iss": "",
+        "issuer_kid": "",
     }
 
-    missing = sorted(required - set(envelope))
-    if missing:
-        raise EnvelopeVerificationError(f"missing required fields: {','.join(missing)}")
+    def _emit(outcome: str, reason: str, *, reason_code: str = "") -> None:
+        if audit_sink is not None:
+            audit_sink.record(
+                event_type="envelope.verify",
+                outcome=outcome,
+                reason=reason,
+                reason_code=reason_code,
+                artifact_version="envelope/v0",
+                **audit_ctx,
+            )
 
-    _validate_static_fields(envelope)
+    def _emit_cap(
+        outcome: str,
+        reason: str,
+        *,
+        reason_code: str = "",
+        cap_iss: str = "",
+        cap_kid: str = "",
+    ) -> None:
+        if audit_sink is not None:
+            audit_sink.record(
+                event_type="capability.verify",
+                outcome=outcome,
+                reason=reason,
+                reason_code=reason_code,
+                artifact_version="wt-cap+jwt",
+                message_id=audit_ctx["message_id"],
+                sender=audit_ctx["sender"],
+                recipient=audit_ctx["recipient"],
+                envelope_kid=audit_ctx["envelope_kid"],
+                issuer_iss=cap_iss,
+                issuer_kid=cap_kid,
+            )
 
-    issued_at = _parse_rfc3339(envelope["issued_at"])
-    expires_at = _parse_rfc3339(envelope["expires_at"])
-    current = now.astimezone(timezone.utc) if now else datetime.now(timezone.utc)
+    try:
+        required = {
+            "version",
+            "message_id",
+            "sender_spiffe_id",
+            "recipient_spiffe_id",
+            "issued_at",
+            "expires_at",
+            "nonce",
+            "capability_token",
+            "purpose_of_use",
+            "kid",
+            "alg",
+            "payload",
+            "payload_digest",
+            "signature",
+        }
 
-    if issued_at - current > config.max_clock_skew:
-        raise EnvelopeVerificationError("issued_at in future beyond skew")
-    if current - expires_at > config.max_clock_skew:
-        raise EnvelopeVerificationError("envelope expired")
-    if expires_at <= issued_at:
-        raise EnvelopeVerificationError("invalid validity window")
-    if expires_at - issued_at > config.max_envelope_ttl:
-        raise EnvelopeVerificationError("envelope ttl exceeds maximum")
+        missing = sorted(required - set(envelope))
+        if missing:
+            raise EnvelopeVerificationError(
+                f"missing required fields: {','.join(missing)}",
+                reason=DenyReason.MISSING_REQUIRED_FIELD,
+            )
 
-    computed_digest = _digest_payload(envelope["payload"])
-    if computed_digest != envelope["payload_digest"]:
-        raise EnvelopeVerificationError("payload digest mismatch")
+        _validate_static_fields(envelope)
 
-    signing_input = canonicalize_envelope_for_signing(envelope)
-    public_key_pem = key_lookup(envelope["kid"])
+        issued_at = parse_rfc3339(envelope["issued_at"])
+        expires_at = parse_rfc3339(envelope["expires_at"])
+        current = now.astimezone(UTC) if now else datetime.now(UTC)
 
-    if envelope["alg"] == "Ed25519" and not _verify_ed25519_signature(
-        signing_input,
-        envelope["signature"],
-        public_key_pem,
-    ):
-        raise EnvelopeVerificationError("signature invalid")
+        if issued_at - current > config.max_clock_skew:
+            raise EnvelopeVerificationError(
+                "issued_at in future beyond skew", reason=DenyReason.ISSUED_AT_IN_FUTURE
+            )
+        if current - expires_at > config.max_clock_skew:
+            raise EnvelopeVerificationError(
+                "envelope expired", reason=DenyReason.ENVELOPE_EXPIRED
+            )
+        if expires_at <= issued_at:
+            raise EnvelopeVerificationError(
+                "invalid validity window", reason=DenyReason.INVALID_VALIDITY_WINDOW
+            )
+        if expires_at - issued_at > config.max_envelope_ttl:
+            raise EnvelopeVerificationError(
+                "envelope ttl exceeds maximum",
+                reason=DenyReason.ENVELOPE_TTL_EXCEEDED,
+            )
 
-    sender = envelope["sender_spiffe_id"]
-    nonce = envelope["nonce"]
-    ttl = max(expires_at - current, timedelta(seconds=0))
-    if not replay_cache.mark_if_new(sender, nonce, ttl):
-        raise EnvelopeVerificationError("replay detected")
+        computed_digest = _digest_payload(envelope["payload"])
+        if computed_digest != envelope["payload_digest"]:
+            raise EnvelopeVerificationError(
+                "payload digest mismatch", reason=DenyReason.PAYLOAD_DIGEST_MISMATCH
+            )
+
+        signing_input = canonicalize_envelope_for_signing(envelope)
+        public_key_pem = key_lookup(envelope["kid"])
+
+        if envelope["alg"] == "Ed25519" and not _verify_ed25519_signature(
+            signing_input,
+            envelope["signature"],
+            public_key_pem,
+        ):
+            raise EnvelopeVerificationError(
+                "signature invalid", reason=DenyReason.SIGNATURE_INVALID
+            )
+
+        try:
+            claims = verify_capability_token(
+                envelope["capability_token"],
+                envelope=envelope,
+                issuer_lookup=issuer_lookup,
+                current=current,
+                max_clock_skew=config.max_clock_skew,
+                max_capability_ttl=config.max_capability_ttl,
+                revocation_list=revocation_list,
+            )
+        except EnvelopeVerificationError as cap_exc:
+            _emit_cap("deny", str(cap_exc), reason_code=cap_exc.reason_code)
+            raise
+        _emit_cap(
+            "allow", "ok",
+            reason_code="ok",
+            cap_iss=claims.iss,
+            cap_kid=claims.issuer_kid,
+        )
+        audit_ctx["issuer_iss"] = claims.iss
+        audit_ctx["issuer_kid"] = claims.issuer_kid
+
+        sender = envelope["sender_spiffe_id"]
+        nonce = envelope["nonce"]
+        ttl = max(expires_at - current, timedelta(seconds=0))
+        if not replay_cache.mark_if_new(sender, nonce, ttl):
+            raise EnvelopeVerificationError(
+                "replay detected", reason=DenyReason.REPLAY_DETECTED
+            )
+    except EnvelopeVerificationError as exc:
+        _emit("deny", str(exc), reason_code=exc.reason_code)
+        raise
+
+    _emit("allow", "ok", reason_code="ok")
+    return claims

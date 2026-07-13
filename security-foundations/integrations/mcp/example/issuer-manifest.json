@@ -1,0 +1,9 @@
+{
+  "keys": [
+    {
+      "iss": "spiffe://mesh.example/ns-iss/cap-issuer-1",
+      "kid": "issuer-kid-1",
+      "pem_path": "issuer-pub.pem"
+    }
+  ]
+}

@@ -3,7 +3,7 @@ import pathlib
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -113,11 +113,24 @@ class FileSystemTrustStoreTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "escapes manifest directory"):
                 FileSystemTrustStore.from_manifest(manifest)
 
+    def test_manifest_rejects_invalid_not_after(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = pathlib.Path(tmp)
+            (tmp_path / "kid-1.pem").write_bytes(_ed25519_pem())
+            manifest = tmp_path / "manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    {"keys": [{"kid": "kid-1", "pem_path": "kid-1.pem", "not_after": "not-a-date"}]}
+                )
+            )
+            with self.assertRaisesRegex(ValueError, "invalid not_after"):
+                FileSystemTrustStore.from_manifest(manifest)
+
     def test_expired_key_raises_at_lookup(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = pathlib.Path(tmp)
             (tmp_path / "kid-1.pem").write_bytes(_ed25519_pem())
-            past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
+            past = (datetime.now(UTC) - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
             manifest = tmp_path / "manifest.json"
             manifest.write_text(
                 json.dumps(

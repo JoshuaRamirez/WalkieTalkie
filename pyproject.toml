@@ -18,12 +18,12 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["security-foundations/envelope"]
+packages = ["security-foundations/envelope", "security-foundations/integrations", "security-foundations/mesh"]
 
 [tool.ruff]
 target-version = "py311"
 line-length = 110
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I"]
+select = ["E", "F", "W", "I", "UP", "B"]
 ignore = []

@@ -1,0 +1,10 @@
+# Runtime artifacts from running the bridge in-tree. Real configs live
+# outside the repo (e.g. ~/mesh-config); these patterns keep accidental
+# in-tree runs from committing keys / mailboxes.
+mesh-config/
+*.private.json
+trust.json
+rt-*.addr
+inbox-*.jsonl
+inbox-*.lock
+audit-*.jsonl

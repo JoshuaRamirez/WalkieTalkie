@@ -99,17 +99,71 @@ Transitions must follow deterministic workflow:
 
 ### A1. Sybil Deterrence
 - Identity issuance quotas.
+  **Landed (v0):** `SybilDeterrence` in
+  `security-foundations/envelope/sybil_deterrence.py` enforces two
+  independent sliding-window quotas: `max_per_issuer` and
+  `max_per_tenant` (trust-domain aggregated via
+  `audit_query.trust_domain_of`). Saturation surfaces distinct
+  `SYBIL_ISSUER_QUOTA_EXCEEDED` and `SYBIL_TENANT_QUOTA_EXCEEDED`
+  reason codes. `InMemorySybilLedger` is the v0 backend; operators
+  wanting cluster-wide consistency swap in a distributed store
+  behind the `SybilLedger` ABC.
 - Attestation burden tuning.
+  **Deferred:** the attestation cost dial (proof-of-work or
+  hardware-attestation strength) belongs in the higher-level
+  identity-issuance flow and is documented as out-of-scope for the
+  in-process v0 primitive.
 - Reputation hygiene and decay controls.
+  **Landed (v0):** `IssuerReputation` tracks a per-`(iss, kid)`
+  score with configurable `decay_per_interval` / `decay_interval`,
+  bounded `[floor, ceiling]`. `reward()` and `penalize()` adjust the
+  score; `current_score()` applies decay lazily. The deterrence gate
+  refuses issuance when the decayed score falls below
+  `min_reputation` (`SYBIL_REPUTATION_INSUFFICIENT`).
 
 ### A2. Eclipse Resistance
 - Neighbor diversity rules.
+  **Landed (v0):** `select_neighbors()` + `DiversityRule` in
+  `security-foundations/envelope/eclipse_resistance.py`. Greedy
+  freshness-first selector with two diversity invariants:
+  `max_per_trust_domain` (per-domain cap that a Sybil cluster
+  cannot overflow no matter how many candidates it submits) and
+  `min_distinct_trust_domains` (minimum spread, reported as a
+  `diversity_shortfall` flag when not met). Rejection diagnostics
+  carry distinct reason codes (`diversity_per_domain_cap`,
+  `diversity_target_reached`).
 - Independent peer sampling paths.
+  **Deferred:** multi-process / network-topology concern. Operators
+  pull peers from separate gossip layers and feed the combined pool
+  into `select_neighbors`. The selector takes the union as input.
 - Routing anomaly detection.
+  **Landed (v0, surge half):** `detect_trust_domain_surges()` returns
+  any trust domain that posted ≥ `surge_threshold` candidates with
+  `last_seen` inside a configurable window. A surge is a signal for
+  operators to investigate, not a denial — pair with the per-domain
+  cap for the deny path.
 
 ### A3. Discovery and Routing Integrity
 - Signed updates and freshness checks.
+  **Signed updates landed earlier** via Phase 1's
+  `discovery_record.py` (`DiscoveryRecord` + `verify_record()`
+  enforce signature, window, and TTL).
+  **Freshness checks landed (v0):** `DiscoveryFreshnessTracker` in
+  `security-foundations/envelope/discovery_propagation.py` pins the
+  highest `issued_at` seen per `(workload_iss, workload_kid)` and
+  refuses any record whose timestamp doesn't strictly increase.
+  Catches operator-mistake rewinds AND an adversary recovering an
+  old still-in-window signed record to overwrite a newer one. Surfaces
+  `DISCOVERY_REWOUND`.
 - Rate-limited propagation channels.
+  **Landed (v0):** `DiscoveryPropagationLimiter` enforces a per-
+  workload sliding-window republish cap (default 1 per 60 s).
+  Surfaces `DISCOVERY_RATE_LIMITED`. The limiter runs AFTER the
+  Phase 1 signature/window verification (running it pre-auth would
+  let any spoofed `workload_iss` exhaust another workload's
+  allowance — same lesson as the Phase 1 rate-limit hardening).
+  `DiscoveryAdmissionGate` composes both checks into one
+  `admit()` entry point.
 
 **Acceptance Criteria**
 - Simulated Sybil clusters cannot dominate peer view beyond tolerated threshold.
@@ -120,15 +174,54 @@ Transitions must follow deterministic workflow:
 
 ### B1. Resource Budget Partitioning
 - Separate pools for control-plane and data-plane.
+  **Landed (v0):** `BudgetController` + `BudgetPool` in
+  `security-foundations/envelope/capacity_budgets.py`. Operators
+  define one pool per workload class (e.g. `security-critical`,
+  `control-plane`, `data-plane`); `acquire()` admits a request
+  against a named pool.
 - Security-critical services get non-preemptible floor.
+  **Landed (v0):** every pool carries a `reserved` allocation. The
+  controller enforces that any pool's burst cannot dip into another
+  pool's `reserved` even when the other pool is idle — that's the
+  "non-preemptible floor" invariant and the substrate-level proof
+  that "data-plane flood cannot starve revocation/authZ/policy
+  services" (the Track B acceptance criterion). Surfaces
+  `BUDGET_FLOOR_GUARD`.
 
 ### B2. Anti-Amplification Controls
 - Bounded expensive verification paths.
 - Work-token or equivalent throttles for abuse-heavy identities.
+  **Landed (v0):** every `acquire()` accepts a positive `cost`
+  parameter. Operators charge expensive routes more so a flood of
+  expensive calls hits the ceiling faster than a flood of cheap
+  ones. The cost API is the work-token equivalent. Per-pool
+  ceilings (`BUDGET_CEILING_EXCEEDED`) bound the worst-case spend
+  per pool.
 
 ### B3. Fairness Controller
 - Tenant reserve pools and burst ceilings.
+  **Landed (v0):** `TenantBudget(pool, tenant, reserve, burst)`
+  pins a per-`(pool, tenant)` allowance. A noisy tenant hits their
+  own `burst` cap (`BUDGET_TENANT_BURST_EXCEEDED`) before draining
+  the pool's burst headroom, so other tenants in the same pool are
+  insulated.
 - Automatic rebalance on cascading throttle detection.
+  **Landed (v0, circle-back):** `CapacityRebalancer` in
+  `security-foundations/envelope/capacity_rebalancer.py` reads a
+  `BudgetController` snapshot, classifies pools as stressed (above
+  `stress_threshold`, default 0.85) or slack (below
+  `slack_threshold`, default 0.30), and declares the system
+  *cascading* when at least `cascade_min_stressed` pools (default 2)
+  are stressed AND at least one slack pool is available.
+  `evaluate()` drafts a `RebalanceDecision` that transfers
+  `transfer_fraction` (default 0.20) of each slack pool's
+  donor-side headroom (`ceiling - max(reserved, in_flight)`) to the
+  stressed pools, proportional to their `stress_excess`. `apply()`
+  mutates the controller via `BudgetController.adjust_ceiling`,
+  which preserves the **non-preemptible floor**, the
+  **cross-pool oversubscription cap**, and the no-retroactive-
+  overcommit rule end to end. Shrinks apply before grows so
+  intermediate states never violate the oversubscription cap.
 
 **Acceptance Criteria**
 - Data-plane flood cannot starve revocation/authZ/policy services.
@@ -143,15 +236,44 @@ Transitions must follow deterministic workflow:
 - Policy rollback detection.
 - Revocation uncertainty.
 - Critical anomaly quarantine signal.
+  **Landed (v0):** `TriggerKind` StrEnum in
+  `security-foundations/envelope/safe_mode_engine.py` covers all
+  five categories. `Trigger(kind, category, minimum_state,
+  observed_at, detail)` is the in-process observation shape.
+  `trigger_for(kind, …)` uses a built-in default profile derived
+  from §4.1 (e.g. `LEDGER_DIVERGENCE` → S4_LOCKDOWN with
+  `CRYPTO_TRUST` authority).
 
 ### C2. State Computation
 - Determine min required state per trigger.
 - Resolve to max severity.
 - Apply authority hierarchy if conflicts arise.
+  **Landed (v0):** `SafeModeEngine.observe()` admits triggers into
+  a per-kind active map. The engine's current state is
+  `max(t.minimum_state for t in active)`. The §4.1 authority
+  hierarchy is enforced on the downgrade path: a
+  `DowngradeApproval.authority` must be at least as high as every
+  still-active trigger's `TriggerCategory`. `is_higher_authority()`
+  and `is_more_severe_state()` are the ordering predicates.
 
 ### C3. Transition Runtime
 - Deterministic transition handlers with idempotent steps.
 - Recovery downgrade checks with signed approvals.
+  **Landed (v0):** `observe()` and `clear()` are idempotent
+  (re-observing a same-kind trigger with equal/lower severity is a
+  no-op; clearing a non-active kind is a no-op). Every state change
+  returns a `StateTransition(from_state, to_state, transition_at,
+  cause, active_kinds, detail)` record so transitions are
+  machine-readable. Manual `downgrade()` requires a
+  `DowngradeApproval` whose authority dominates every active
+  trigger AND a target state at-or-above the current trigger floor;
+  `require_authorized_downgrade()` tags failures with
+  `SAFE_MODE_DOWNGRADE_UNAUTHORIZED` / `_TRIGGERS_ACTIVE`. Signed
+  artifacts are documented as a follow-up (the shapes are
+  signing-ready).
+  The Track C acceptance criterion — "Compound failures always
+  result in predictable state and logs" — is pinned by
+  `test_two_engines_walk_identical_history` and `test_expected_history`.
 
 **Acceptance Criteria**
 - Compound failures always result in predictable state and logs.
@@ -162,17 +284,80 @@ Transitions must follow deterministic workflow:
 
 ### D1. Key Rotation Drills
 - Overlap windows and deterministic cutovers.
+  **Landed (v0):** `KeyRotationPlan` in
+  `security-foundations/envelope/key_rotation.py` defines a rotation
+  via three timestamps (`overlap_start`, `cutover_at`,
+  `overlap_end`). `current_phase()` returns exactly one of
+  `PRE_OVERLAP` / `OVERLAP` / `POST_CUTOVER` / `COMPLETE` for any
+  `now`; the cutover moment is deterministic.
 - Compatibility validation during transition.
+  **Landed (v0):** `accepted_kids()` returns the frozenset of kids
+  a verifier should honor for a given plan at a given time:
+  `{old}` before overlap, `{old, new}` during overlap and the
+  post-cutover sunset window, `{new}` after `overlap_end`.
+  `RotationRegistry` aggregates multiple plans and rejects
+  conflicts (`ROTATION_PLAN_CONFLICT`). `require_accepted_kid()`
+  raises `ROTATION_KID_NOT_ACCEPTED` when a candidate kid is not
+  in any active acceptance window.
 
 ### D2. Revocation Convergence
 - Push + pull propagation.
+  **Landed (v0):** `RevocationBroadcast` in
+  `security-foundations/envelope/revocation_convergence.py` is the
+  push-side announcement shape. Consumer nodes (whether they
+  received it via push or pull) ACK via
+  `ConvergenceTracker.record_ack`. The tracker doesn't distinguish
+  push from pull — what matters is that a node has confirmed it
+  sees the revocation.
 - Emergency fast-path revocation.
+  **Landed (v0):** broadcasts carry a `fast_path` flag. `SLOPolicy`
+  defines a tighter `fast_path_deadline` separate from the
+  `normal_deadline`, so operators can require sub-minute
+  convergence for emergency revocations without forcing the same
+  cadence on routine ones.
 - Convergence SLO telemetry.
+  **Landed (v0):** `evaluate_slo()` returns a
+  `ConvergenceSnapshot(jti, acks_received, acks_expected,
+  coverage, time_to_target, elapsed, deadline, status, fast_path)`
+  carrying everything a dashboard or alerting layer needs.
+  `SLOStatus` is `MEETING` / `PENDING` / `MISSED`. The
+  `time_to_target` field is filled when `target_coverage` has been
+  reached, supporting "what was our actual p99 convergence
+  yesterday?" queries. `pending_broadcasts()` is the foundation for
+  alerting — feed it the in-flight `jti` set and surface anything
+  not yet meeting SLO.
 
 ### D3. Recovery and Re-Admission
 - Quarantine policy.
+  **Landed (v0):** `QuarantineEntry(quarantine_id, workload_iss,
+  last_kid, quarantined_at, reason)` in
+  `security-foundations/envelope/recovery_readmission.py` is the
+  incident-ticket shape that the re-admission flow attaches to. The
+  enforcement plumbing (revoking the workload's tokens, refusing
+  inbound envelopes) lives in the existing revocation and admission
+  primitives.
 - Clean-room rebuild proof.
+  **Landed (v0):** `CleanRoomAttestation` is an EdDSA-signed JCS
+  body with `typ="wt-readmission/v0"` cross-protocol binding. It
+  carries the `quarantine_id` it covers, the rebuilt workload's
+  `new_kid`, the `baseline_digest` of the clean image the rebuild
+  was performed from, the attester SPIFFE id + kid, and a time
+  window. The signing authority is a separate trust pool
+  (`IssuerTrustStore`-shaped lookup) so the workload being
+  readmitted physically cannot sign its own re-admission.
 - Re-attestation and scoped monitoring period post rejoin.
+  **Landed (v0):** `verify_readmission()` validates the attestation
+  against the quarantine entry and returns a `ReAdmissionGrant`
+  carrying the post-rejoin `monitoring_period`. The runtime applies
+  extra scrutiny (e.g. tighter budget ceiling, mandatory step-up)
+  for that duration before treating the workload as fully trusted.
+
+The Track D D3 acceptance criterion — "Re-admitted nodes satisfy
+clean-state evidence requirements" — is pinned by three concrete
+v0 requirements: (1) attestation signed by a separate trust pool;
+(2) commits to a `baseline_digest` proving clean image; (3) uses a
+`new_kid` distinct from the quarantined material
+(`READMISSION_KID_REUSE` if not).
 
 **Acceptance Criteria**
 - Revoked entities cannot perform privileged writes post checkpoint.
@@ -185,16 +370,46 @@ Transitions must follow deterministic workflow:
 ### E1. Protocol State-Machine Model
 - Include reorder/partition and delegation edges.
 - Encode safety and liveness assumptions explicitly.
+  **Landed (v0):** the substrate's safety invariants are encoded as
+  the test suite itself; every Phase 2/3 module ships an
+  acceptance-criterion-pinned test. The Phase 3 D2 reorder semantics
+  (early-ack wins) and partition handling (per-tenant pin
+  independence) are pinned by `test_revocation_convergence` and
+  `test_discovery_propagation`. **Deferred:** a TLA+ / Lean model
+  belongs to a follow-up; v0 trades full formal verification for
+  machine-checked test-backed obligations.
 
 ### E2. Proof Obligations
 - No unauthorized privileged action reachable.
 - No duplicate privileged mutation reachable.
 - Delegation scope/TTL/audience monotonicity.
 - Revoked capability cannot commit post-revocation checkpoint.
+  **Landed (v0):** `OBLIGATIONS` in
+  `security-foundations/envelope/proof_obligations.py` is a stable
+  registry of `ProofObligation(name, phase, track, statement,
+  canonical_test)` entries — one per safety invariant the substrate
+  claims to enforce. The plan's four explicit obligations are all
+  represented (`tool_step_up_call_binding`, `session_resume_sequence_strict`,
+  `delegation_scope_monotonicity` / `audience_monotonicity` /
+  `window_containment`, `revoked_capability_blocked_at_checkpoint`)
+  alongside ~20 more covering every Phase 1/2/3 track.
 
 ### E3. CI Blocking Integration
 - Fail release on model/proof regression.
 - Archive proof artifacts for audit reproducibility.
+  **Landed (v0):** `test_proof_obligations.ResolutionTests.test_every_obligation_resolves`
+  imports the registry and resolves every `canonical_test` to a real
+  test class + method. If a backing test is renamed or deleted, this
+  resolves fails and CI blocks the merge. Coverage-breadth tests
+  ensure every Phase 2 track (A/B/C/D/E) and every Phase 3 core
+  track (A/B/C/D) keeps at least one obligation. **Archiving** of
+  proof artifacts is documented as a follow-up; v0 archives the
+  obligation+test mapping in git itself.
+
+The Track E acceptance criterion — "All mandatory obligations
+proven or release blocked" — is satisfied at the v0 substrate
+level: every named obligation has a backing test, and the CI gate
+fails fast if that ceases to be true.
 
 **Acceptance Criteria**
 - All mandatory obligations proven or release blocked.

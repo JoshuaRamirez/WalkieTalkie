@@ -81,12 +81,30 @@ Phase 2 target: stable A1, controlled pilot for A2.
 
 ### A1. Delegation Data Model
 - Define chain IDs, hop index, parent reference, and signed receipt schema.
+  **Landed (v0):** `DelegationReceipt` in
+  `security-foundations/envelope/delegation_receipt.py` carries
+  `chain_id` (UUIDv7), `hop_index`, `parent_jti`, `delegator_iss`/
+  `delegator_kid`, `delegate_iss`, `scope`, `aud`, `iat`/`nbf`/`exp`,
+  `jti`, and a base64url EdDSA signature over the JCS-canonicalized
+  body with `typ: "wt-delegation/v0"`.
 - Standardize clock and expiry semantics across hops.
+  **Landed (v0):** NumericDate `iat`/`nbf`/`exp` per JWT; the
+  validator enforces `iat <= nbf < exp` and the same skew tolerance
+  used by the capability validator.
 
 ### A2. Delegation Validator
 - Validate depth limits.
+  **Landed (v0):** `DelegationVerificationConfig.max_chain_depth`
+  defaults to 3; `hop_index >= max_chain_depth` raises
+  `DelegationError(DELEGATION_DEPTH_EXCEEDED)`.
 - Verify monotonic scope and TTL constraints.
+  **Landed (v0):** Child scope MUST equal parent scope
+  (`DELEGATION_SCOPE_ESCALATION`); child `[iat, exp]` MUST be contained
+  within parent's window (`DELEGATION_TTL_ESCALATION`).
 - Enforce audience continuity constraints.
+  **Landed (v0):** Child aud MUST equal parent aud
+  (`DELEGATION_AUDIENCE_DRIFT`); child `delegator_iss` MUST equal
+  parent `sub` (`DELEGATION_PARENT_MISMATCH`).
 
 ### A3. Non-Escalation Proof Tests
 - Property-based tests for random delegation graphs.
@@ -94,7 +112,14 @@ Phase 2 target: stable A1, controlled pilot for A2.
 
 **Acceptance Criteria**
 - No test case can produce broader privilege at child hop.
+  **Landed (deterministic v0 tests):** explicit cases for scope
+  divergence (both directions), audience drift, TTL extension, hop
+  reordering, parent-jti mismatch, and depth overrun all raise
+  `DelegationError` with the matching `DenyReason` family. A3's
+  property/fuzz tests remain a follow-up.
 - Invalid chain receipt always denies execution.
+  **Landed:** the validator raises on every invariant breach; the
+  consumer never sees a partial-success return value.
 
 ---
 
@@ -102,15 +127,53 @@ Phase 2 target: stable A1, controlled pilot for A2.
 
 ### B1. Data Classification Pipeline
 - Class labels (public/internal/confidential/restricted).
+  **Landed (v0):** `DataClass` StrEnum in
+  `security-foundations/envelope/data_classification.py` with the four
+  required labels and a strict ordering for "more restrictive" comparisons.
 - Metadata binding and immutable lineage tags.
+  **Landed (v0):** `ClassifiedData` (frozen dataclass) carries a
+  `data_digest`, a `DataClass` label, an immutable tuple of
+  `LineageTag` entries, and an immutable tuple-of-pairs metadata bag.
+  `classify()` / `derive()` / `combine()` are the only ways to construct
+  multi-link lineages. `derive()` rejects class demotion; `combine()`
+  takes the max class. Each lineage tag commits to its parent's
+  `chain_hash` so tampering anywhere in the lineage is detectable by
+  re-derivation.
 
 ### B2. Purpose-of-Use Policy Enforcement
 - Retrieval denied unless class + purpose + identity align.
+  **Landed (v0):** `AllowlistRetrievalPolicy` in
+  `security-foundations/envelope/retrieval_policy.py` evaluates a
+  closed tuple of `RetrievalRule(caller_iss, purpose_of_use, max_class)`
+  in declaration order; the first matching `(caller_iss, purpose_of_use)`
+  decides, and `data.data_class` must be at most as restrictive as the
+  rule's `max_class`. Denials carry stable `DenyReason` codes
+  (`RETRIEVAL_NO_RULE_MATCH`, `RETRIEVAL_CLASS_EXCEEDS_RULE`).
+  `require_retrieval()` raises `RetrievalError` carrying the decision.
 - Cross-tenant retrieval denied by default.
+  **Landed (v0):** the policy carries a `CrossTenantRetrieval` dial
+  defaulting to `DENY`. Origin tenant is derived from the trust-domain
+  component of the first lineage tag's `actor_iss`; when caller and
+  origin trust domains differ, retrieval is rejected with
+  `RETRIEVAL_CROSS_TENANT` regardless of any matching rule. Operators
+  must explicitly set `cross_tenant=ALLOW` to opt in.
 
 ### B3. Prompt Assembly Minimization
 - Least-sensitive-first context composition.
+  **Landed (v0):** `compose()` in
+  `security-foundations/envelope/prompt_assembly.py` sorts surviving
+  candidates by `DataClass` rank ascending (PUBLIC → RESTRICTED), with
+  `source_label` breaking ties for deterministic output.
 - Max context sensitivity budget per action class.
+  **Landed (v0):** `ActionBudget(action, max_class, max_items)` caps both
+  the most-restrictive class allowed in the assembled prompt and the
+  item count. Candidates above the class ceiling are dropped with
+  `reason_code="class_exceeds_budget"`; survivors past `max_items` are
+  dropped with `reason_code="items_over_budget"`. Every `IncludedItem`
+  carries `source_label`, `data_class`, and `trust_label` (the
+  trust-domain of the first lineage tag's `actor_iss`), satisfying the
+  "prompt assembly logs include source sensitivity and trust labels"
+  acceptance criterion.
 
 **Acceptance Criteria**
 - Unauthorized retrieval attempts are denied with explicit policy reason.
@@ -122,15 +185,62 @@ Phase 2 target: stable A1, controlled pilot for A2.
 
 ### C1. Output Scanning
 - Deterministic secret patterns + ML classifiers.
+  **Landed (v0, deterministic half):** `PatternRegistry` + `scan()` in
+  `security-foundations/envelope/output_scanning.py`. Built-in patterns
+  cover AWS access keys, generic PEM private-key blocks, Anthropic /
+  OpenAI / GitHub / Stripe API keys, and RFC 7519 JWTs. Each pattern
+  carries a `RiskLevel` (NONE / LOW / MEDIUM / HIGH / CRITICAL). The
+  `ML classifiers` half is deferred; `ScanResult.matches` is a flat
+  tuple so a future classifier can append matches without breaking
+  consumers.
 - Risk score assigned to every outbound artifact.
+  **Landed (v0):** every `scan()` returns a `ScanResult` whose `.risk`
+  property is the most-severe match's severity (or `RiskLevel.NONE`
+  for clean output). `ScanResult.redact()` returns a copy of the text
+  with each match replaced by `[REDACTED:<pattern_name>]`, with
+  overlapping-match resolution favouring earlier start, then higher
+  severity, then longer match.
 
 ### C2. Policy-Adaptive Egress
 - Deny, allow, or quarantine based on risk and data class.
+  **Landed (v0):** `MatrixEgressPolicy` in
+  `security-foundations/envelope/egress_policy.py` evaluates a closed
+  matrix of `EgressMatrixCell(risk, data_class, action)` where `action`
+  is one of `ALLOW`, `QUARANTINE`, `DENY`. Cells not present in the
+  matrix default to `EgressAction.DENY` (`EGRESS_NO_MATRIX_ENTRY`).
+  Quarantine returns `reason_code="egress_quarantined"` so downstream
+  systems can fan a single verdict out to allow / review-queue / drop
+  without re-encoding the decision. `require_egress()` raises
+  `EgressError` on any non-ALLOW verdict.
 - Mandatory NO_EXPORT for restricted-class outputs where required.
+  **Landed (v0):** `MatrixEgressPolicy.restricted_no_export` (default
+  `True`) overrides every matrix entry to deny when
+  `data_class==DataClass.RESTRICTED`, carrying
+  `EGRESS_RESTRICTED_NO_EXPORT`. Operators that want to take
+  responsibility for restricted artifacts inside the matrix can set the
+  flag to `False`.
 
 ### C3. Reviewer Workflow
 - Quarantined outputs route to human review queue.
+  **Landed (v0):** `QuarantineRecord` in
+  `security-foundations/envelope/reviewer_workflow.py` is the queue
+  entry shape — a frozen dataclass binding `record_id` (UUIDv7),
+  `artifact_digest`, `risk`, `data_class`, `requested_at`,
+  `requester_iss`, and `purpose_of_use`. Storage and routing belong to
+  the operator; the in-process primitive guarantees the binding stays
+  immutable. A JCS-stable `record_digest` is exposed for cnf-style
+  reviewer-decision binding.
 - Signed reviewer decision record with expiration and scope.
+  **Landed (v0):** `ReviewDecision` is an EdDSA-signed JCS body with
+  `typ="wt-review/v0"` cross-protocol binding, carrying
+  `record_digest`, `verdict` (RELEASE / REJECT), `reason`, reviewer
+  SPIFFE id + kid, `[iat, nbf, exp]` window, and a UUIDv7 `jti`.
+  `verify_release_authorization()` is the release-path check that
+  validates shape, record binding, time window (default max TTL 24h),
+  signature (via `IssuerTrustStore`), and that the verdict is RELEASE.
+  A REJECT raises `REVIEW_REJECTED`. `verify_decision()` is the
+  audit/archive entry point that does the same shape/signature/window
+  checks without the RELEASE requirement.
 
 **Acceptance Criteria**
 - Synthetic secret/PII corpora produce expected block/quarantine rates.
@@ -142,15 +252,64 @@ Phase 2 target: stable A1, controlled pilot for A2.
 
 ### D1. Instruction Isolation
 - Treat peer/tool outputs as untrusted data channel.
+  **Landed (v0):** `ContentChannel` StrEnum (`SYSTEM` / `USER` / `TOOL`
+  / `RETRIEVED`) + `Trust` StrEnum (`TRUSTED` / `UNTRUSTED`) in
+  `security-foundations/envelope/instruction_isolation.py`.
+  `ContentSegment` enforces channel/trust pairings at construction:
+  `SYSTEM` must be `TRUSTED`, `USER` and `RETRIEVED` must be
+  `UNTRUSTED`, and `TOOL` may only be `TRUSTED` when a non-empty
+  `signature_ref` is supplied — that's the "tool outputs treated as
+  untrusted unless signed" rule, lifted into the type system.
 - Ensure model cannot treat arbitrary external data as control instructions.
+  **Landed (v0):** `assemble_isolated_prompt()` renders non-SYSTEM
+  segments inside `<<wt-iso:NONCE:CHANNEL ...>>` ... `<<wt-iso:NONCE:end>>`
+  fences keyed off a fresh 96-bit random nonce. Segment text and
+  source labels are HTML-escaped so a payload literally cannot
+  produce a `<<` in the wrapped region. The system prompt is
+  expected to instruct the model to treat anything inside a
+  `<<wt-iso:…>>` fence as inert data. An `audit_log` of
+  `(channel, source_label, trust, signature_ref)` per segment is
+  returned alongside the assembled text.
 
 ### D2. Tool Policy Gate
 - Runtime tool-call validation independent of model deliberation.
+  **Landed (v0):** `ToolPolicy` (closed allowlist of `ToolRule`
+  records) + `evaluate_tool_call()` in
+  `security-foundations/envelope/tool_policy_gate.py`. The gate's
+  inputs are operator-configured (policy) and out-of-band (optional
+  step-up attestation); the model has zero influence on the decision.
+  Unknown tools → `TOOL_UNKNOWN`. Per-tool caller allowlists →
+  `TOOL_CALLER_NOT_ALLOWED`. `require_tool_call()` raises
+  `ToolPolicyDenied` on any non-ALLOW verdict.
 - High-risk tools require step-up authorization path.
+  **Landed (v0):** `ToolRule.risk_tier` (LOW / MEDIUM / HIGH /
+  CRITICAL) drives `effective_step_up_required` (defaulting to True
+  for HIGH and CRITICAL); operators can override per-rule.
+  `StepUpAttestation` is an EdDSA-signed JCS body with
+  `typ="wt-stepup/v0"` cross-protocol binding, carrying
+  `tool_name`, `caller_iss`, `arguments_digest` (so a stale
+  attestation cannot be reused for a different call), `iat`/`nbf`/`exp`,
+  and a UUIDv7 `jti`. Verification (call binding, time window,
+  signature via `IssuerTrustStore`) is in-line; failures surface
+  `TOOL_STEP_UP_*` reason codes.
 
 ### D3. Adversarial Corpus CI Gate
 - Curated injection and smuggling corpus run per release.
+  **Landed (v0):** `security-foundations/envelope/test-vectors/adversarial-corpus-v0.json`
+  carries 18 curated entries spanning prompt injection, role
+  confusion, synthetic-fence escapes, secret exfiltration (AWS root,
+  private keys, Anthropic / OpenAI / GitHub / Stripe keys, JWTs),
+  unauthorized tool smuggling (unknown, unauthorized caller, missing
+  step-up), cross-tenant retrieval, class-above-rule retrieval, and
+  restricted egress. Every entry declares the v0 gate that MUST block
+  it plus the expected reason_code / risk level / structural
+  assertion.
 - Block release on regressions below safety threshold.
+  **Landed (v0):** `test_adversarial_corpus.py` runs alongside every
+  other suite. `test_every_entry_is_blocked` enforces a **100 %
+  block-rate** — any regression fails CI. `test_corpus_covers_every_v0_gate`
+  enforces the inverse: the corpus must continue to exercise every
+  installed gate, so coverage cannot silently shrink.
 
 **Acceptance Criteria**
 - Known injection patterns cannot force unauthorized tool actions.
@@ -162,11 +321,47 @@ Phase 2 target: stable A1, controlled pilot for A2.
 
 ### E1. Checkpointed Execution
 - Revalidate capability and policy at commit points.
+  **Landed (v0):** `Checkpoint` + `validate_checkpoint()` in
+  `security-foundations/envelope/checkpointed_execution.py`. A
+  `Checkpoint(checkpoint_id, task_id, step, requested_at,
+  intended_action)` represents one commit point in a long-running
+  task. The validator re-checks the capability's `[nbf, exp]`
+  window, the `jti` against an `InMemoryRevocationLedger` (swap-in
+  abstract base `RevocationLedger`), and the active policy epoch
+  against the epoch the task was authorized under.
 - Abort or downgrade behavior on revocation or policy epoch mismatch.
+  **Landed (v0):** `CheckpointPolicy` carries three independent
+  failure-mode dials (`on_capability_expired`,
+  `on_capability_revoked`, `on_epoch_mismatch`), each ∈
+  `{ABORT, DOWNGRADE}` (default ABORT). The validator returns a
+  `CheckpointDecision(action, reason, reason_code)` so the task
+  runtime can fan a single verdict to the abort path or the
+  re-evaluate-under-new-policy path. The acceptance criterion
+  ("Revoked capability cannot commit writes post-revocation
+  checkpoint") is pinned by
+  `test_revoked_capability_blocked_at_next_checkpoint`.
 
 ### E2. Streaming and Resume Controls
 - Session tokens with bounded lifetime and strict resume conditions.
+  **Landed (v0):** `SessionToken` in
+  `security-foundations/envelope/session_token.py` is an EdDSA-signed
+  JCS body with `typ="wt-session/v0"` cross-protocol binding,
+  carrying `session_id` (stable across resumes), `seq` (monotonic,
+  +1 per resume), `parent_jti`, `iss`/`iss_kid`/`sub`/`aud`/`scope`,
+  `[iat, nbf, exp]` (default per-token max TTL 5 minutes), and a
+  UUIDv7 `jti`. `verify_session_token()` enforces shape, window,
+  TTL, and signature. `verify_resume()` additionally enforces a
+  cumulative-lifetime cap (default 1 hour) — operators bound how
+  long a single session can stay alive across resumes regardless of
+  individual token TTLs.
 - Replay-safe resume identifiers.
+  **Landed (v0):** every `SessionToken` carries a unique `jti`. A
+  resume MUST set `parent_jti` to the previous token's `jti` and
+  set `seq = previous.seq + 1`. Reusing or skipping a sequence
+  number → `SESSION_RESUME_SEQUENCE_INVALID`. The chain rules also
+  reject `session_id` switching, `parent_jti` forging, and any
+  subject / audience / scope drift across resumes, so a stolen
+  token cannot be turned into a broader-privilege resume.
 
 **Acceptance Criteria**
 - Revoked capability cannot commit writes post-revocation checkpoint.

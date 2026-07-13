@@ -14,7 +14,589 @@ the approved plan.
   - payload digest verification,
   - in-process Ed25519 signature verification via the `cryptography` library
     (no `openssl` subprocess),
-  - key-id lookup behind a callable interface.
+  - key-id lookup behind a callable interface,
+  - capability token validation (see below).
+- **Capability token v0** (`envelope/capability_token.py` validator,
+  `envelope/capability_issuer.py` issuer): RFC 7519 JWT with EdDSA, bound to
+  the envelope via `cnf.envelope_digest` so a leaked or replayed token only
+  authorizes its specific payload. Issuer trust is a separate
+  `IssuerTrustStore` (`envelope/issuer_trust_store.py`) keyed on `(iss, kid)`,
+  so envelope-signing keys cannot be used to mint tokens. `CapabilityIssuer`
+  validates `iss`/`kid`/`ttl` at construction and auto-generates UUIDv7 `jti`
+  values; `generate_uuidv7` is a small RFC 9562 implementation.
+- **Issuance policy v0** (`envelope/issuance_policy.py`): `IssuancePolicy`
+  ABC + `AllowAllPolicy` (default) + `AllowlistPolicy` (frozen
+  `(sub, aud, scope)` tuples + `max_ttl`). Policy denials raise
+  `IssuancePolicyError` and emit a `capability.issue` deny audit event when
+  an `audit_sink` is attached.
+- **Alerting v0** (`envelope/alerting.py`): `AlertingAuditSink` decorator
+  + `ThresholdAlertingPolicy` (per-identity sliding windows) firing
+  `REPEATED_VALIDATION_FAILURE` (on `envelope.verify` denies) and
+  `ABNORMAL_ISSUANCE_VOLUME` (on `capability.issue` allows). Alerts
+  dispatch through a caller-supplied `on_alert` callable; the underlying
+  hash-chained audit sink is preserved unchanged.
+- **Audit search views v0** (`envelope/audit_query.py`): canned filters
+  over an `Iterable[AuditEvent]` — `allows`, `denies`, `with_event_type`,
+  `with_reason_code`, `with_sender`, `with_recipient`, `with_message_id`,
+  `replays`, `cross_tenant_attempts`, `break_glass_attempts`. Pure
+  generators so they compose with `itertools` and caller predicates.
+  Cross-tenant = sender and recipient in different SPIFFE trust domains.
+- **Signed policy bundles v0** (`envelope/policy_bundle.py`): `PolicyBundle`
+  carries a monotonic `version`, an EdDSA signature, and a serialized
+  `AllowlistPolicy`. `verify_bundle()` checks the signature against an
+  `IssuerTrustStore` and returns the realized policy. `RollbackGuard`
+  (`InMemoryRollbackGuard` / `FileBackedRollbackGuard`) enforces per-issuer
+  monotonic-version acceptance.
+- **Canary policy releases v0** (`envelope/canary_policy.py`): `CanaryPolicy`
+  wraps a stable + candidate `IssuancePolicy` pair and routes a percentage
+  of grants to the candidate via a deterministic sha256-based bucket over
+  `(sub, aud, scope)`. Auto-rollback engages once the candidate's denial
+  count crosses `rollback_after_denials`; rollback is sticky for the
+  lifetime of the instance.
+- **Delegation receipts v0** (`envelope/delegation_receipt.py`, Phase 2
+  Track A): `DelegationReceipt` records one hop of a delegation chain
+  (`chain_id`, `hop_index`, `parent_jti`, `delegator_iss`, `delegate_iss`,
+  scope/aud/window, signature with `typ: "wt-delegation/v0"`).
+  `verify_receipt()` enforces every non-escalation invariant: hop_index
+  must be exactly `parent.hop_index + 1`, parent_jti must match,
+  `delegator_iss == parent.sub`, scope must equal parent's scope, aud
+  must equal parent's, and `[iat, exp]` must be contained within the
+  parent's window. Depth capped at `max_chain_depth` (default 3).
+- **Data classification + lineage v0**
+  (`envelope/data_classification.py`, Phase 2 Track B B1): `DataClass`
+  enum (public / internal / confidential / restricted), `ClassifiedData`
+  frozen wrapper around a `data_digest`, `lineage` chain, and metadata
+  bag. `classify()` / `derive()` / `combine()` are the only constructors;
+  derivation rejects class demotion (`DataClassificationError`), combine
+  takes the max class. Each `LineageTag` commits to its parent's
+  `chain_hash` so tamper-evident lineage walks are possible without
+  trusting any single producer.
+- **Retrieval policy v0** (`envelope/retrieval_policy.py`, Phase 2 Track
+  B B2): `AllowlistRetrievalPolicy` evaluates retrieval against a closed
+  tuple of `RetrievalRule(caller_iss, purpose_of_use, max_class)` plus a
+  `CrossTenantRetrieval` dial that defaults to `DENY`. The tenant check
+  runs first — origin tenant is the trust-domain of the data's first
+  lineage tag's `actor_iss`, and a mismatched caller is rejected with
+  `RETRIEVAL_CROSS_TENANT` regardless of any rule. Otherwise, the first
+  `(caller_iss, purpose_of_use)` rule wins and the data's class must be
+  at most as restrictive as `max_class`. `require_retrieval()` raises
+  `RetrievalError` carrying the decision on denial.
+- **Prompt assembly minimization v0** (`envelope/prompt_assembly.py`,
+  Phase 2 Track B B3): `compose()` consumes a list of `PromptCandidate`
+  records (each pairs a `ClassifiedData` with a source label and the raw
+  context text) against an `ActionBudget(action, max_class, max_items)`.
+  Items whose class exceeds the budget are dropped with
+  `reason_code="class_exceeds_budget"`; survivors are sorted
+  least-sensitive-first (PUBLIC → RESTRICTED, tie-broken by
+  `source_label`); overflow past `max_items` is dropped with
+  `reason_code="items_over_budget"`. Each `IncludedItem` carries
+  `source_label`, `data_class`, and `trust_label` so downstream audit
+  records can answer "what sensitivity and what tenant did each prompt
+  chunk come from".
+- **Output scanning v0** (`envelope/output_scanning.py`, Phase 2 Track C
+  C1, deterministic half): `PatternRegistry` carries an immutable tuple
+  of `SecretPattern(name, regex, severity)` records. Built-ins cover
+  AWS access keys, generic PEM private-key blocks, Anthropic / OpenAI
+  / GitHub / Stripe API keys, and RFC 7519 JWTs. `scan(text)` returns
+  a `ScanResult` whose `.risk` is the max-severity over all matches
+  (`RiskLevel.NONE` for clean output) and whose `.redact()` returns
+  the text with every match replaced by `[REDACTED:<pattern_name>]`.
+  ML classifiers are deferred; the result shape leaves room for them.
+- **Policy-adaptive egress v0** (`envelope/egress_policy.py`, Phase 2
+  Track C C2): `MatrixEgressPolicy` consults a closed matrix of
+  `EgressMatrixCell(risk, data_class, action)` cells where `action` is
+  one of `ALLOW` / `QUARANTINE` / `DENY`. Unmatched cells fall through
+  to default-deny with `EGRESS_NO_MATRIX_ENTRY`. The
+  `restricted_no_export=True` default forces any `RESTRICTED` artifact
+  to deny regardless of matrix or risk score, carrying
+  `EGRESS_RESTRICTED_NO_EXPORT`. `require_egress()` raises
+  `EgressError` on any non-ALLOW verdict.
+- **Reviewer workflow v0** (`envelope/reviewer_workflow.py`, Phase 2
+  Track C C3): `QuarantineRecord` is the queue-entry shape (UUIDv7
+  `record_id`, `artifact_digest`, risk, data class, requester SPIFFE
+  id, `purpose_of_use`). `ReviewDecision` is an EdDSA-signed
+  JCS-canonical record with `typ="wt-review/v0"` cross-protocol
+  binding, carrying `record_digest` (binds to a specific quarantine
+  record), `verdict` (`RELEASE` / `REJECT`), reviewer SPIFFE id + kid,
+  `[iat, nbf, exp]` (default max TTL 24h), and a UUIDv7 `jti`.
+  `verify_release_authorization()` is the release-path check: shape +
+  binding + window + signature (via `IssuerTrustStore`) + verdict ==
+  RELEASE. `verify_decision()` is the audit-only variant.
+- **Instruction isolation v0** (`envelope/instruction_isolation.py`,
+  Phase 2 Track D D1): `ContentChannel` (`SYSTEM` / `USER` / `TOOL` /
+  `RETRIEVED`) + `Trust` (`TRUSTED` / `UNTRUSTED`) segregate the four
+  prompt content sources. `ContentSegment` enforces channel/trust
+  pairings at construction — `SYSTEM` must be `TRUSTED`, `USER` and
+  `RETRIEVED` must be `UNTRUSTED`, and `TOOL` may only be `TRUSTED`
+  when accompanied by a non-empty `signature_ref` ("untrusted unless
+  signed"). `assemble_isolated_prompt()` wraps every non-SYSTEM
+  segment in nonce-fenced data frames (`<<wt-iso:NONCE:CHANNEL …>>`),
+  HTML-escapes content and source labels so synthetic fences cannot
+  appear in the wrapped region, and returns an `audit_log` of every
+  segment's `(channel, source_label, trust, signature_ref)`.
+- **Tool policy gate v0** (`envelope/tool_policy_gate.py`, Phase 2
+  Track D D2): `ToolPolicy` is a closed allowlist of `ToolRule`
+  records `(tool_name, risk_tier, allowed_callers, step_up_required)`.
+  `evaluate_tool_call()` enforces unknown-tool rejection
+  (`TOOL_UNKNOWN`), per-tool caller allowlists
+  (`TOOL_CALLER_NOT_ALLOWED`), and step-up authorization for high-risk
+  tools. `RiskTier.HIGH` and `CRITICAL` default to `step_up_required`.
+  `StepUpAttestation` is an EdDSA-signed JCS body with `typ="wt-stepup/v0"`
+  cross-protocol binding, carrying `tool_name`, `caller_iss`,
+  `arguments_digest`, time window, and a UUIDv7 `jti`. The gate runs
+  independent of model deliberation — operator-configured policy plus
+  out-of-band signed attestation are its only inputs.
+- **Adversarial corpus CI gate v0**
+  (`envelope/test_adversarial_corpus.py` +
+  `envelope/test-vectors/adversarial-corpus-v0.json`, Phase 2 Track D
+  D3): an 18-entry curated corpus spanning prompt injection,
+  role-confusion, synthetic-fence escape, secret exfiltration (AWS,
+  PEM, Anthropic / OpenAI / GitHub / Stripe, JWT), tool smuggling
+  (unknown / unauthorized / missing-step-up), cross-tenant retrieval,
+  class-above-rule retrieval, and restricted-class egress. Every
+  entry declares the v0 gate that must block it plus the expected
+  outcome. The test enforces a 100 % block-rate AND that the corpus
+  exercises every installed gate, so regressions in either direction
+  fail CI.
+- **Checkpointed execution v0**
+  (`envelope/checkpointed_execution.py`, Phase 2 Track E E1):
+  `Checkpoint(checkpoint_id, task_id, step, requested_at,
+  intended_action)` is the commit-point shape for long-running tasks.
+  `validate_checkpoint()` re-checks the capability's time window, the
+  `jti` against a `RevocationLedger` (in-memory default), and the
+  active policy epoch against `CheckpointPolicy.expected_epoch`.
+  `CheckpointPolicy` carries independent `{ABORT, DOWNGRADE}` dials
+  for each failure mode so operators can choose per-class behavior.
+  The acceptance criterion "Revoked capability cannot commit writes
+  post-revocation checkpoint" is pinned by a dedicated test.
+- **Session tokens v0** (`envelope/session_token.py`, Phase 2 Track E
+  E2): `SessionToken` is an EdDSA-signed JCS body with
+  `typ="wt-session/v0"` cross-protocol binding, carrying a stable
+  `session_id` plus a monotonic `seq`, `parent_jti`, SPIFFE iss /
+  sub / aud, `scope`, a per-token `[iat, nbf, exp]` window (default
+  max TTL 5 min), and a UUIDv7 `jti`. `verify_session_token()`
+  checks shape, window, and signature. `verify_resume()` adds the
+  chain rules: matching `session_id`, `parent_jti == previous.jti`,
+  `seq == previous.seq + 1`, no subject / audience / scope drift,
+  and a cumulative-lifetime cap (default 1 hour). Resume identifier
+  replay (reusing `seq`) raises `SESSION_RESUME_SEQUENCE_INVALID`.
+- **Sybil deterrence v0** (`envelope/sybil_deterrence.py`, Phase 3
+  Track A A1): `SybilDeterrence` enforces sliding-window quotas
+  `max_per_issuer` and `max_per_tenant` on identity issuance.
+  `InMemorySybilLedger` is the v0 backend; cluster-wide consistency
+  belongs to a distributed implementation behind the `SybilLedger`
+  ABC. `IssuerReputation` tracks a per-`(iss, kid)` score with
+  configurable decay, `reward()` / `penalize()` adjustments, and a
+  `[floor, ceiling]` clamp; the gate refuses issuance when the
+  decayed score falls below `min_reputation`. Saturation paths
+  surface distinct `SYBIL_ISSUER_QUOTA_EXCEEDED` /
+  `SYBIL_TENANT_QUOTA_EXCEEDED` / `SYBIL_REPUTATION_INSUFFICIENT`
+  reason codes.
+- **Eclipse resistance v0** (`envelope/eclipse_resistance.py`, Phase
+  3 Track A A2): `select_neighbors()` is a freshness-first greedy
+  selector that caps per-trust-domain occupancy via
+  `DiversityRule.max_per_trust_domain` (a Sybil cluster cannot
+  dominate the neighbor set no matter how many candidates it
+  submits) and reports `diversity_shortfall` when fewer than
+  `min_distinct_trust_domains` trust domains appear in the final
+  set. Rejection diagnostics distinguish `diversity_per_domain_cap`
+  from `diversity_target_reached`.
+  `detect_trust_domain_surges()` returns trust domains whose
+  in-window candidate count meets a configurable threshold — a
+  signal for operators to investigate.
+- **Discovery propagation integrity v0**
+  (`envelope/discovery_propagation.py`, Phase 3 Track A A3):
+  `DiscoveryFreshnessTracker` pins the highest `issued_at` seen per
+  `(workload_iss, workload_kid)` and refuses any record whose
+  timestamp doesn't strictly increase (`DISCOVERY_REWOUND`).
+  `DiscoveryPropagationLimiter` enforces a sliding-window per-
+  workload republish cap (default 1 per 60 s, `DISCOVERY_RATE_LIMITED`).
+  `DiscoveryAdmissionGate` composes both checks into a single
+  `admit()` entry point; callers must verify the underlying
+  `DiscoveryRecord` signature with the Phase 1 verifier first, since
+  running the limiter pre-auth would let any spoofed `workload_iss`
+  exhaust another workload's allowance.
+- **Capacity budgets v0** (`envelope/capacity_budgets.py`, Phase 3
+  Track B B1/B2 + tenant half of B3): `BudgetController` partitions
+  `total_capacity` across named `BudgetPool(name, reserved, ceiling)`
+  records (e.g. `security-critical`, `control-plane`, `data-plane`).
+  The "non-preemptible floor" invariant: no pool can burst into
+  another pool's `reserved` even when the other is idle — surfacing
+  `BUDGET_FLOOR_GUARD`. That's the substrate-level proof that
+  "data-plane flood cannot starve security-critical services" (Track
+  B acceptance criterion). Every `acquire()` takes a positive `cost`,
+  giving operators a work-token dial for expensive routes.
+  Per-tenant fairness via `TenantBudget(pool, tenant, reserve, burst)`:
+  a noisy tenant hits their own `burst` cap
+  (`BUDGET_TENANT_BURST_EXCEEDED`) before draining the pool's burst
+  headroom. `snapshot()` and `tenant_snapshot()` expose live
+  consumption for a future rebalancer.
+- **Capacity rebalancer v0** (`envelope/capacity_rebalancer.py`,
+  Phase 3 B3 deferred half, circle-back): `CapacityRebalancer`
+  reads a `BudgetController` snapshot, classifies pools as stressed
+  (utilization ≥ `stress_threshold`) or slack (utilization ≤
+  `slack_threshold`), and declares the system *cascading* when
+  `cascade_min_stressed` (default 2) pools are stressed AND at
+  least one slack pool is available. `evaluate()` drafts a
+  `RebalanceDecision` that moves `transfer_fraction` of each slack
+  pool's donor-side headroom to the stressed pools proportional to
+  their `stress_excess`. `apply()` mutates the controller via
+  `BudgetController.adjust_ceiling`, which preserves the
+  **non-preemptible floor**, the **cross-pool oversubscription
+  cap**, and the no-retroactive-overcommit rule end-to-end. Shrinks
+  apply before grows so intermediate states never violate the
+  oversubscription cap.
+- **Safe-mode engine v0** (`envelope/safe_mode_engine.py`, Phase 3
+  Track C C1/C2/C3): implements the §4.2 S0/S1/S2/S3/S4 global state
+  semantics plus the §4.1 authority hierarchy (`CRYPTO_TRUST` >
+  `AUTHORIZATION` > `DATA_PROTECTION` > `AVAILABILITY`). `TriggerKind`
+  covers clock-trust failure, ledger divergence, policy rollback,
+  revocation uncertainty, anomaly quarantine. `SafeModeEngine.observe()`
+  / `clear()` are idempotent and deterministic: same trigger sequence
+  always lands the same state and same `StateTransition` log.
+  `downgrade()` enforces both the authority dominance check (an
+  `AUTHORIZATION`-class approval cannot clear a `CRYPTO_TRUST`-class
+  trigger) and the trigger-floor check (cannot silently downgrade
+  below what active triggers require). `require_authorized_downgrade()`
+  tags failures with `SAFE_MODE_DOWNGRADE_UNAUTHORIZED` /
+  `_TRIGGERS_ACTIVE`.
+- **Key rotation drills v0** (`envelope/key_rotation.py`, Phase 3
+  Track D D1): `KeyRotationPlan(subject_iss, old_kid, new_kid,
+  overlap_start, cutover_at, overlap_end)` defines a rotation
+  schedule. `current_phase()` returns the deterministic
+  `PRE_OVERLAP` / `OVERLAP` / `POST_CUTOVER` / `COMPLETE` phase for
+  a given `now`. `accepted_kids()` returns the kids a verifier
+  should honor: `{old}` pre-overlap, `{old, new}` during overlap
+  and the post-cutover sunset, `{new}` after `overlap_end`.
+  `RotationRegistry` admits multiple concurrent plans and rejects
+  conflicting registrations (overlapping windows + shared kid) with
+  `ROTATION_PLAN_CONFLICT`. `require_accepted_kid()` raises
+  `ROTATION_KID_NOT_ACCEPTED` when a kid falls outside every active
+  acceptance window.
+- **Revocation convergence v0**
+  (`envelope/revocation_convergence.py`, Phase 3 Track D D2):
+  `RevocationBroadcast(jti, issued_at, fast_path, reason,
+  expected_nodes)` is the push-side announcement.
+  `ConvergenceTracker.record_ack` collects per-node acknowledgements
+  (push and pull are not distinguished — what matters is each node
+  confirming it sees the revocation). `SLOPolicy` carries separate
+  `normal_deadline` and `fast_path_deadline` so emergency
+  revocations get a tighter SLO. `evaluate_slo()` returns a
+  `ConvergenceSnapshot` with `coverage`, `time_to_target`,
+  `elapsed`, and a `SLOStatus` of `MEETING` / `PENDING` / `MISSED`.
+  `pending_broadcasts()` is the foundation for an alerting layer.
+- **Recovery and re-admission v0**
+  (`envelope/recovery_readmission.py`, Phase 3 Track D D3):
+  `QuarantineEntry(quarantine_id, workload_iss, last_kid,
+  quarantined_at, reason)` is the incident-ticket shape.
+  `CleanRoomAttestation` is an EdDSA-signed JCS body with
+  `typ="wt-readmission/v0"` cross-protocol binding, carrying
+  `quarantine_id`, `new_kid`, `baseline_digest`, attester SPIFFE id
+  + kid, time window, and `monitoring_period_seconds`. Signed by a
+  separate trust pool so the workload being readmitted cannot sign
+  its own re-admission. `verify_readmission()` returns a
+  `ReAdmissionGrant(workload_iss, new_kid, monitoring_period,
+  baseline_digest, granted_at)` after enforcing the three clean-state
+  evidence requirements: separate-trust signature, baseline commit,
+  and kid distinct from the quarantined material
+  (`READMISSION_KID_REUSE` if not).
+- **Proof obligations registry v0**
+  (`envelope/proof_obligations.py`, Phase 3 Track E E1+E2+E3):
+  `OBLIGATIONS` is a stable taxonomy of `ProofObligation(name,
+  phase, track, statement, canonical_test)` entries — one per
+  safety invariant the substrate claims to enforce. Covers all four
+  explicit Phase 3 E2 obligations (no unauthorized privileged
+  action, no duplicate privileged mutation, delegation
+  scope/TTL/audience monotonicity, revoked capability cannot
+  commit) plus ~20 more across Phase 1/2/3. The companion
+  `test_every_obligation_resolves` imports each `canonical_test`
+  and asserts it points at a real `unittest.TestCase.test_*`
+  method — a renamed or deleted backing test fails CI. Coverage
+  tests enforce that every Phase 2 track and every Phase 3 core
+  track keeps at least one obligation, so coverage cannot silently
+  shrink.
+- **Signed safe-mode artifacts v0** (`envelope/signed_safe_mode.py`,
+  Phase 3 §3 D3.3 circle-back): `SignedStateTransition` and
+  `SignedDowngradeApproval` are EdDSA-signed JCS bodies with
+  `typ="wt-safe-mode-transition/v0"` and
+  `typ="wt-safe-mode-downgrade/v0"` cross-protocol bindings.
+  `verify_transition()` validates audit-grade transition records
+  against an `IssuerTrustStore`-shaped attester lookup.
+  `verified_downgrade()` extends the engine's
+  `SafeModeEngine.downgrade()` to require a signed approval — the
+  signature check runs BEFORE the engine consults the unsigned
+  authority hierarchy, so an in-memory forged approval is rejected
+  with `SAFE_MODE_ARTIFACT_SIGNATURE_INVALID` before the engine
+  ever sees it.
+- **Discovery record test vectors** (Phase 1 hangover circle-back):
+  `test-vectors/valid-discovery-record.json` is a deterministic
+  signed `DiscoveryRecord` that verifies cleanly under the bundled
+  `dev-issuer-1.pub.pem`; `test-vectors/tampered-discovery-record.json`
+  reuses the valid signature but mutates the `endpoints` field so
+  signature verification fails. `_regen_vectors.py` emits both; the
+  `test_discovery_test_vectors` suite asserts the verifier accepts
+  the valid one and rejects the tampered one, keeping the vectors
+  coherent across regenerations.
+- **Example MCP host integration v0** (`integrations/mcp/`, Phase 4):
+  `envelope_adapter.py` translates MCP JSON-RPC 2.0 messages to/from
+  the signed envelope schema. `host.py` (`ExampleMCPHost`) runs the
+  full substrate pipeline for one inbound message — verify_envelope
+  (signature + window + replay + capability binding + **revocation**
+  when a `revocation_list` is wired) → **post-auth rate limit** →
+  tool policy gate → tool dispatch → output scan → egress policy →
+  signed reply — emitting a hash-chained audit event at every
+  decision. `HostConfig` exposes optional `rate_limiter` and
+  `revocation_list`; the smoke fixtures gate issuance with an
+  `AllowlistPolicy`. `test_smoke.py` drives real Ed25519 round trips
+  including the **revoke-then-reject capability lifecycle** and the
+  **post-auth rate-limit** invariant (a spoofed sender burns none of
+  the victim's allowance). The host stays under a 500-line ceiling
+  pinned by `test_host.HostLineCountTests`; demo tools and pure
+  helpers live in `demo_tools.py` / `host_support.py`. Runbook +
+  deterministic key/manifest/sample-audit generators under
+  `integrations/mcp/example/`.
+- **Mesh MCP bridge (runnable example)** (`integrations/mcp/bridge/`):
+  a real MCP server over stdio that lets two Claude Code instances
+  exchange **signed, verified** messages over the mesh. `Claude A →
+  bridge A → signed envelope / loopback TCP → bridge B → Claude B`.
+  Exposes `send_message` / `check_inbox` MCP tools; a background thread
+  runs `verify_envelope` on every inbound frame before it reaches a
+  file-backed inbox, and `mail_hook.py` (a UserPromptSubmit hook)
+  surfaces verified mail so Claude "receives" without polling. Security
+  reuses the already-pinned `verify_envelope` invariants — no new
+  crypto. `test_bridge.py` proves the MCP handshake, verified delivery,
+  and **replay + forgery rejection** end-to-end; `demo_conversation.py`
+  runs the whole path headless. **[RUNNABLE]** demo; loopback/single-
+  host, no wire TLS/PKI (Phase 6). See `bridge/README.md`.
+- **MCP federation (runnable example)** (`integrations/mcp/federation/`):
+  turns MCP from point-to-point into a *network*. Many backend tool
+  servers live on the mesh and **announce** themselves; one **gateway**
+  (an MCP stdio server) discovers them, aggregates their tools into a
+  single namespaced `tools/list` (`<server>__<tool>`), and **routes**
+  each `tools/call` to the owning backend over the mesh. A client
+  configures **one** endpoint and reaches all servers; adding a backend
+  appears in the next list with no client change. `test_federation.py`
+  proves the federation logic + a real cross-process MCP stdio handshake;
+  `demo_federation.py` runs it headless. This is the *coordination-fabric*
+  view of the substrate (discovery + routing), independent of the
+  security layer that composes on top. See `federation/README.md`.
+- **Workspace status server (runnable example)**
+  (`integrations/mcp/workspace/`): a dev stands up a read-only status
+  server for a feature workspace; a teammate follows progress
+  asynchronously (owner never interrupted). The privacy model is
+  **structural, not a promise**: the only exposed op is `get_status`
+  (no file/command/path tool exists), facts are derived only from git in
+  the one configured directory, **visibility levels** (summary / standard
+  / detailed — never file contents) cap exposure, watchers are
+  **deny-by-default allow-listed**, and every access (granted *and*
+  denied) is logged so watching is reciprocally transparent. `watch.py`
+  emits a digest only when status changes (no noise). `test_workspace.py`
+  pins the gating, allow/deny, bounded surface, and access logging;
+  `demo_workspace.py` runs the whole story. See `workspace/README.md`.
+- **Workload CA + X.509 SVID v0** (`envelope/workload_ca.py`, Phase 5
+  Track A): `WorkloadCA` mints short-lived Ed25519 X.509 SVIDs binding
+  a workload's key to its `spiffe://` id via a critical URI SAN,
+  signed by a self-signed internal root (the trust anchor a verifier
+  loads out-of-band). A CA cannot issue outside its own trust domain.
+  `verify_svid()` validates chain-to-root, time window, key usage
+  (leaf may not sign certs), and the SPIFFE-SAN binding, with a
+  distinct `SVID_*` `DenyReason` per failure. **[RUNNABLE reference
+  CA]** — real verifiable id↔key binding, but not production PKI (no
+  HSM/KMS custody, no OCSP/CRL, no intermediates; those are Phase 6).
+- **Peer admission v0** (`envelope/peer_admission.py`, Phase 5 Track
+  A): `PeerAdmissionPolicy` is a deny-by-default allowlist of
+  `AdmissionRule(spiffe_id, env_tier, pinned_fingerprint?)`. After an
+  SVID verifies, `admit_peer()` decides whether that authenticated
+  identity may join — denying unknown peers, wrong-env-tier
+  presentation, and cert-pin mismatches with distinct `ADMISSION_*`
+  reasons. This is vision §8.1 ("unauthorized peer cannot join the
+  mesh") at admission scope. `require_admission()` raises on denial.
+- **Policy engine v0** (`envelope/policy_engine.py`, Phase 5 Track B):
+  `PolicyEngine.decide(PolicyRequest)` is the uniform authZ decision
+  authority the vision's Layer C calls for. `NativePolicyEngine` is a
+  first-match, deny-by-default evaluator over
+  `PolicyRule(principal, action, resource, conditions)` with wildcard
+  matching and typed conditions (equals / in / not_in) over the
+  request context. Every decision returns a `PolicyDecision` carrying
+  a UUIDv7 `decision_id` for the forensic trace (vision: "every tool
+  invocation must carry a provable chain … policy decision ID").
+  Structured evaluator, not a Rego/Cedar DSL parser; syntax interop
+  is deferred behind the `PolicyEngine` ABC.
+- **Policy audit wiring v0** (`envelope/policy_audit.py`, Phase 5
+  Track B): `decide_and_audit()` runs a `PolicyEngine` and emits a
+  `policy.decide` hash-chained audit event whose `reason` embeds the
+  `decision_id` — so the decision id is tamper-evident (it lives in a
+  hashed field) and the chain still validates. `build_baseline_engine()`
+  expresses the vision's "baseline policy library" as engine rules
+  mirroring the Phase 2 gates (low-risk-tool permit, step-up-required
+  deny, deny-by-default), so the deny-by-default posture an operator
+  tunes is uniform engine rules instead of bespoke gate code.
+- **Mesh v0** (`security-foundations/mesh/`, Phase 5 Track C): the
+  vision's §5 zero-trust overlay mesh. `transport.py` makes transport
+  a swappable seam — `Transport` ABC (moves bytes, does no
+  verification; identity comes from the signed envelope inside the
+  frame) with a deterministic `InMemoryTransport`/`Switchboard`.
+  `node.py` (`MeshNode`) is one authenticated participant:
+  `learn_peer()` verifies a signed `DiscoveryRecord` then admits it
+  through a deny-by-default `PeerAdmissionPolicy` (authentication ≠
+  authorization — a verified-but-unadmitted peer is not learned);
+  `routing_table()` selects peers via `eclipse_resistance` for
+  diversity; `send_to()` routes signed envelope bytes to an admitted
+  peer. `socket_transport.py` (`LocalSocketTransport`) is a real
+  loopback-TCP implementation of the same `Transport` ABC.
+  `test_mesh_round_trip` is the **fabric-works-as-a-system proof**:
+  two mutually-admitted nodes complete a signed round trip (A →
+  transport → B verifies full stack → reply → A re-verifies), both
+  audit chains validate, and the same envelope verifies after
+  crossing a real socket. This is vision §8 re-proven at mesh scope
+  (Phase 4 proved it at single-host scope). Loopback / single-host
+  only — a planet-scale mesh (NAT, wire TLS, pooling) is Phase 6.
+- **mTLS transport v0** (`mesh/tls_transport.py`, Phase 6 Track A):
+  `TlsSocketTransport` implements the same `Transport` ABC over
+  **mutual TLS 1.3**, closing the vision's Layer A mTLS requirement.
+  Each node presents its Phase 5 SVID; every handshake verifies the
+  peer cert both via TLS (chain to trusted root, `CERT_REQUIRED`) and
+  via the substrate's `verify_svid` (window + key usage + SPIFFE SAN),
+  yielding the peer's SPIFFE id as `Frame.source`. **Defense in depth:**
+  TLS authenticates + encrypts the *channel*; the signed envelope still
+  authenticates the *message*. A peer without a CA-issued SVID cannot
+  complete the handshake, so unauthenticated bytes never reach the
+  envelope verifier. `TlsIdentity` + `mint_identity(ca, spiffe_id)`
+  bundle the material. Loopback mTLS is real TLS — the same handshake,
+  cipher negotiation, and encryption as a WAN address; loopback bounds
+  scale, not realness.
+- **Gossip membership v0** (`mesh/membership.py`, Phase 6 Track B):
+  `SwimMembership` is a SWIM-style membership protocol closing the
+  vision's §5 "nodes discover each other" requirement without a central
+  registry. Join-via-seed, ping/ack failure detection
+  (ALIVE→SUSPECT→DEAD), gossip dissemination piggybacked on every
+  message (state spreads epidemically), and incarnation-based
+  refutation (a wrongly-suspected node out-incarnates the rumor so a
+  transient hiccup can't permanently evict it). Transport-agnostic —
+  runs over `InMemoryTransport` or `TlsSocketTransport`. Membership
+  answers *"who is reachable"*, not *"who is allowed"* (that's
+  `peer_admission`). Proof obligations `gossip_membership_converges`,
+  `gossip_detects_downed_node`.
+- **Gossip discovery + admission v0** (`mesh/gossip_discovery.py`,
+  Phase 6 Track B): `GossipDiscovery` couples the membership view to a
+  `PeerAdmissionPolicy` — `routable_peers()` is the intersection of
+  *reachable* (gossip ALIVE) and *allowed* (admission permits the
+  peer's `(spiffe_id, env_tier)`). **Discovery is not authorization:** a
+  rogue that gossip reports as alive is not routable; an unknown or
+  self-asserted-escalated tier is denied (the spiffe_id is SVID-proven
+  at the mTLS handshake, not self-asserted). Vision §8.1 at network
+  scope. Proof obligation `gossiped_peer_still_gated_by_admission`.
+- **Multi-hop routing v0** (`mesh/routing.py`, Phase 6 Track C):
+  `Router.handle` forwards a message toward a far node through
+  intermediaries, returning a pure `RoutingDecision` (deliver / forward
+  / drop). Security-shaped: **deny-by-default forwarding** (relays only
+  toward an admitted/routable next hop), **loop-safe** (per-hop TTL +
+  a per-node seen-set of message ids), and the intermediary is never the
+  envelope's recipient — moving bytes grants no authority. `RoutedMessage`
+  wraps the opaque signed envelope with dest/ttl/msg_id. Proof
+  obligations `mesh_forwarding_deny_by_default`, `mesh_forwarding_loop_safe`.
+- **Pooled connection transport v0** (`mesh/connection_pool.py`, Phase 6
+  Track D): `PooledSocketTransport` implements the `Transport` ABC with
+  **persistent, reused** connections (one TCP connection per destination
+  carries a frame stream instead of connect-per-frame), `SO_KEEPALIVE`,
+  **reconnect-with-backoff** on a dropped link, and a **bounded LRU
+  pool** as backpressure against fd exhaustion. This is an *operational*
+  layer — how bytes move, not what they mean — so it carries **no proof
+  obligation** (a reliability feature earns no safety claim, same honesty
+  rule as `runtime_profile`). Identity still comes from the signed
+  envelope / peer SVID.
+- **Runtime trust tiers v0** (`envelope/runtime_profile.py`, Phase 5
+  Track D, **[REFERENCE]**): `RuntimeProfile(tier, allowed_syscalls,
+  writable_paths, egress, egress_allowlist, secret_scopes)` is the
+  declarative model for the vision's Layer E trust tiers, with
+  built-ins `strict_profile` / `standard_profile` /
+  `limited_trust_profile`. **This declares constraints; it does not
+  enforce them** — actual confinement needs a kernel + container
+  runtime + network policy + secrets manager (deployment layer,
+  Phase 6). The value is a single authoritative, type-checked,
+  versioned source for the enforcement layer to consume.
+- **Seccomp generation v0** (`envelope/runtime_profile.py`
+  `generate_seccomp` / `seccomp_to_json`, Phase 5 Track D,
+  **[REFERENCE]**): renders a `RuntimeProfile`'s `allowed_syscalls`
+  into the exact OCI/Docker seccomp document a kernel loads —
+  deny-by-default `SCMP_ACT_ERRNO`, the x86_64/x86/x32 architecture
+  list, one sorted `SCMP_ACT_ALLOW` rule. Generation is deterministic
+  and testable in-process; *loading* it into a kernel is the
+  operator's runtime.
+- **Image signature attestation v0** (`envelope/image_attestation.py`,
+  Phase 5 Track D, **[REFERENCE]**): `ImageSignature` (typ
+  `wt-image-sig/v0`) is a cosign-style detached Ed25519 signature
+  binding a SPIFFE signer to one image digest, following the signed-
+  artifact pattern. `verify_image_signature(sig, expected_digest,
+  issuer_lookup)` fails fast — shape → exact digest match → signer-key
+  lookup → signature — with distinct deny reasons
+  (`IMAGE_SIG_MALFORMED` / `IMAGE_SIG_DIGEST_MISMATCH` /
+  `IMAGE_SIG_UNKNOWN_SIGNER` / `IMAGE_SIG_INVALID`). Proof obligation
+  `image_signature_binds_digest_to_signer`. Verifying attestation is
+  in-process; the admission gate that refuses to *run* an unattested
+  image is deployment-layer.
+- **Bootstrap artifact validation v0** (`envelope/bootstrap_bundle.py`):
+  `BootstrapBundle` is a signed, epoch-versioned anchor set for a trust
+  domain. `verify_bundle()` validates shape + signature against a root
+  PEM supplied out-of-band, pins the trust domain, and materializes the
+  bundle into an `IssuerTrustStore` so downstream components consume it
+  through the same interface as manifest-loaded keys.
+- **Discovery record integrity v0** (`envelope/discovery_record.py`):
+  `DiscoveryRecord` advertises `(workload_iss, workload_kid, endpoints)`
+  signed by a discovery authority. `verify_record()` enforces shape,
+  time window (default 1-hour max TTL, 60-second clock skew), and
+  signature against an `IssuerTrustStore` — typically the one
+  materialized from the bootstrap bundle. Anti-poisoning: stale records
+  fail the time window; forged records fail the signature.
+- **Admission coupling v0** (`envelope/admission_coupling.py`): after
+  `verify_record()` succeeds, `admit(record, policy)` /
+  `require_admission(record, policy)` checks the workload SPIFFE ID
+  against `AdmissionPolicy.allowed_workloads` and the discovery
+  version against `accepted_discovery_versions` (the "compatibility
+  matrix"). Denied decisions zero out the `endpoints` field so the
+  deny path never propagates transport hints for an unadmitted peer.
+- **Discovery + admission audit checkpoints**: `verify_record` and
+  `admit` / `require_admission` accept an optional `audit_sink` and
+  emit `discovery.verify` / `admission.evaluate` events with stable
+  `reason_code` values (`discovery_malformed`, `discovery_expired`,
+  `discovery_signature_invalid`, `discovery_unknown_issuer`,
+  `admission_workload_not_allowed`, `admission_version_incompatible`).
+  Pairs with the existing `envelope.verify` / `capability.verify` /
+  `capability.issue` checkpoints in `audit.py`.
+- **Identity-aware rate limits v0** (`envelope/rate_limiter.py`):
+  `IdentityRateLimiter` enforces per-identity fixed-count sliding
+  windows with per-identity overrides. `RateLimitedVerifier` decorates
+  a `Verifier` so throttled requests never reach signature verification;
+  throttled-deny is `RateLimitExceededError` (a subclass of
+  `EnvelopeVerificationError` with `DenyReason.RATE_LIMITED`).
+- **Revocation list v0** (`envelope/revocation_list.py`): `InMemoryRevocationList`
+  and `FileBackedRevocationList` (append-only JSONL with an `integrity_hash()`
+  for tamper detection). The validator consults the list *after* signature
+  verification so an attacker forging a token with a guessed `jti` cannot
+  probe the list. Distributed cache invalidation remains out of scope for v0.
+- **Deterministic error contract** (`envelope/deny_reason.py`): every
+  `EnvelopeVerificationError` carries a `DenyReason` enum value. `reason_code`
+  is exposed on the exception and embedded in audit events for machine-readable
+  matching. New deny paths get new identifiers; shipped values are never
+  renamed or repurposed.
+
+## Frozen contracts
+
+All five Phase 1 §6 contracts (envelope, capability token, audit / policy
+decision log, security error response, discovery record) are documented in
+[`contracts/`](./contracts/). Each contract records artifact, backwards-
+compatibility policy, schema test vectors, and change control.
+- **Hash-chained audit events v0** (`envelope/audit.py`): every
+  `verify_envelope` call records exactly one event (allow or deny) with the
+  envelope identifiers and the rejection reason. `InMemoryAuditSink` and
+  `JsonlAuditSink` ship; `verify_chain` re-derives the hash chain to detect
+  insertion, deletion, or in-place mutation of past records.
+- **`Verifier` facade** (`envelope/verifier.py`): a frozen dataclass that holds
+  the trust stores, replay cache, audit sink, and config so callers don't pass
+  seven keyword arguments per request. `Verifier.verify(envelope)` raises and
+  returns the validated `CapabilityClaims`; `Verifier.try_verify(envelope)`
+  never raises and returns a `VerificationResult` with `ok`, `reason`, and
+  `claims`.
 - Replay cache implementations:
   - `InMemoryReplayCache` for local use,
   - `SQLiteReplayCache` for cross-process replay protection.

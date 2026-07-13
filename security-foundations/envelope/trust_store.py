@@ -17,12 +17,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from verify_envelope import EnvelopeVerificationError, _parse_rfc3339
+from deny_reason import DenyReason
+from verify_envelope import EnvelopeVerificationError, parse_rfc3339
 
 
 @dataclass(frozen=True)
@@ -79,7 +80,14 @@ class FileSystemTrustStore:
                 raise ValueError(f"manifest entry {kid} pem_path not found: {pem_path}")
             pem_bytes = pem_path.read_bytes()
             cls._parse_or_raise(pem_bytes, source=str(pem_path))
-            not_after = _parse_rfc3339(entry["not_after"]) if "not_after" in entry else None
+            not_after: datetime | None = None
+            if "not_after" in entry:
+                try:
+                    not_after = parse_rfc3339(entry["not_after"])
+                except EnvelopeVerificationError as exc:
+                    raise ValueError(
+                        f"manifest entry {kid} has invalid not_after: {entry['not_after']}"
+                    ) from exc
             if kid in keys:
                 raise ValueError(f"duplicate kid in manifest: {kid}")
             keys[kid] = TrustedKey(kid=kid, pem=pem_bytes, not_after=not_after)
@@ -97,7 +105,11 @@ class FileSystemTrustStore:
     def __call__(self, kid: str) -> bytes:
         entry = self._keys.get(kid)
         if entry is None:
-            raise EnvelopeVerificationError(f"unknown kid: {kid}")
-        if entry.not_after is not None and datetime.now(timezone.utc) > entry.not_after:
-            raise EnvelopeVerificationError(f"key expired: {kid}")
+            raise EnvelopeVerificationError(
+                f"unknown kid: {kid}", reason=DenyReason.UNKNOWN_KID
+            )
+        if entry.not_after is not None and datetime.now(UTC) > entry.not_after:
+            raise EnvelopeVerificationError(
+                f"key expired: {kid}", reason=DenyReason.KEY_EXPIRED
+            )
         return entry.pem
