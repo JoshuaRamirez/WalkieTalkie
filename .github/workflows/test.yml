@@ -37,4 +37,21 @@ jobs:
         run: ruff check security-foundations
 
       - name: Unit tests
-        run: python -m unittest discover -s security-foundations/envelope -t security-foundations/envelope -v
+        run: |
+          set -euo pipefail
+          # Each package/example is its own import root (some subdirs have no
+          # __init__.py and rely on per-test sys.path), so discover per-root
+          # rather than once from the repo top. Any failing suite fails the job.
+          roots=(
+            security-foundations/envelope
+            security-foundations/mesh
+            security-foundations/integrations/mcp
+            security-foundations/integrations/mcp/bridge
+            security-foundations/integrations/mcp/federation
+            security-foundations/integrations/mcp/workspace
+          )
+          for r in "${roots[@]}"; do
+            echo "::group::unittest ${r}"
+            python -m unittest discover -s "${r}" -t "${r}"
+            echo "::endgroup::"
+          done

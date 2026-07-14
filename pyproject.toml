@@ -2,15 +2,45 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# NOTE ON DISTRIBUTION: WalkieTalkie currently runs from a source checkout.
+# Modules import their siblings by bare name (each package dir is its own
+# import root — the dev/test convention), so while a wheel builds, the
+# installed package is not yet importable as a library. `pip install -e .`
+# here is for pulling dependencies and running the suites from source; the
+# import-restructure that would make it a clean installable package is a
+# tracked follow-up (see DEFERRED.md, "Installable-package import
+# restructure"). Metadata below describes the source project, not a
+# published library.
+
 [project]
 name = "walkietalkie-envelope"
-version = "0.0.1"
-description = "WalkieTalkie Phase 0 envelope verifier and trust store reference implementation."
+version = "0.1.0"
+description = "WalkieTalkie — a security substrate for peer-to-peer, MCP-style AI-agent workloads: signed-envelope kernel, capability/policy layer, and a mutual-TLS gossip/routing mesh."
+readme = "README.md"
 requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Joshua Ramirez" }]
+keywords = ["mcp", "security", "peer-to-peer", "ai-agents", "mtls", "gossip", "capability-security"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Topic :: Security",
+  "Topic :: System :: Networking",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
 dependencies = [
-  "cryptography>=41",
+  # 42 is the floor: the X.509 layer uses the *_utc accessors
+  # (not_valid_before_utc / not_valid_after_utc) added in cryptography 42.
+  "cryptography>=42",
   "jcs>=0.2.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/JoshuaRamirez/WalkieTalkie"
+Repository = "https://github.com/JoshuaRamirez/WalkieTalkie"
+Issues = "https://github.com/JoshuaRamirez/WalkieTalkie/issues"
 
 [project.optional-dependencies]
 dev = [
@@ -19,6 +49,15 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["security-foundations/envelope", "security-foundations/integrations", "security-foundations/mesh"]
+# Ship library code only. Tests, demos, and dev-time generators are part of
+# the source tree (and run in CI) but must not land in the installed wheel,
+# where they would bloat the package and pollute the top-level import namespace.
+exclude = [
+  "**/test_*.py",
+  "**/demo_*.py",
+  "**/_regen_*.py",
+  "**/gen_bridge_config.py",
+]
 
 [tool.ruff]
 target-version = "py311"

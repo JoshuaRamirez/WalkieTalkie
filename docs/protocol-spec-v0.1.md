@@ -196,9 +196,12 @@ release on any broken pin.
 
 ## 7. What v0.1 does not specify
 
-- **Transport.** mTLS/TLS 1.3, connection management, and network
-  addressing are deployment-layer. The substrate binds identity and
-  integrity at the envelope layer, above the transport.
+- **Transport.** This protocol is transport-agnostic: it binds identity
+  and integrity at the envelope layer, *above* the transport, and does
+  not mandate one. A [RUNNABLE] mutual-TLS 1.3 transport does ship in
+  `security-foundations/mesh/tls_transport.py` (Phase 6, proven over
+  loopback); what remains deployment-layer is WAN-scale connection
+  management, network addressing, and NAT traversal.
 - **Key custody and PKI operations.** The root key's HSM/custody,
   issuance workflow, and rotation operations are out of scope; the
   substrate consumes keys through the `IssuerTrustStore` interface.

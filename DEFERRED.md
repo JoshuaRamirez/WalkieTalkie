@@ -22,6 +22,27 @@ There are three categories:
 
 ## Deferred (follow-up viable)
 
+### Installable-package import restructure
+The substrate runs from a source checkout. Every module imports its
+siblings by bare name (`from audit import ...`), which resolves only
+when each package directory is itself on `sys.path` — the dev/test
+convention (`unittest discover -s <pkg> -t <pkg>`, documented in
+CLAUDE.md as "each package is its own import root"). Consequently a
+built wheel installs but is **not importable as a library**
+(`import envelope.verify_envelope` → `No module named 'audit'`).
+
+Making it a real installable package is a dedicated slice, not a
+mechanical rename: it must (a) convert ~90 bare sibling imports to
+package-relative form, (b) untangle **cross-package** bare imports
+(e.g. `mesh/tls_transport.py` does `from workload_ca import ...`, but
+`workload_ca` lives in `envelope`) that today rely on a flat
+`sys.path` holding every package dir at once, (c) re-qualify the
+**dynamic string module references** in `proof_obligations.py`
+(`importlib.import_module(<name>)`, which the `test_every_obligation_resolves`
+CI gate depends on), and (d) rework the test invocation to run against
+the package rather than the flat dirs. Until then, v0 is honestly
+source-distributed; the packaging metadata says so.
+
 ### Independent peer sampling paths (Phase 3 Track A A2)
 Multi-process / network-topology concern. v0 takes the combined
 candidate pool as input to `select_neighbors`. Follow-up would

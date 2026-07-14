@@ -170,7 +170,7 @@ The map above is honest only if its edges are labelled:
    (A.8.31) are *verified/declared* in-process but *enforced* by a
    firewall, admission webhook, and container runtime respectively. The
    substrate is the authoritative source; the enforcing infrastructure
-   is Phase 6 / deployment.
+   is Phase 7 / deployment.
 3. **Encryption in transit is deployment-layer.** Envelope signatures
    give integrity+authenticity in-process; TLS 1.3 confidentiality on
    the wire (CC6.7 encryption, A.8.24 cryptography-in-transit) is the
