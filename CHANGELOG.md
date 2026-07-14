@@ -35,14 +35,19 @@ deliverables carry `**Landed (v0):**` annotations in
   owner, with a spoof-resistant identity binding (`integrations/mcp/workspace/`).
 - **Proof-obligation registry** (`envelope/proof_obligations.py`): 48 invariants,
   each pinned by a canonical test and gated by `test_every_obligation_resolves`.
-- Root `README.md`, `SECURITY.md` disclosure policy, and `CHANGELOG.md`.
+- Root `README.md`, `SECURITY.md` disclosure policy, `CHANGELOG.md`,
+  `CONTRIBUTING.md`, and a `.github/pull_request_template.md`.
 
 ### Changed
 
+- Version set to `0.1.0` (first coherent milestone: Phases 0–6 complete).
 - CI now runs the full test suite (all six import roots — envelope, mesh, and the
   MCP examples), not just the envelope package.
 - Packaging metadata modernized: accurate description, `readme`, `license`
   (EPL-2.0), authors, keywords, trove classifiers, and project URLs.
+- Packaging scoped honestly to the current reality: the project runs from a
+  source checkout and is not yet a `pip install`-able library (the
+  import-restructure that would make it one is tracked in `DEFERRED.md`).
 
 ### Fixed
 

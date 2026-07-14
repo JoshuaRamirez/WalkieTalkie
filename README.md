@@ -80,6 +80,12 @@ implementation-plan/   per-phase plans with landed-status annotations
 
 ## Install and test
 
+WalkieTalkie currently **runs from a source checkout** — it is not yet a
+`pip install`-able library. The editable install below is for pulling
+dependencies and running the suites; importing the packages as an installed
+library is a tracked follow-up (see [`DEFERRED.md`](./DEFERRED.md),
+"Installable-package import restructure").
+
 ```sh
 python -m venv .venv
 .venv/bin/python -m pip install -e ".[dev]"

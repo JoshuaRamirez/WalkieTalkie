@@ -2,9 +2,19 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# NOTE ON DISTRIBUTION: WalkieTalkie currently runs from a source checkout.
+# Modules import their siblings by bare name (each package dir is its own
+# import root — the dev/test convention), so while a wheel builds, the
+# installed package is not yet importable as a library. `pip install -e .`
+# here is for pulling dependencies and running the suites from source; the
+# import-restructure that would make it a clean installable package is a
+# tracked follow-up (see DEFERRED.md, "Installable-package import
+# restructure"). Metadata below describes the source project, not a
+# published library.
+
 [project]
 name = "walkietalkie-envelope"
-version = "0.0.1"
+version = "0.1.0"
 description = "WalkieTalkie — a security substrate for peer-to-peer, MCP-style AI-agent workloads: signed-envelope kernel, capability/policy layer, and a mutual-TLS gossip/routing mesh."
 readme = "README.md"
 requires-python = ">=3.11"
