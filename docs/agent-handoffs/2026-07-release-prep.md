@@ -6,8 +6,17 @@ intentionally not done; read this for the moment-in-time framing the
 release-prep pass ended on.
 
 **Branch state, not a merged milestone.** All the work below is on
-`claude/resolve-merge-conflicts-tMxSj`, pushed but **not merged to `main`** —
-opening that PR is one of the pending decisions below.
+`claude/resolve-merge-conflicts-tMxSj`.
+
+> **Update (maintainer delegated "do the best thing"):** Path B executed —
+> packaging scoped honestly to source-distribution, version bumped to
+> **0.1.0**, import-restructure recorded in `DEFERRED.md`. **PR #90** opened
+> against `main` (cleanly mergeable; file diff = the 17 release-prep files).
+> Remaining, deliberately left to the maintainer: **merge PR #90**, the
+> **EPL-2.0 license**, the **package rename** (tied to the deferred Path A
+> refactor), and **cutting a git tag** (after merge). The five-item list
+> below is the original framing; three are now resolved (packaging → Path B,
+> version → 0.1.0, PR → opened).
 
 ## What just landed
 
