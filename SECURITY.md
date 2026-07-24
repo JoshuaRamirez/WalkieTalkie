@@ -8,9 +8,12 @@ vulnerability and what the project's security boundary currently is.
 
 Read this before assessing a finding — it shapes what counts as a vulnerability.
 
-- The substrate is **pre-release** (version `0.0.1`, no tagged releases yet).
-- The kernel and mesh are **[RUNNABLE]** and tested, but run over **loopback and
-  localhost sockets**. That bounds scale and reachability, not the security
+- The substrate is **pre-release** — no tagged releases yet; see `pyproject.toml`
+  for the in-development version.
+- The kernel and mesh are **[RUNNABLE]** and tested. The mesh binds a
+  **configurable interface** (loopback by default; `bind_host` / `advertise_host`
+  reach peers on a mutually reachable network — LAN/VPN). Cross-NAT WAN
+  reachability is not built. This bounds reachability, not the security
   properties — see the honesty model in [`README.md`](./README.md).
 - The deployment layer (production PKI custody, NAT/STUN/TURN traversal, runtime
   sandboxing, image admission) is **[REFERENCE]** — documented and modelled, but
