@@ -42,10 +42,12 @@ Capabilities are labelled so claims never outrun reality:
   WAN/NAT traversal, a container runtime). These are documented as such, not
   presented as operational.
 
-The boundary is explicit: the mesh runs over loopback and localhost sockets.
-That bounds **scale and reachability, not security** — WAN deployment (NAT/STUN/
-TURN, PKI custody, mesh scale, runtime sandboxing) is the Phase 7 frontier and
-is tracked in [`DEFERRED.md`](./DEFERRED.md) and
+The boundary is explicit: the mesh binds a **configurable interface** (loopback
+by default; `bind_host` / `advertise_host` reach peers on a mutually reachable
+network — LAN/VPN). That bounds **reachability, not security**. What is *not*
+built is cross-NAT WAN traversal (both peers behind NAT), plus PKI custody at
+scale and runtime sandboxing — the Phase 7 frontier, tracked in
+[`DEFERRED.md`](./DEFERRED.md) and
 [`docs/deployment-networking.md`](./docs/deployment-networking.md).
 
 ## What's proven
