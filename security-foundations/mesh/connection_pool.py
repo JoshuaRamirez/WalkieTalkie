@@ -69,9 +69,13 @@ class PooledSocketTransport(Transport):
         max_connections: int = 64,
         connect_retries: int = 3,
         backoff_base: float = 0.02,
+        bind_host: str = "127.0.0.1",
+        advertise_host: str | None = None,
     ) -> None:
         if not isinstance(source_address, str) or not source_address:
             raise TransportError("source_address must be a non-empty string")
+        if not isinstance(bind_host, str) or not bind_host:
+            raise TransportError("bind_host must be a non-empty string")
         if max_connections < 1:
             raise TransportError("max_connections must be >= 1")
         if connect_retries < 1:
@@ -96,11 +100,13 @@ class PooledSocketTransport(Transport):
 
         self._listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._listener.bind(("127.0.0.1", 0))
+        self._listener.bind((bind_host, 0))
         self._listener.listen(64)
         self._listener.settimeout(0.25)
-        host, port = self._listener.getsockname()
-        self._address = f"{host}:{port}"
+        _, port = self._listener.getsockname()
+        # Advertise a dialable host; a wildcard bind (0.0.0.0) is not dialable,
+        # so such callers pass advertise_host = a reachable IP.
+        self._address = f"{advertise_host or bind_host}:{port}"
 
         self._acceptor = threading.Thread(target=self._accept_loop, daemon=True)
         self._acceptor.start()

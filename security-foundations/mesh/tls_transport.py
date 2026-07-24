@@ -21,9 +21,11 @@ bytes never reach the envelope verifier at all.
 
 Loopback is real TLS: the handshake, cipher negotiation, certificate
 verification, and record encryption are identical whether the socket is
-``127.0.0.1`` or a WAN address. Loopback bounds *scale* (one host's ports
-and threads), not *realness*. NAT traversal, WAN CA custody, and planet
-scale are the D6.8 deployment frontier — [REFERENCE], not here.
+``127.0.0.1`` or a WAN address. The bind interface is configurable
+(``bind_host`` / ``advertise_host``), so nodes on different machines on a
+reachable network connect over the same verified handshake; loopback is
+only the default. NAT traversal, WAN CA custody, and planet scale remain
+the D6.8 deployment frontier — [REFERENCE], not here.
 """
 
 from __future__ import annotations
@@ -134,7 +136,9 @@ def mint_identity(ca, spiffe_id: str, *, now: datetime | None = None) -> TlsIden
 
 
 class TlsSocketTransport(Transport):
-    """A :class:`Transport` over mutually-authenticated TLS 1.3 on loopback.
+    """A :class:`Transport` over mutually-authenticated TLS 1.3 on a
+    configurable interface (loopback by default; ``bind_host`` /
+    ``advertise_host`` open it to peers on other machines).
 
     The listener thread accepts connections, completes the mTLS handshake,
     verifies the peer's SVID, reads one length-prefixed frame, and appends
@@ -151,9 +155,13 @@ class TlsSocketTransport(Transport):
         identity: TlsIdentity,
         *,
         now_fn: Callable[[], datetime] | None = None,
+        bind_host: str = "127.0.0.1",
+        advertise_host: str | None = None,
     ) -> None:
         if not isinstance(identity, TlsIdentity):
             raise TransportError("identity must be a TlsIdentity")
+        if not isinstance(bind_host, str) or not bind_host:
+            raise TransportError("bind_host must be a non-empty string")
         self._id = identity
         self._now = now_fn or (lambda: datetime.now(UTC))
         self._server_ctx = identity._context(server=True)
@@ -165,11 +173,15 @@ class TlsSocketTransport(Transport):
 
         self._listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._listener.bind(("127.0.0.1", 0))
+        self._listener.bind((bind_host, 0))
         self._listener.listen(16)
         self._listener.settimeout(0.25)
-        host, port = self._listener.getsockname()
-        self._address = f"{host}:{port}"
+        _, port = self._listener.getsockname()
+        # Advertise a *dialable* host (see LocalSocketTransport): a wildcard
+        # bind (0.0.0.0) is not dialable, so such callers pass advertise_host.
+        # Identity is unaffected — the mTLS handshake + verify_svid below bind
+        # identity to the SVID, never to the wire address.
+        self._address = f"{advertise_host or bind_host}:{port}"
 
         self._thread = threading.Thread(target=self._serve, daemon=True)
         self._thread.start()

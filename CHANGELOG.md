@@ -33,6 +33,14 @@ deliverables carry `**Landed (v0):**` annotations in
   gateway aggregating multiple tool servers (`integrations/mcp/federation/`), and
   a workspace-status server that shares progress without context-switching the
   owner, with a spoof-resistant identity binding (`integrations/mcp/workspace/`).
+- **Cross-machine networking.** The mesh transports (`socket_transport`,
+  `tls_transport`, `connection_pool`) take `bind_host` / `advertise_host`, so a
+  node can bind all interfaces and advertise a routable address. Peers on a
+  mutually reachable network (LAN, VPN, or port-forwarded hosts) now connect
+  over the identical mTLS + signed-envelope path — no longer loopback-only. The
+  default is unchanged (loopback), and the security logic (mTLS peer
+  verification, admission) is untouched; only the bind interface is
+  configurable. New tests pin identity binding over a wildcard (`0.0.0.0`) bind.
 - **Proof-obligation registry** (`envelope/proof_obligations.py`): 48 invariants,
   each pinned by a canonical test and gated by `test_every_obligation_resolves`.
 - Root `README.md`, `SECURITY.md` disclosure policy, `CHANGELOG.md`,

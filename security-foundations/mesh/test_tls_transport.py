@@ -89,5 +89,48 @@ class MutualTlsTests(unittest.TestCase):
             self.assertEqual(t.spiffe_id, "spiffe://mesh.local/x")
 
 
+class ConfigurableBindTests(unittest.TestCase):
+    """The bind interface is configurable so peers on other machines can
+    connect. The default is unchanged, and widening the bind interface does
+    not touch identity: the mTLS handshake still binds identity to the SVID."""
+
+    def test_default_binds_and_advertises_loopback(self):
+        ca = _ca()
+        # No new args -> loopback bind + loopback advertise, exactly as before.
+        with TlsSocketTransport(mint_identity(ca, "spiffe://mesh.local/d")) as t:
+            self.assertTrue(t.address.startswith("127.0.0.1:"))
+
+    def test_wildcard_bind_advertises_dialable_host_and_round_trips(self):
+        ca = _ca()
+        # Server binds ALL interfaces (reachable from other machines) but
+        # advertises a *dialable* host; on a real LAN advertise_host is the
+        # host's routable IP. 127.0.0.1 stands in so the test runs on one box.
+        server = TlsSocketTransport(
+            mint_identity(ca, "spiffe://mesh.local/server"),
+            bind_host="0.0.0.0",
+            advertise_host="127.0.0.1",
+        )
+        client = TlsSocketTransport(mint_identity(ca, "spiffe://mesh.local/client"))
+        try:
+            # The advertised address is the dialable host, never the wildcard.
+            self.assertTrue(server.address.startswith("127.0.0.1:"))
+            self.assertNotIn("0.0.0.0", server.address)
+            # A peer dials the advertised address; the mTLS round trip and the
+            # identity binding are unaffected by the wider bind interface.
+            client.send(server.address, b"cross-interface hello")
+            frame = _await_frame(server)
+            self.assertIsNotNone(frame)
+            self.assertEqual(frame.payload, b"cross-interface hello")
+            self.assertEqual(frame.source, "spiffe://mesh.local/client")
+        finally:
+            client.close()
+            server.close()
+
+    def test_empty_bind_host_rejected(self):
+        ca = _ca()
+        with self.assertRaises(TransportError):
+            TlsSocketTransport(mint_identity(ca, "spiffe://mesh.local/x"), bind_host="")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -329,8 +329,12 @@ pool above, and **sharpened** the boundary on the rest:
 ### Still deferred / out of scope after Phase 6 (the Phase 7 pool)
 - **Kernel-level sandbox enforcement** — unchanged (Phase 5 item).
 - **Image-admission enforcement** — unchanged (Phase 5 item).
-- **NAT traversal / real WAN reachability** — STUN/TURN/ICE, relays.
-  Loopback has no NAT; this needs public hosts. See
+- **NAT traversal / cross-NAT WAN reachability** — STUN/TURN/ICE, relays.
+  As of v0.1 the transport bind is configurable (`bind_host` /
+  `advertise_host`), so peers on a mutually reachable network (LAN, VPN, or
+  port-forwarded hosts) now connect directly over the same mTLS + envelope
+  path. What stays deferred is the case where *both* peers sit behind NAT
+  with no dialable address, which needs public relays. See
   `docs/deployment-networking.md` §1. Out of substrate scope.
 - **Production PKI custody + issuance ops** — unchanged; HSM/KMS root,
   SPIRE-style attestation, rotation ops. Out of substrate scope.
