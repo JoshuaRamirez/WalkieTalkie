@@ -208,4 +208,28 @@ the substrate uses — the bridge adds transport and MCP glue, no new crypto.
 `gen_bridge_config.py --agents alice bob carol` mints three. Any agent can
 `send_message(to="carol", …)` as long as carol's bridge is running and
 carol is in the shared `trust.json`. Routing is direct (each bridge dials
-the peer's rendezvous address); a real gossip/routing layer is Phase 6.
+the peer's rendezvous address); gossip membership + multi-hop routing shipped
+in Phase 6 (`mesh/membership.py`, `mesh/routing.py`).
+
+## Across machines (LAN / reachable network)
+
+By default both bridges bind loopback, so they must share one host. To let a
+peer on **another machine** connect, start the receiving bridge bound to all
+interfaces and advertise this host's routable address:
+
+    python .../bridge/mesh_mcp_bridge.py --name alice --peer bob \
+        --bind-host 0.0.0.0 --advertise-host 192.168.1.42   # alice's LAN IP
+
+The advertised `host:port` is what the peer dials. The rendezvous is a local
+file (`rt-<name>.addr` under the config dir), so across machines share that
+address out of band (copy it to the peer, or point both bridges at a shared
+config location). Peers on a mutually reachable network — LAN, VPN, WireGuard —
+connect directly; two peers *both* behind NAT still need a relay (see
+`docs/deployment-networking.md`).
+
+**Security note.** Every message is envelope-signed, so identity, integrity, and
+replay protection hold regardless of where the bytes travel. But this bridge
+runs over **plain TCP** — the payload is *authenticated, not encrypted in
+transit* — so run it on a trusted network. For an untrusted path, the
+substrate's mTLS transport (`mesh/tls_transport.py`) adds channel encryption +
+peer-certificate auth on top of the same envelope.

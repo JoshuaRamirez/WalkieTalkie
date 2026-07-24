@@ -231,7 +231,15 @@ def _append_inbox(inbox: pathlib.Path, entry: dict) -> None:
 
 
 class MeshBridge:
-    def __init__(self, cfg: BridgeConfig, peer: str, *, send_only: bool = False) -> None:
+    def __init__(
+        self,
+        cfg: BridgeConfig,
+        peer: str,
+        *,
+        send_only: bool = False,
+        bind_host: str = "127.0.0.1",
+        advertise_host: str | None = None,
+    ) -> None:
         self.cfg = cfg
         self.peer = peer
         self.send_only = send_only
@@ -242,7 +250,14 @@ class MeshBridge:
         # Lazy import so the module is importable without a bound socket.
         from socket_transport import LocalSocketTransport
 
-        self.transport = LocalSocketTransport(source_address=cfg.name)
+        # Default binds loopback (same-machine). Pass bind_host="0.0.0.0" +
+        # advertise_host=<this host's routable IP> to let a peer on another
+        # machine connect. Messages are envelope-signed (integrity + identity)
+        # but this transport is plain TCP, so cross-machine links want a
+        # trusted network (LAN/VPN); transport encryption is the TLS transport.
+        self.transport = LocalSocketTransport(
+            source_address=cfg.name, bind_host=bind_host, advertise_host=advertise_host
+        )
 
         # send_only: a per-turn client bridge (e.g. one Claude spawns) that
         # only SENDS + reads the shared inbox file. It must NOT claim the
@@ -489,10 +504,23 @@ def main() -> None:
         help="client mode: send + read inbox, but don't own the listener "
         "(use when an always-on daemon bridge is the receiver)",
     )
+    ap.add_argument(
+        "--bind-host", default="127.0.0.1",
+        help="interface to bind (default 127.0.0.1; use 0.0.0.0 to accept a "
+        "peer from another machine on a reachable network)",
+    )
+    ap.add_argument(
+        "--advertise-host", default=None,
+        help="address peers should dial (default = bind host); set to this "
+        "host's routable IP when binding 0.0.0.0",
+    )
     args = ap.parse_args()
 
     cfg = BridgeConfig(args.config, args.name)
-    bridge = MeshBridge(cfg, args.peer, send_only=args.send_only)
+    bridge = MeshBridge(
+        cfg, args.peer, send_only=args.send_only,
+        bind_host=args.bind_host, advertise_host=args.advertise_host,
+    )
     try:
         serve_stdio(bridge)
     finally:
