@@ -17,6 +17,17 @@ release-prep pass ended on.
 > refactor), and **cutting a git tag** (after merge). The five-item list
 > below is the original framing; three are now resolved (packaging → Path B,
 > version → 0.1.0, PR → opened).
+>
+> **Update ("ultracode to the finish" — cross-machine networking):** closed
+> the loopback-only gap. The mesh transports (`socket_transport`,
+> `tls_transport`, `connection_pool`) and the two-Claude **bridge** CLI now
+> take `bind_host` / `advertise_host`, so nodes/agents on different machines
+> on a reachable network (LAN/VPN) connect over the identical mTLS + envelope
+> path. Default stays loopback; security logic byte-for-byte untouched
+> (adversarially confirmed); suite **961 → 967**. Docs updated
+> (`deployment-networking.md` §1, `DEFERRED.md`) to the honest new boundary:
+> reachable-network multi-machine works; cross-NAT (both peers behind NAT)
+> still needs relays. All on PR #90.
 
 ## What just landed
 
