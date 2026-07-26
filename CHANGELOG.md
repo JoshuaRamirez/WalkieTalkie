@@ -41,7 +41,7 @@ deliverables carry `**Landed (v0):**` annotations in
   default is unchanged (loopback), and the security logic (mTLS peer
   verification, admission) is untouched; only the bind interface is
   configurable. New tests pin identity binding over a wildcard (`0.0.0.0`) bind.
-- **Proof-obligation registry** (`envelope/proof_obligations.py`): 51 invariants,
+- **Proof-obligation registry** (`envelope/proof_obligations.py`): 53 invariants,
   each pinned by a canonical test and gated by `test_every_obligation_resolves`.
 - Root `README.md`, `SECURITY.md` disclosure policy, `CHANGELOG.md`,
   `CONTRIBUTING.md`, and a `.github/pull_request_template.md`.
@@ -86,5 +86,27 @@ deliverables carry `**Landed (v0):**` annotations in
   `envelope_too_deep`, `envelope_not_canonicalizable`,
   `verifier_internal_error`. Pinned by `envelope/test_verifier_fail_closed.py`
   and three new proof obligations.
+- **The denial audit path now survives the input it reports on.** The audit
+  context is read off the envelope *before* validation — a denial has to name
+  the message it denied — so those values are attacker-controlled, and the sink
+  JCS-canonicalizes what it is handed in order to hash it. A field the encoder
+  rejects therefore made the sink raise *while recording the denial*, so the
+  foreign exception escaped the deny handler and no event was written. This is
+  reachable from the wire: `json.loads` accepts a bare `NaN`, so
+  `{"sender_spiffe_id": NaN}` parses. Identity fields are now coerced to
+  bounded safe strings (`audit_safe`) before they reach the sink — which also
+  stops an unbounded field from bloating every downstream audit record.
+- **An allow that cannot be audited is now a denial.** A sink that raises (disk
+  full, permissions) previously leaked its own `OSError` out of the verifier,
+  reopening the partial-deny-path hole from the other end — and `_record` is
+  called from inside the deny handlers themselves. Sink failures now surface as
+  an `audit_sink_failure` denial with the cause chained. Fail-closed is the
+  point: the hash-chained log exists to make unaudited allows impossible.
+- **Bounded the depth check's own memory.** `check_json_depth` queued one tuple
+  per child including scalars, so a wide-but-shallow payload (a few MB of frame
+  holding millions of compact integers) cost hundreds of MB of transient
+  tuples — a memory-exhaustion DoS inside the check meant to prevent one. Only
+  containers are queued now, so auxiliary memory tracks nesting depth rather
+  than breadth. New deny reason: `audit_sink_failure`.
 
 [Unreleased]: https://github.com/JoshuaRamirez/WalkieTalkie/commits/main

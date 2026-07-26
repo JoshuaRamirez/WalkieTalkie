@@ -41,6 +41,7 @@ class DenyReason(StrEnum):
     ENVELOPE_TOO_DEEP = "envelope_too_deep"
     ENVELOPE_NOT_CANONICALIZABLE = "envelope_not_canonicalizable"
     VERIFIER_INTERNAL_ERROR = "verifier_internal_error"
+    AUDIT_SINK_FAILURE = "audit_sink_failure"
 
     # --- Time window (envelope) ---
     INVALID_TIMESTAMP = "invalid_timestamp"

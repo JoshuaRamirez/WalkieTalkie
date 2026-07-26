@@ -613,6 +613,22 @@ each entry names the module that implements it.
   probing the verifier left no forensic trace. Pinned by
   `envelope/test_verifier_fail_closed.py`.
 
+  The deny path also has to survive the input it reports on. The audit context
+  is read off the envelope *before* validation — a denial must name the message
+  it denied — and the sink JCS-canonicalizes what it is handed in order to hash
+  it, so a field the encoder rejects made the sink raise *while recording the
+  denial* (`json.loads` accepts a bare `NaN`, so this arrives from the wire).
+  Two guards close that:
+  - **`audit_safe`** coerces identity fields to bounded safe strings before
+    they reach the sink — non-strings become a `<non-string:type>` marker
+    rather than their repr, so a malformed field is recorded without copying
+    attacker bytes into the forensic log, and an oversized one cannot bloat
+    every downstream record.
+  - **Sink failures are denials.** A sink that raises surfaces as
+    `audit_sink_failure`, never its own `OSError`. On the allow path that
+    downgrades the result to a denial: an unaudited allow is exactly what the
+    hash chain exists to prevent.
+
 ## Frozen contracts
 
 All five Phase 1 §6 contracts (envelope, capability token, audit / policy

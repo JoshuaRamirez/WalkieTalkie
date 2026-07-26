@@ -189,6 +189,42 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             ".test_raising_key_lookup_denies_cleanly"
         ),
     ),
+    ProofObligation(
+        name="envelope_denial_audit_survives_malformed_input",
+        phase=Phase.PHASE_1,
+        track="A",
+        statement=(
+            "The audit context is read off the envelope before validation "
+            "— a denial must name the message it denied — so those values "
+            "are attacker-controlled, and the sink canonicalizes what it "
+            "is handed in order to hash it. A field the encoder rejects "
+            "must not make the sink raise *while recording the denial*. "
+            "Identity fields are coerced to bounded safe strings, so the "
+            "deny event is written for any input. Reachable from the wire: "
+            "json.loads accepts a bare NaN."
+        ),
+        canonical_test=(
+            "test_verifier_fail_closed.AuditContextSanitizationTests"
+            ".test_non_canonicalizable_identity_still_audits_its_denial"
+        ),
+    ),
+    ProofObligation(
+        name="envelope_unaudited_allow_is_denied",
+        phase=Phase.PHASE_1,
+        track="A",
+        statement=(
+            "An allow that could not be audited is downgraded to a "
+            "denial. The hash-chained log exists to make unaudited allows "
+            "impossible, so a sink that raises (disk full, permissions) "
+            "fails closed rather than letting the operation proceed "
+            "unrecorded — and its native exception type never escapes the "
+            "verifier."
+        ),
+        canonical_test=(
+            "test_verifier_fail_closed.AuditSinkFailureTests"
+            ".test_sink_failure_on_allow_path_downgrades_to_deny"
+        ),
+    ),
     # ----- Phase 1 capability token -----
     ProofObligation(
         name="capability_cnf_binding_prevents_reuse",

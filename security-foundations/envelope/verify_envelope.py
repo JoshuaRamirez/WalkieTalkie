@@ -202,6 +202,37 @@ def parse_rfc3339(value: str) -> datetime:
     return dt.astimezone(UTC)
 
 
+AUDIT_FIELD_MAX_LEN = 256
+
+
+def audit_safe(value: Any, *, max_len: int = AUDIT_FIELD_MAX_LEN) -> str:
+    """Coerce an unvalidated envelope field into something safe to audit.
+
+    The audit context is read straight off the inbound envelope *before*
+    validation — it has to be, since a denial needs to name the message it
+    denied. So these values are arbitrary attacker-controlled JSON, and the
+    audit sink JCS-canonicalizes what it is handed in order to hash it.
+
+    Two ways that bites, both reachable from the wire:
+
+    - A non-canonicalizable value (``json.loads`` accepts a bare ``NaN`` by
+      default, so ``{"sender_spiffe_id": NaN}`` parses) makes the sink raise
+      *while recording the denial* — the foreign exception escapes the deny
+      handler and no event is written. The exact failure this module exists
+      to prevent, one layer up.
+    - An unbounded string bloats every downstream audit record.
+
+    Non-strings become a type marker rather than their repr: the point is to
+    record *that* the field was malformed without copying attacker bytes
+    into the forensic log.
+    """
+    if not isinstance(value, str):
+        return f"<non-string:{type(value).__name__}>"
+    if len(value) > max_len:
+        return value[:max_len] + "…<truncated>"
+    return value
+
+
 def check_json_depth(value: Any, max_depth: int) -> None:
     """Reject structures nested deeper than ``max_depth``.
 
@@ -222,8 +253,17 @@ def check_json_depth(value: Any, max_depth: int) -> None:
                 f"json nesting exceeds maximum depth of {max_depth}",
                 reason=DenyReason.ENVELOPE_TOO_DEEP,
             )
+        # Push only containers. Scalars cannot deepen the nesting, and
+        # queueing one tuple per scalar would make auxiliary memory
+        # proportional to *breadth*: a wide array of compact integers turns
+        # a few MB of frame into hundreds of MB of transient tuples — a
+        # memory-exhaustion DoS inside the check meant to prevent one.
         children = node.values() if isinstance(node, dict) else node
-        stack.extend((child, depth + 1) for child in children)
+        stack.extend(
+            (child, depth + 1)
+            for child in children
+            if isinstance(child, (dict, list))
+        )
 
 
 def _canonical_json(value: Any) -> bytes:
@@ -376,25 +416,50 @@ def verify_envelope(
     # Deferred to avoid circular import (capability_token imports from this module).
     from capability_token import verify_capability_token
 
+    _raw = envelope if isinstance(envelope, dict) else {}
     audit_ctx = {
-        "message_id": envelope.get("message_id", "") if isinstance(envelope, dict) else "",
-        "sender": envelope.get("sender_spiffe_id", "") if isinstance(envelope, dict) else "",
-        "recipient": envelope.get("recipient_spiffe_id", "") if isinstance(envelope, dict) else "",
-        "envelope_kid": envelope.get("kid", "") if isinstance(envelope, dict) else "",
+        "message_id": audit_safe(_raw.get("message_id", "")),
+        "sender": audit_safe(_raw.get("sender_spiffe_id", "")),
+        "recipient": audit_safe(_raw.get("recipient_spiffe_id", "")),
+        "envelope_kid": audit_safe(_raw.get("kid", "")),
         "issuer_iss": "",
         "issuer_kid": "",
     }
 
+    def _record(**fields: Any) -> None:
+        """Emit one audit event, converting sink failures into denials.
+
+        A sink that raises (disk full, permissions) must not leak its own
+        exception type out of ``verify_envelope`` — that would reopen the
+        partial-deny-path hole from the other end, since ``_record`` is
+        called from inside the deny handlers themselves.
+
+        Fail *closed*: an allow that could not be audited is downgraded to a
+        denial, because an unaudited allow is precisely what the hash-chained
+        log exists to make impossible. In the deny path the outcome is
+        already a denial; surfacing AUDIT_SINK_FAILURE there deliberately
+        supersedes the original reason code, since a broken audit sink is the
+        more urgent operational fact (the original stays chained).
+        """
+        if audit_sink is None:
+            return
+        try:
+            audit_sink.record(**fields)
+        except Exception as exc:
+            raise EnvelopeVerificationError(
+                f"audit sink failed: {type(exc).__name__}",
+                reason=DenyReason.AUDIT_SINK_FAILURE,
+            ) from exc
+
     def _emit(outcome: str, reason: str, *, reason_code: str = "") -> None:
-        if audit_sink is not None:
-            audit_sink.record(
-                event_type="envelope.verify",
-                outcome=outcome,
-                reason=reason,
-                reason_code=reason_code,
-                artifact_version="envelope/v0",
-                **audit_ctx,
-            )
+        _record(
+            event_type="envelope.verify",
+            outcome=outcome,
+            reason=reason,
+            reason_code=reason_code,
+            artifact_version="envelope/v0",
+            **audit_ctx,
+        )
 
     def _emit_cap(
         outcome: str,
@@ -404,20 +469,19 @@ def verify_envelope(
         cap_iss: str = "",
         cap_kid: str = "",
     ) -> None:
-        if audit_sink is not None:
-            audit_sink.record(
-                event_type="capability.verify",
-                outcome=outcome,
-                reason=reason,
-                reason_code=reason_code,
-                artifact_version="wt-cap+jwt",
-                message_id=audit_ctx["message_id"],
-                sender=audit_ctx["sender"],
-                recipient=audit_ctx["recipient"],
-                envelope_kid=audit_ctx["envelope_kid"],
-                issuer_iss=cap_iss,
-                issuer_kid=cap_kid,
-            )
+        _record(
+            event_type="capability.verify",
+            outcome=outcome,
+            reason=reason,
+            reason_code=reason_code,
+            artifact_version="wt-cap+jwt",
+            message_id=audit_ctx["message_id"],
+            sender=audit_ctx["sender"],
+            recipient=audit_ctx["recipient"],
+            envelope_kid=audit_ctx["envelope_kid"],
+            issuer_iss=cap_iss,
+            issuer_kid=cap_kid,
+        )
 
     try:
         if not isinstance(envelope, dict):

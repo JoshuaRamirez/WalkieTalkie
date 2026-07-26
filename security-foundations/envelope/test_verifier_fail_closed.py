@@ -29,12 +29,13 @@ chain that still verifies.** Nothing else escapes.
 
 import pathlib
 import sys
+import tracemalloc
 import unittest
 from datetime import UTC, datetime, timedelta
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from audit import InMemoryAuditSink, verify_chain
+from audit import AuditSink, InMemoryAuditSink, verify_chain
 from deny_reason import DenyReason
 from test_verify_envelope import (
     _ISSUER_IDENTITY,
@@ -53,6 +54,7 @@ from verify_envelope import (
     InMemoryReplayCache,
     VerificationConfig,
     _digest_payload,
+    audit_safe,
     check_json_depth,
     verify_envelope,
 )
@@ -263,6 +265,124 @@ class NestingDepthTests(_VerifierFixture):
     def test_wide_but_shallow_is_accepted(self):
         """The bound is on depth, not size — breadth must not trip it."""
         check_json_depth({"k": [{"a": i} for i in range(5_000)]}, 8)
+
+    def test_wide_payload_does_not_blow_up_auxiliary_memory(self):
+        """Auxiliary memory tracks *depth*, not breadth.
+
+        Queueing one tuple per scalar would make a few MB of wire frame cost
+        hundreds of MB of transient tuples — a memory-exhaustion DoS inside
+        the check that exists to prevent one. Only containers are queued, so
+        a wide array of scalars costs nothing.
+        """
+        wide = {"k": list(range(1_000_000))}
+        tracemalloc.start()
+        try:
+            before = tracemalloc.get_traced_memory()[0]
+            check_json_depth(wide, 64)
+            peak = tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+        overhead_mb = (peak - before) / 1e6
+        self.assertLess(overhead_mb, 1.0, f"walk allocated {overhead_mb:.1f} MB")
+
+    def test_cyclic_structure_terminates(self):
+        """A reference cycle is bounded by the depth check, not an infinite loop.
+
+        Cycles cannot arrive from ``json.loads``, but an in-process caller can
+        build one. The depth counter rises on every revisit, so the walk hits
+        the bound and denies instead of spinning — no visited-set needed.
+        """
+        cyclic_list: list = []
+        cyclic_list.append(cyclic_list)
+        cyclic_dict: dict = {}
+        cyclic_dict["self"] = cyclic_dict
+        for name, value in (("list", cyclic_list), ("dict", cyclic_dict)):
+            with self.subTest(kind=name):
+                with self.assertRaises(EnvelopeVerificationError) as ctx:
+                    check_json_depth(value, 64)
+                self.assertEqual(ctx.exception.reason, DenyReason.ENVELOPE_TOO_DEEP)
+
+
+class AuditContextSanitizationTests(_VerifierFixture):
+    """The deny path must survive the values it is trying to report on.
+
+    The audit context is read off the envelope *before* validation — a denial
+    has to name the message it denied. Those values are attacker-controlled,
+    and the sink JCS-canonicalizes what it is handed in order to hash it. A
+    field the encoder rejects therefore made the sink raise *while recording
+    the denial*: the foreign exception escaped the deny handler and no event
+    was written. Reachable from the wire — ``json.loads`` accepts a bare
+    ``NaN``, so ``{"sender_spiffe_id": NaN}`` parses.
+    """
+
+    def test_non_canonicalizable_identity_still_audits_its_denial(self):
+        for field in ("message_id", "sender_spiffe_id", "recipient_spiffe_id", "kid"):
+            for bad in (float("nan"), float("inf"), {"a": {1, 2}}):
+                with self.subTest(field=field, value=repr(bad)):
+                    envelope, now = self.valid_envelope()
+                    envelope[field] = bad
+                    sink = InMemoryAuditSink()
+                    with self.assertRaises(EnvelopeVerificationError):
+                        self.verify(envelope, now, sink=sink)
+                    self.assertEqual(len(sink.events), 1)
+                    verify_chain(sink.events)
+
+    def test_oversized_identity_is_truncated_in_the_audit_record(self):
+        """An unbounded field must not bloat every downstream audit record."""
+        envelope, now = self.valid_envelope()
+        envelope["sender_spiffe_id"] = "A" * 100_000
+        sink = InMemoryAuditSink()
+        with self.assertRaises(EnvelopeVerificationError):
+            self.verify(envelope, now, sink=sink)
+        self.assertEqual(len(sink.events), 1)
+        self.assertLess(len(sink.events[0].sender), 1_000)
+        verify_chain(sink.events)
+
+    def test_audit_safe_marks_type_without_copying_attacker_bytes(self):
+        self.assertEqual(audit_safe("spiffe://mesh/a"), "spiffe://mesh/a")
+        self.assertEqual(audit_safe(123), "<non-string:int>")
+        self.assertEqual(audit_safe(None), "<non-string:NoneType>")
+        self.assertEqual(audit_safe(float("nan")), "<non-string:float>")
+        self.assertTrue(audit_safe("x" * 5_000).endswith("…<truncated>"))
+        self.assertLess(len(audit_safe("x" * 5_000)), 400)
+
+
+class AuditSinkFailureTests(_VerifierFixture):
+    """A sink that raises must not leak its exception type out of the verifier.
+
+    ``_record`` is called from inside the deny handlers, so an unguarded sink
+    failure reopens the partial-deny-path hole from the other end.
+    """
+
+    class BrokenSink(AuditSink):
+        def tail_hash(self):
+            return "0" * 64
+
+        def _append(self, event):
+            raise AssertionError("unreachable")
+
+        def record(self, **fields):
+            raise OSError("audit disk full")
+
+    def test_sink_failure_on_allow_path_downgrades_to_deny(self):
+        """An allow that could not be audited is not an allow.
+
+        The hash-chained log exists to make unaudited allows impossible, so
+        losing the sink fails closed rather than proceeding unrecorded.
+        """
+        envelope, now = self.valid_envelope()
+        with self.assertRaises(EnvelopeVerificationError) as ctx:
+            self.verify(envelope, now, sink=self.BrokenSink())
+        self.assertEqual(ctx.exception.reason, DenyReason.AUDIT_SINK_FAILURE)
+        self.assertIsInstance(ctx.exception.__cause__, OSError)
+
+    def test_sink_failure_on_deny_path_stays_an_envelope_error(self):
+        """Already denying; the sink failure supersedes but never leaks OSError."""
+        envelope, now = self.valid_envelope()
+        envelope["nonce"] = 123
+        with self.assertRaises(EnvelopeVerificationError) as ctx:
+            self.verify(envelope, now, sink=self.BrokenSink())
+        self.assertEqual(ctx.exception.reason, DenyReason.AUDIT_SINK_FAILURE)
 
 
 class InternalErrorBackstopTests(_VerifierFixture):
