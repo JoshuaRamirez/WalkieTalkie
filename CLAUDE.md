@@ -14,14 +14,22 @@ WalkieTalkie is a security substrate for peer-to-peer MCP-style
 workloads. The `security-foundations/envelope/` package is the
 in-process safety kernel: cryptographic envelope verification,
 capability tokens, delegation receipts, retrieval / egress / tool
-policies, safe-mode engine, sybil deterrence, etc. There is no
-network layer, no persistence backend, no live deployment — this
-is the kernel only.
+policies, safe-mode engine, sybil deterrence, etc. On top of it,
+`security-foundations/mesh/` is the network stack (Phase 5–6):
+transport ABC, mutual TLS 1.3, SWIM gossip membership, and
+multi-hop routing — all [RUNNABLE] but bound to loopback and
+localhost sockets, which caps scale and reachability, not the
+security properties. There is still no persistence backend and no
+production / WAN deployment: the enforcement that needs real
+infrastructure (PKI custody, NAT traversal, kernel sandboxing) is
+labelled [REFERENCE] and lives in the Phase 7 pool — see
+`DEFERRED.md`.
 
-Phases shipped (Phase 0 through Phase 3) are tracked in
+Phases shipped (Phase 0 through Phase 6) are tracked in
 `implementation-plan/phases/`. Every deliverable in those docs is
 annotated `**Landed (v0):**` with a pointer to the module that
-implements it.
+implements it. The `## Phase 4/5/6 status` sections below carry the
+per-phase detail.
 
 ## Source of truth for "what's proven"
 

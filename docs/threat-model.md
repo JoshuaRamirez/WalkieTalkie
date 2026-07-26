@@ -89,7 +89,9 @@ Goal: be treated as a trusted peer
 
 **Enforcement boundary.** In-process the substrate verifies SVIDs and
 admits peers. The transport-layer mTLS handshake the vision also calls
-for (Layer A) is deployment-layer — the substrate binds identity at the
+for (Layer A) now ships [RUNNABLE] in `mesh/tls_transport.py` (Phase 6,
+proven over loopback); WAN-scale handshake operations remain
+deployment-layer. Either way the substrate binds identity at the
 *envelope* layer, which holds regardless of transport (proven by the
 same envelope verifying over both InMemory and real-socket transports
 in `mesh/test_mesh_round_trip.py`).
@@ -334,7 +336,7 @@ machine-*enforced* in-process — claiming one would overclaim (see the
 class. The substrate produces a versioned, type-checked, loadable
 seccomp document and a declarative confinement profile; *loading* it
 into a kernel, confining the filesystem, and enforcing egress are the
-container runtime's and network policy's job (Phase 6 / deployment).
+container runtime's and network policy's job (Phase 7 / deployment).
 The value is a single authoritative source the enforcement layer
 consumes instead of scattered ad-hoc config.
 

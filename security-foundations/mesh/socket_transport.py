@@ -9,8 +9,10 @@ socket — because security lives in the signed envelope, not the wire.
 
 Design:
 
-- Binds an ephemeral loopback port (``127.0.0.1:0``); the OS-assigned
-  ``address`` is ``"127.0.0.1:<port>"``.
+- Binds an ephemeral port on ``bind_host`` (default ``127.0.0.1``); the
+  advertised ``address`` is ``"{advertise_host or bind_host}:<port>"``.
+  Pass ``bind_host="0.0.0.0"`` + a reachable ``advertise_host`` to accept
+  peers from other machines.
 - A daemon listener thread accepts connections, reads one
   length-prefixed frame per connection, and appends it to a
   thread-safe inbox. ``receive()`` drains the inbox (non-blocking,
@@ -20,11 +22,11 @@ Design:
 - ``close()`` stops the listener and releases the socket. Callers
   MUST close (tests use try/finally) so no thread or port leaks.
 
-This is loopback only and single-host — genuine networking, but not a
-distributed deployment. A planet-scale mesh (NAT traversal, TLS on
-the wire, connection pooling, backpressure) is out of scope and lives
-in the Phase 6 pool. What this proves is that the node abstraction
-holds over a real socket, which is the claim that matters.
+The bind interface is configurable, so this reaches LAN / reachable-address
+multi-machine use, not just a single host. What is still out of scope is
+true WAN across NAT (STUN/TURN/relay) and PKI custody at scale — deployment
+infrastructure, not the substrate. Security is unaffected either way: it
+lives in the signed envelope, not the wire address.
 """
 
 from __future__ import annotations
@@ -58,9 +60,17 @@ class LocalSocketTransport(Transport):
     identity comes from the signed envelope inside the payload.
     """
 
-    def __init__(self, source_address: str = "local") -> None:
+    def __init__(
+        self,
+        source_address: str = "local",
+        *,
+        bind_host: str = "127.0.0.1",
+        advertise_host: str | None = None,
+    ) -> None:
         if not isinstance(source_address, str) or not source_address:
             raise TransportError("source_address must be a non-empty string")
+        if not isinstance(bind_host, str) or not bind_host:
+            raise TransportError("bind_host must be a non-empty string")
         self._source_address = source_address
         self._inbox: deque[Frame] = deque()
         self._lock = threading.Lock()
@@ -68,11 +78,14 @@ class LocalSocketTransport(Transport):
 
         self._listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._listener.bind(("127.0.0.1", 0))
+        self._listener.bind((bind_host, 0))
         self._listener.listen(16)
         self._listener.settimeout(0.25)
-        host, port = self._listener.getsockname()
-        self._address = f"{host}:{port}"
+        _, port = self._listener.getsockname()
+        # Advertise a *dialable* host. Bound to 0.0.0.0 (all interfaces),
+        # getsockname() reports 0.0.0.0, which peers cannot dial, so a caller
+        # binding a wildcard interface must pass advertise_host = a reachable IP.
+        self._address = f"{advertise_host or bind_host}:{port}"
 
         self._thread = threading.Thread(target=self._serve, daemon=True)
         self._thread.start()

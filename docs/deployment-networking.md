@@ -31,6 +31,14 @@ every other directly. On the internet, most nodes sit behind NAT or a
 firewall and have no publicly dialable address; two such peers cannot
 open a direct TCP connection at all.
 
+**What now works (v0.1).** The transports' bind interface is configurable
+(`bind_host` / `advertise_host`): a node can bind `0.0.0.0` and advertise a
+routable address, so peers on the **same reachable network** — a LAN, a VPN,
+or hosts with port-forwarding — connect directly over the identical mTLS +
+signed-envelope path. This is no longer loopback-only. What remains below is
+the harder case: two peers with **no** mutually dialable address because both
+sit behind NAT.
+
 **What a deployment needs.**
 - **STUN** for each node to discover its own public `ip:port`.
 - **TURN / relays** for the (common) case where hole-punching fails —
