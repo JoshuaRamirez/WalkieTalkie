@@ -64,6 +64,21 @@ Enable authenticated peer discovery and request/response execution with anti-rep
   issuer (iss, kid). See `security-foundations/envelope/audit.py`. Discovery,
   policy, and execution checkpoints remain outstanding.
 
+  **Made total (v0):** "every call" originally held only for inputs whose
+  field types the verifier assumed. A malformed inbound envelope
+  (`{"message_id": 123, …}`, a payload nested 20k deep, a non-JSON value)
+  escaped as a bare `TypeError` / `AttributeError` / `RecursionError`,
+  skipping the deny path — so a malformed-envelope probe emitted **zero**
+  audit events and bypassed every caller's `except
+  EnvelopeVerificationError`. The verifier now type-checks each field
+  before matching it, bounds JSON nesting depth
+  (`VerificationConfig.max_json_depth`, iterative check), converts
+  canonicalization failures into denials, and backstops the whole path so
+  no input yields anything but `EnvelopeVerificationError`. Pinned by
+  `test_verifier_fail_closed.py` and obligations
+  `envelope_malformed_field_type_denies_cleanly`,
+  `envelope_nesting_depth_bounded`, `envelope_verifier_fails_closed`.
+
 ### D1.5 Operational Guardrails
 - Identity-aware rate limits.
   **Landed (v0):** `IdentityRateLimiter` in

@@ -41,7 +41,7 @@ deliverables carry `**Landed (v0):**` annotations in
   default is unchanged (loopback), and the security logic (mTLS peer
   verification, admission) is untouched; only the bind interface is
   configurable. New tests pin identity binding over a wildcard (`0.0.0.0`) bind.
-- **Proof-obligation registry** (`envelope/proof_obligations.py`): 48 invariants,
+- **Proof-obligation registry** (`envelope/proof_obligations.py`): 51 invariants,
   each pinned by a canonical test and gated by `test_every_obligation_resolves`.
 - Root `README.md`, `SECURITY.md` disclosure policy, `CHANGELOG.md`,
   `CONTRIBUTING.md`, and a `.github/pull_request_template.md`.
@@ -64,5 +64,27 @@ deliverables carry `**Landed (v0):**` annotations in
 - Raised the `cryptography` dependency floor from `>=41` to `>=42`: the X.509
   layer uses the `*_utc` certificate accessors added in cryptography 42, so a
   fresh install resolving 41 would fail at runtime.
+
+### Security
+
+- **`verify_envelope` now fails closed on malformed input.** The inbound
+  envelope is attacker-controlled JSON, but the verifier assumed each field's
+  Python type: regex matches, set membership, and `str.replace` all *raise* on
+  the wrong type instead of returning False. A peer sending
+  `{"message_id": 123, …}` — or a payload nested 20k deep, or a value outside
+  the JSON data model — got the verifier to throw a bare `TypeError` /
+  `AttributeError` / `RecursionError`. That exception escaped every caller's
+  `except EnvelopeVerificationError` handler **and** bypassed the verifier's
+  own deny path, so the probe emitted **no audit event** — silent, and remotely
+  reachable through `envelope_from_json`, which validates only that the wire
+  bytes decode to a JSON object. Deep nesting was additionally a stack-
+  exhaustion DoS. The verifier now type-checks fields before matching them,
+  bounds nesting via `VerificationConfig.max_json_depth` (default 64, checked
+  iteratively), converts canonicalization failures into denials, and backstops
+  the path with a `verifier_internal_error` denial so no input yields anything
+  but `EnvelopeVerificationError`. New deny reasons: `envelope_not_object`,
+  `envelope_too_deep`, `envelope_not_canonicalizable`,
+  `verifier_internal_error`. Pinned by `envelope/test_verifier_fail_closed.py`
+  and three new proof obligations.
 
 [Unreleased]: https://github.com/JoshuaRamirez/WalkieTalkie/commits/main

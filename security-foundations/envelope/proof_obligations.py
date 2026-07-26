@@ -136,6 +136,59 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             ".test_invalid_signature_does_not_reserve_nonce"
         ),
     ),
+    ProofObligation(
+        name="envelope_malformed_field_type_denies_cleanly",
+        phase=Phase.PHASE_1,
+        track="A",
+        statement=(
+            "The envelope is attacker-controlled JSON, so any field can "
+            "hold any JSON type. A field of the wrong type is a DENIAL "
+            "carrying that field's DenyReason — never an escaping "
+            "TypeError. This is a security property, not a robustness "
+            "one: a foreign exception type bypasses every caller's "
+            "`except EnvelopeVerificationError` handler AND the "
+            "verifier's own deny path, so the probe would leave no "
+            "audit event."
+        ),
+        canonical_test=(
+            "test_verifier_fail_closed.MalformedFieldTypeTests"
+            ".test_non_string_fields_deny_cleanly"
+        ),
+    ),
+    ProofObligation(
+        name="envelope_nesting_depth_bounded",
+        phase=Phase.PHASE_1,
+        track="A",
+        statement=(
+            "Inbound JSON nested deeper than config.max_json_depth is "
+            "rejected before canonicalization, which recurses over the "
+            "envelope. Without the bound, a few kilobytes of wire bytes "
+            "exhaust the interpreter stack — an unauthenticated remote "
+            "denial of service. The depth check is itself iterative, so "
+            "it survives the input it exists to reject."
+        ),
+        canonical_test=(
+            "test_verifier_fail_closed.NestingDepthTests"
+            ".test_deeply_nested_payload_denies_cleanly"
+        ),
+    ),
+    ProofObligation(
+        name="envelope_verifier_fails_closed",
+        phase=Phase.PHASE_1,
+        track="A",
+        statement=(
+            "No input and no callback failure makes verify_envelope raise "
+            "anything other than EnvelopeVerificationError. Unanticipated "
+            "exceptions (a trust store that is down, a bug) become a "
+            "VERIFIER_INTERNAL_ERROR denial with an audit event, keeping "
+            "the deny path total. BaseException (KeyboardInterrupt, "
+            "SystemExit) still propagates — shutdown is not a denial."
+        ),
+        canonical_test=(
+            "test_verifier_fail_closed.InternalErrorBackstopTests"
+            ".test_raising_key_lookup_denies_cleanly"
+        ),
+    ),
     # ----- Phase 1 capability token -----
     ProofObligation(
         name="capability_cnf_binding_prevents_reuse",
