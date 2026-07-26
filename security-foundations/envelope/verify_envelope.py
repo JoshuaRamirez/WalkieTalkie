@@ -58,6 +58,13 @@ class VerificationConfig:
     max_clock_skew: timedelta = timedelta(seconds=60)
     max_envelope_ttl: timedelta = timedelta(minutes=5)
     max_capability_ttl: timedelta = timedelta(minutes=5)
+    # Structural bound on inbound JSON. Canonicalization (:mod:`jcs`) and
+    # hashing recurse over the envelope, so an attacker-supplied nesting
+    # depth near CPython's recursion limit turns a few kilobytes of wire
+    # bytes into a stack exhaustion. The verifier rejects over-deep
+    # envelopes *before* touching them. 64 is far above any real MCP
+    # payload and far below the interpreter's limit.
+    max_json_depth: int = 64
 
 
 DEFAULT_CONFIG = VerificationConfig()
@@ -177,6 +184,10 @@ class SQLiteReplayCache(ReplayCache):
 
 
 def parse_rfc3339(value: str) -> datetime:
+    if not isinstance(value, str):
+        raise EnvelopeVerificationError(
+            "timestamp must be a string", reason=DenyReason.INVALID_TIMESTAMP
+        )
     candidate = value.replace("Z", "+00:00")
     try:
         dt = datetime.fromisoformat(candidate)
@@ -191,8 +202,94 @@ def parse_rfc3339(value: str) -> datetime:
     return dt.astimezone(UTC)
 
 
+AUDIT_FIELD_MAX_LEN = 256
+
+
+def audit_safe(value: Any, *, max_len: int = AUDIT_FIELD_MAX_LEN) -> str:
+    """Coerce an unvalidated envelope field into something safe to audit.
+
+    The audit context is read straight off the inbound envelope *before*
+    validation — it has to be, since a denial needs to name the message it
+    denied. So these values are arbitrary attacker-controlled JSON, and the
+    audit sink JCS-canonicalizes what it is handed in order to hash it.
+
+    Two ways that bites, both reachable from the wire:
+
+    - A non-canonicalizable value (``json.loads`` accepts a bare ``NaN`` by
+      default, so ``{"sender_spiffe_id": NaN}`` parses) makes the sink raise
+      *while recording the denial* — the foreign exception escapes the deny
+      handler and no event is written. The exact failure this module exists
+      to prevent, one layer up.
+    - An unbounded string bloats every downstream audit record.
+
+    Non-strings become a type marker rather than their repr: the point is to
+    record *that* the field was malformed without copying attacker bytes
+    into the forensic log.
+    """
+    if not isinstance(value, str):
+        return f"<non-string:{type(value).__name__}>"
+    if len(value) > max_len:
+        return value[:max_len] + "…<truncated>"
+    return value
+
+
+def check_json_depth(value: Any, max_depth: int) -> None:
+    """Reject structures nested deeper than ``max_depth``.
+
+    Walked with an explicit stack rather than recursion: a recursive depth
+    checker would itself blow the stack on exactly the input it exists to
+    reject, which is the bug and not the fix.
+
+    Raises :class:`EnvelopeVerificationError` with
+    :attr:`DenyReason.ENVELOPE_TOO_DEEP` on the first node past the bound.
+    """
+    stack: list[tuple[Any, int]] = [(value, 1)]
+    while stack:
+        node, depth = stack.pop()
+        if not isinstance(node, (dict, list)):
+            continue
+        if depth > max_depth:
+            raise EnvelopeVerificationError(
+                f"json nesting exceeds maximum depth of {max_depth}",
+                reason=DenyReason.ENVELOPE_TOO_DEEP,
+            )
+        # Push only containers. Scalars cannot deepen the nesting, and
+        # queueing one tuple per scalar would make auxiliary memory
+        # proportional to *breadth*: a wide array of compact integers turns
+        # a few MB of frame into hundreds of MB of transient tuples — a
+        # memory-exhaustion DoS inside the check meant to prevent one.
+        children = node.values() if isinstance(node, dict) else node
+        stack.extend(
+            (child, depth + 1)
+            for child in children
+            if isinstance(child, (dict, list))
+        )
+
+
 def _canonical_json(value: Any) -> bytes:
-    return jcs.canonicalize(value)
+    """Canonicalize to JCS bytes, converting encoder failures into denials.
+
+    :mod:`jcs` raises bare ``TypeError``/``ValueError`` for values outside
+    the JSON data model (``set``, ``bytes``, ``NaN``, ``Infinity``). Those
+    reach this function whenever a caller hands the verifier a dict it did
+    not decode from JSON itself, and an uncaught ``TypeError`` escapes the
+    verifier's deny path — no ``DenyReason``, no audit event. Fail closed
+    instead.
+    """
+    try:
+        return jcs.canonicalize(value)
+    except EnvelopeVerificationError:
+        raise
+    except RecursionError as exc:
+        raise EnvelopeVerificationError(
+            "json nesting exceeds canonicalization limit",
+            reason=DenyReason.ENVELOPE_TOO_DEEP,
+        ) from exc
+    except Exception as exc:
+        raise EnvelopeVerificationError(
+            f"value is not canonicalizable JSON: {type(exc).__name__}",
+            reason=DenyReason.ENVELOPE_NOT_CANONICALIZABLE,
+        ) from exc
 
 
 def _digest_payload(payload: Any) -> str:
@@ -248,27 +345,38 @@ def _verify_ed25519_signature(signing_input: bytes, signature: str, public_key_p
 
 
 def _validate_static_fields(envelope: dict[str, Any]) -> None:
+    # Every field below is matched against a regex or a membership test,
+    # both of which raise (``TypeError``) on a non-``str`` rather than
+    # returning False. The envelope is attacker-controlled JSON, so a
+    # non-``str`` here is an expected input, not an internal error: check
+    # the type first and deny with the field's own reason code.
     if envelope["version"] != "v0":
         raise EnvelopeVerificationError(
             "unsupported version", reason=DenyReason.UNSUPPORTED_VERSION
         )
 
-    if not UUID_V7_RE.match(envelope["message_id"]):
+    if not isinstance(envelope["message_id"], str) or not UUID_V7_RE.match(
+        envelope["message_id"]
+    ):
         raise EnvelopeVerificationError(
             "message_id must be UUIDv7", reason=DenyReason.INVALID_MESSAGE_ID
         )
 
-    if not SPIFFE_ID_RE.match(envelope["sender_spiffe_id"]):
+    if not isinstance(envelope["sender_spiffe_id"], str) or not SPIFFE_ID_RE.match(
+        envelope["sender_spiffe_id"]
+    ):
         raise EnvelopeVerificationError(
             "invalid sender_spiffe_id", reason=DenyReason.INVALID_SENDER_SPIFFE_ID
         )
 
-    if not SPIFFE_ID_RE.match(envelope["recipient_spiffe_id"]):
+    if not isinstance(envelope["recipient_spiffe_id"], str) or not SPIFFE_ID_RE.match(
+        envelope["recipient_spiffe_id"]
+    ):
         raise EnvelopeVerificationError(
             "invalid recipient_spiffe_id", reason=DenyReason.INVALID_RECIPIENT_SPIFFE_ID
         )
 
-    if not NONCE_RE.match(envelope["nonce"]):
+    if not isinstance(envelope["nonce"], str) or not NONCE_RE.match(envelope["nonce"]):
         raise EnvelopeVerificationError(
             "invalid nonce format", reason=DenyReason.INVALID_NONCE
         )
@@ -278,13 +386,17 @@ def _validate_static_fields(envelope: dict[str, Any]) -> None:
             "invalid kid format", reason=DenyReason.INVALID_KID
         )
 
-    if not HEX_SHA256_RE.match(envelope["payload_digest"]):
+    if not isinstance(envelope["payload_digest"], str) or not HEX_SHA256_RE.match(
+        envelope["payload_digest"]
+    ):
         raise EnvelopeVerificationError(
             "payload_digest must be hex sha256",
             reason=DenyReason.INVALID_PAYLOAD_DIGEST,
         )
 
-    if envelope["alg"] not in ALLOWED_ALGORITHMS:
+    # ``x in <set>`` hashes x; an unhashable ``alg`` (list/dict) raises
+    # TypeError instead of failing the membership test.
+    if not isinstance(envelope["alg"], str) or envelope["alg"] not in ALLOWED_ALGORITHMS:
         raise EnvelopeVerificationError(
             "algorithm not allowed", reason=DenyReason.DISALLOWED_ALGORITHM
         )
@@ -304,25 +416,50 @@ def verify_envelope(
     # Deferred to avoid circular import (capability_token imports from this module).
     from capability_token import verify_capability_token
 
+    _raw = envelope if isinstance(envelope, dict) else {}
     audit_ctx = {
-        "message_id": envelope.get("message_id", "") if isinstance(envelope, dict) else "",
-        "sender": envelope.get("sender_spiffe_id", "") if isinstance(envelope, dict) else "",
-        "recipient": envelope.get("recipient_spiffe_id", "") if isinstance(envelope, dict) else "",
-        "envelope_kid": envelope.get("kid", "") if isinstance(envelope, dict) else "",
+        "message_id": audit_safe(_raw.get("message_id", "")),
+        "sender": audit_safe(_raw.get("sender_spiffe_id", "")),
+        "recipient": audit_safe(_raw.get("recipient_spiffe_id", "")),
+        "envelope_kid": audit_safe(_raw.get("kid", "")),
         "issuer_iss": "",
         "issuer_kid": "",
     }
 
+    def _record(**fields: Any) -> None:
+        """Emit one audit event, converting sink failures into denials.
+
+        A sink that raises (disk full, permissions) must not leak its own
+        exception type out of ``verify_envelope`` — that would reopen the
+        partial-deny-path hole from the other end, since ``_record`` is
+        called from inside the deny handlers themselves.
+
+        Fail *closed*: an allow that could not be audited is downgraded to a
+        denial, because an unaudited allow is precisely what the hash-chained
+        log exists to make impossible. In the deny path the outcome is
+        already a denial; surfacing AUDIT_SINK_FAILURE there deliberately
+        supersedes the original reason code, since a broken audit sink is the
+        more urgent operational fact (the original stays chained).
+        """
+        if audit_sink is None:
+            return
+        try:
+            audit_sink.record(**fields)
+        except Exception as exc:
+            raise EnvelopeVerificationError(
+                f"audit sink failed: {type(exc).__name__}",
+                reason=DenyReason.AUDIT_SINK_FAILURE,
+            ) from exc
+
     def _emit(outcome: str, reason: str, *, reason_code: str = "") -> None:
-        if audit_sink is not None:
-            audit_sink.record(
-                event_type="envelope.verify",
-                outcome=outcome,
-                reason=reason,
-                reason_code=reason_code,
-                artifact_version="envelope/v0",
-                **audit_ctx,
-            )
+        _record(
+            event_type="envelope.verify",
+            outcome=outcome,
+            reason=reason,
+            reason_code=reason_code,
+            artifact_version="envelope/v0",
+            **audit_ctx,
+        )
 
     def _emit_cap(
         outcome: str,
@@ -332,22 +469,31 @@ def verify_envelope(
         cap_iss: str = "",
         cap_kid: str = "",
     ) -> None:
-        if audit_sink is not None:
-            audit_sink.record(
-                event_type="capability.verify",
-                outcome=outcome,
-                reason=reason,
-                reason_code=reason_code,
-                artifact_version="wt-cap+jwt",
-                message_id=audit_ctx["message_id"],
-                sender=audit_ctx["sender"],
-                recipient=audit_ctx["recipient"],
-                envelope_kid=audit_ctx["envelope_kid"],
-                issuer_iss=cap_iss,
-                issuer_kid=cap_kid,
-            )
+        _record(
+            event_type="capability.verify",
+            outcome=outcome,
+            reason=reason,
+            reason_code=reason_code,
+            artifact_version="wt-cap+jwt",
+            message_id=audit_ctx["message_id"],
+            sender=audit_ctx["sender"],
+            recipient=audit_ctx["recipient"],
+            envelope_kid=audit_ctx["envelope_kid"],
+            issuer_iss=cap_iss,
+            issuer_kid=cap_kid,
+        )
 
     try:
+        if not isinstance(envelope, dict):
+            raise EnvelopeVerificationError(
+                "envelope must be a JSON object",
+                reason=DenyReason.ENVELOPE_NOT_OBJECT,
+            )
+
+        # Structural bound first: everything downstream (canonicalization,
+        # hashing, signing input) recurses over this object.
+        check_json_depth(envelope, config.max_json_depth)
+
         required = {
             "version",
             "message_id",
@@ -446,6 +592,21 @@ def verify_envelope(
     except EnvelopeVerificationError as exc:
         _emit("deny", str(exc), reason_code=exc.reason_code)
         raise
+    except Exception as exc:
+        # Fail-closed backstop. Anything that reaches here is a path the
+        # verifier did not anticipate — a malformed field type it has no
+        # explicit guard for, a ``key_lookup``/``replay_cache`` callback
+        # that raised, a bug. Letting it propagate as its native type
+        # would (a) escape every caller's ``except
+        # EnvelopeVerificationError`` handler and (b) skip the deny audit
+        # event, so a malformed-envelope probe would leave no forensic
+        # trace. Deny is the safe direction; the original exception stays
+        # chained for debugging and its type lands in the audit reason.
+        detail = f"verifier internal error: {type(exc).__name__}"
+        _emit("deny", detail, reason_code=DenyReason.VERIFIER_INTERNAL_ERROR.value)
+        raise EnvelopeVerificationError(
+            detail, reason=DenyReason.VERIFIER_INTERNAL_ERROR
+        ) from exc
 
     _emit("allow", "ok", reason_code="ok")
     return claims

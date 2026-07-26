@@ -37,6 +37,11 @@ class DenyReason(StrEnum):
     INVALID_KID = "invalid_kid"
     INVALID_PAYLOAD_DIGEST = "invalid_payload_digest"
     DISALLOWED_ALGORITHM = "disallowed_algorithm"
+    ENVELOPE_NOT_OBJECT = "envelope_not_object"
+    ENVELOPE_TOO_DEEP = "envelope_too_deep"
+    ENVELOPE_NOT_CANONICALIZABLE = "envelope_not_canonicalizable"
+    VERIFIER_INTERNAL_ERROR = "verifier_internal_error"
+    AUDIT_SINK_FAILURE = "audit_sink_failure"
 
     # --- Time window (envelope) ---
     INVALID_TIMESTAMP = "invalid_timestamp"

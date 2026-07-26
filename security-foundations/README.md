@@ -21,7 +21,8 @@ each entry names the module that implements it.
   - in-process Ed25519 signature verification via the `cryptography` library
     (no `openssl` subprocess),
   - key-id lookup behind a callable interface,
-  - capability token validation (see below).
+  - capability token validation (see below),
+  - **structural fail-closed guarantee** — see below.
 - **Capability token v0** (`envelope/capability_token.py` validator,
   `envelope/capability_issuer.py` issuer): RFC 7519 JWT with EdDSA, bound to
   the envelope via `cnf.envelope_digest` so a leaked or replayed token only
@@ -585,6 +586,48 @@ each entry names the module that implements it.
   is exposed on the exception and embedded in audit events for machine-readable
   matching. New deny paths get new identifiers; shipped values are never
   renamed or repurposed.
+- **Structural fail-closed guarantee** (`envelope/verify_envelope.py`): the
+  envelope is attacker-controlled JSON — the MCP adapter's `envelope_from_json`
+  checks only that the wire bytes decode to an *object*, so every field can
+  hold any JSON type at any depth. `verify_envelope` therefore guarantees a
+  **total** deny path: for any input it either returns claims or raises
+  `EnvelopeVerificationError` carrying a `DenyReason`, and every denial emits
+  its `envelope.verify` deny event. Four mechanisms:
+  - **Field type checks before matching.** A regex match or set-membership
+    test *raises* on a non-`str` rather than returning False, so each field
+    is type-checked first and denied with that field's own reason code.
+  - **Nesting bound** (`VerificationConfig.max_json_depth`, default 64).
+    Canonicalization recurses over the envelope, so a few kilobytes of
+    `[[[[…]]]]` would exhaust the interpreter stack — a remote DoS. The
+    check itself is iterative (`check_json_depth`), since a recursive
+    checker would die on exactly the input it exists to reject.
+  - **Canonicalization failures become denials.** `jcs` raises bare
+    `TypeError`/`ValueError` for values outside the JSON data model (`set`,
+    `bytes`, `NaN`); these deny with `envelope_not_canonicalizable`.
+  - **Internal-error backstop.** Anything else — a trust store that is down,
+    a bug — denies with `verifier_internal_error` and an audit event, cause
+    chained. `BaseException` still propagates: shutdown is not a denial.
+
+  Without this, a foreign exception type bypassed both the caller's `except
+  EnvelopeVerificationError` handler *and* the verifier's own deny path, so
+  probing the verifier left no forensic trace. Pinned by
+  `envelope/test_verifier_fail_closed.py`.
+
+  The deny path also has to survive the input it reports on. The audit context
+  is read off the envelope *before* validation — a denial must name the message
+  it denied — and the sink JCS-canonicalizes what it is handed in order to hash
+  it, so a field the encoder rejects made the sink raise *while recording the
+  denial* (`json.loads` accepts a bare `NaN`, so this arrives from the wire).
+  Two guards close that:
+  - **`audit_safe`** coerces identity fields to bounded safe strings before
+    they reach the sink — non-strings become a `<non-string:type>` marker
+    rather than their repr, so a malformed field is recorded without copying
+    attacker bytes into the forensic log, and an oversized one cannot bloat
+    every downstream record.
+  - **Sink failures are denials.** A sink that raises surfaces as
+    `audit_sink_failure`, never its own `OSError`. On the allow path that
+    downgrades the result to a denial: an unaudited allow is exactly what the
+    hash chain exists to prevent.
 
 ## Frozen contracts
 
