@@ -91,6 +91,30 @@ v0 requires identical `scope` at every hop. Partial-order scope
 narrowing is a v1 extension and would require a controlled
 vocabulary first.
 
+### Bounded membership table under gossip pressure (Phase 6 Track B)
+`SwimMembership._merge` validates and length-bounds each gossiped
+node id, but does not cap *how many* updates one message may carry
+or how large the members table may grow. A peer that gossips many
+distinct node ids therefore grows the table, and `_digest()`
+re-gossips the whole table to every peer — so the cost amplifies
+across the cluster.
+
+Deliberately not fixed alongside the decoder hardening, because
+neither obvious fix is safe as a drive-by. Truncating a digest
+would silently break convergence in a cluster larger than the cap
+(`_digest()` legitimately sends self + every known peer). Capping
+the table needs an eviction policy, and evicting a live member
+resurrects it on the next gossip round — a churn loop worse than
+the growth. The real fix is admission-gated membership: only merge
+updates for ids that pass `peer_admission`, making the table
+bounded by the admitted set rather than by a magic number. That is
+a design change to the discovery/membership seam, so it wants its
+own slice.
+
+Bounded in practice today by the 8 MiB transport frame cap and by
+loopback/LAN deployment. Revisit when membership runs over a WAN
+with untrusted peers.
+
 ---
 
 ## Out of substrate scope

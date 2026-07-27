@@ -950,6 +950,43 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             ".test_signed_envelope_reaches_far_node_through_relay"
         ),
     ),
+    ProofObligation(
+        name="mesh_malformed_gossip_does_not_halt_membership",
+        phase=Phase.PHASE_6,
+        track="B",
+        statement=(
+            "A malformed gossip frame is skipped, not raised. The SWIM "
+            "digest is parsed in the clear before anything authenticates "
+            "its contents, and the tick runs in a background loop — so a "
+            "peer sending a non-object frame, a non-list digest, or an "
+            "unhashable node id must not halt failure detection. Raising "
+            "would turn one bad sender into a cluster-wide availability "
+            "failure; later frames in the same queue still process."
+        ),
+        canonical_test=(
+            "test_wire_decoders_fail_closed.GossipFrameTests"
+            ".test_malformed_frames_do_not_kill_the_tick"
+        ),
+    ),
+    ProofObligation(
+        name="mesh_routed_frame_decode_fails_closed",
+        phase=Phase.PHASE_6,
+        track="C",
+        statement=(
+            "RoutedMessage.from_json denies a malformed routed frame with "
+            "TransportError — the mesh's own error type — never a raw "
+            "KeyError / ValueError / base64 error the relay loop has no "
+            "reason to catch. Decoding happens on peer-controlled bytes "
+            "before the signed envelope inside is verified. base64 is "
+            "decoded with validate=True, so a crafted payload is rejected "
+            "rather than silently decoding to something after junk "
+            "characters are discarded."
+        ),
+        canonical_test=(
+            "test_wire_decoders_fail_closed.RoutedMessageDecodeTests"
+            ".test_malformed_frames_raise_transport_error"
+        ),
+    ),
 )
 
 
