@@ -46,6 +46,11 @@ from transport import Transport, TransportError
 _PING = "ping"
 _ACK = "ack"
 
+# A gossiped node id becomes a key in the members table and is re-gossiped
+# to every peer, so an unbounded id is unbounded memory that propagates.
+# Far above any real SPIFFE-style id.
+MAX_NODE_ID_LEN = 256
+
 
 class MemberState(StrEnum):
     ALIVE = "alive"
@@ -161,9 +166,18 @@ class SwimMembership:
 
     def _merge(self, updates: list) -> None:
         for update in updates:
+            # A gossip update is a peer-supplied ``[node_id, incarnation,
+            # state]`` triple. Anything else — a dict (``update[0]`` would
+            # KeyError), a short list, an unhashable node id (``members``
+            # is keyed on it) — is dropped, not raised: one malformed
+            # entry must not discard the rest of the digest.
+            if not isinstance(update, list) or len(update) < 3:
+                continue
             try:
                 nid, inc, raw_state = update[0], int(update[1]), MemberState(update[2])
             except (ValueError, IndexError, TypeError):
+                continue
+            if not isinstance(nid, str) or not nid or len(nid) > MAX_NODE_ID_LEN:
                 continue
             if nid == self.node_id:
                 # Someone thinks I'm suspect/dead — refute by out-incarnating.
@@ -195,12 +209,23 @@ class SwimMembership:
             frame = self.transport.receive()
             if frame is None:
                 break
+            # Every field below is peer-controlled. A malformed frame from
+            # one peer must not kill the tick — that would stop failure
+            # detection for the whole cluster, turning a single bad sender
+            # into a mesh-wide availability failure. Skip the frame and
+            # keep draining the queue.
             try:
                 msg = json.loads(frame.payload)
             except (ValueError, TypeError):
                 continue
-            self._merge(msg.get("gossip", []))
+            if not isinstance(msg, dict):
+                continue
+            gossip = msg.get("gossip", [])
+            if isinstance(gossip, list):
+                self._merge(gossip)
             sender = msg.get("from")
+            if not isinstance(sender, str):
+                continue
             self._mark_heard(sender)
             if msg.get("type") == _PING and sender:
                 self.transport.send(sender, self._encode(_ACK))

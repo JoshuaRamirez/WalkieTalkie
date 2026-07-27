@@ -94,6 +94,17 @@ periodic heartbeat/ping, suspicion + failure detection, member-list
 dissemination. An N-node in-process cluster converges on a shared view
 and detects a downed node.
 
+**Hardened (v0):** the gossip digest is parsed in the clear, before
+anything authenticates its contents, and `tick()` runs in a background
+loop — so a malformed frame that *raised* halted failure detection for
+the whole node. A peer sending `123`, a non-list digest, a dict-shaped
+gossip entry, or an unhashable node id crashed the tick (8 of 11 probed
+cases). Malformed frames are now skipped, later frames in the same queue
+still process, and gossiped node ids are length-bounded
+(`MAX_NODE_ID_LEN`) since each one is stored *and re-gossiped*. Pinned by
+`mesh/test_wire_decoders_fail_closed.py` and the obligation
+`mesh_malformed_gossip_does_not_halt_membership`.
+
 ### D6.4 Gossip-driven discovery + admission [RUNNABLE]
 Wire membership into node discovery: a node learns peers from gossip
 (not a shared file), and every learned peer still passes Phase 5
@@ -104,6 +115,18 @@ holds — a gossiped-but-unadmitted peer is not routable.
 `mesh/routing.py` — a routing table and a forwarding function so node A
 reaches node C via B when not directly connected. Forwarding is
 deny-by-default (only for admitted peers) and loop-safe (TTL / seen-set).
+
+**Hardened (v0):** `RoutedMessage.from_json` is what a relay runs on
+`frame.payload` — peer-controlled bytes, decoded before the signed
+envelope inside is verified. It raised raw `KeyError` / `ValueError` /
+base64 errors no relay loop would catch (6 of 9 probed cases), and two
+cases were worse than a crash: a `dest` of any type and a non-base64
+`payload_b64` were silently *accepted*. Decoding now denies with
+`TransportError`, field types are enforced in `__post_init__` (matching
+the `Frame` contract), `b64decode` runs with `validate=True`, and
+`dest`/`msg_id` are length-bounded — a relay records every `msg_id` in
+its seen-set. Pinned by `mesh/test_wire_decoders_fail_closed.py` and the
+obligation `mesh_routed_frame_decode_fails_closed`.
 
 ### D6.6 Multi-hop secure round trip [RUNNABLE]
 A 3-node (A–B–C) test: A's signed envelope reaches C through B, C

@@ -41,7 +41,7 @@ deliverables carry `**Landed (v0):**` annotations in
   default is unchanged (loopback), and the security logic (mTLS peer
   verification, admission) is untouched; only the bind interface is
   configurable. New tests pin identity binding over a wildcard (`0.0.0.0`) bind.
-- **Proof-obligation registry** (`envelope/proof_obligations.py`): 53 invariants,
+- **Proof-obligation registry** (`envelope/proof_obligations.py`): 55 invariants,
   each pinned by a canonical test and gated by `test_every_obligation_resolves`.
 - Root `README.md`, `SECURITY.md` disclosure policy, `CHANGELOG.md`,
   `CONTRIBUTING.md`, and a `.github/pull_request_template.md`.
@@ -108,5 +108,30 @@ deliverables carry `**Landed (v0):**` annotations in
   tuples — a memory-exhaustion DoS inside the check meant to prevent one. Only
   containers are queued now, so auxiliary memory tracks nesting depth rather
   than breadth. New deny reason: `audit_sink_failure`.
+- **Mesh wire decoders now fail closed on peer-controlled frames.** The routing
+  envelope and the SWIM gossip digest are parsed *in the clear*, before the
+  signed envelope inside is verified — mTLS authenticates the channel, not the
+  contents. Both decoders assumed well-formed input: 8 of 11 probed gossip
+  frames and 6 of 9 routed frames crashed with `AttributeError` / `KeyError` /
+  `TypeError` / `ValueError`.
+  - `SwimMembership.tick()` died on a non-object frame, a non-list digest, a
+    dict-shaped gossip entry, or an unhashable node id. Since `tick()` drives
+    failure detection in a background loop, one peer sending `123` froze the
+    node's view of the whole cluster. Malformed frames are now skipped, and
+    later frames in the same queue still process.
+  - `RoutedMessage.from_json()` — the decode a relay runs on `frame.payload`,
+    and the pattern the docs name as the integration starting point — raised
+    raw `KeyError`/`ValueError`/base64 errors that no relay loop would catch.
+    It now denies with `TransportError`, the mesh's own error type, and
+    validates field types via `RoutedMessage.__post_init__` (matching the
+    `Frame` contract).
+  - Two routing cases were worse than a crash: a `dest` of *any* type and a
+    non-base64 `payload_b64` were silently **accepted**. `b64decode` now runs
+    with `validate=True`, so a crafted payload is rejected rather than
+    decoding to something after junk characters are discarded.
+  - Peer-supplied identifiers are length-bounded (`MAX_NODE_ID_LEN`,
+    `MAX_MSG_ID_LEN`): a gossiped node id is stored *and re-gossiped*, and a
+    relay records every `msg_id` in its seen-set, so unbounded ids are
+    unbounded memory that propagates.
 
 [Unreleased]: https://github.com/JoshuaRamirez/WalkieTalkie/commits/main
