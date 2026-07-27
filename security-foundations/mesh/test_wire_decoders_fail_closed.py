@@ -103,6 +103,20 @@ class GossipFrameTests(unittest.TestCase):
         node.tick()
         self.assertNotIn(huge, node.alive_ids())
 
+    def test_oversized_sender_is_dropped(self):
+        """``from`` is stored by ``_mark_heard`` — same bound as a gossiped id.
+
+        Bounding only the gossip digest would leave the cheaper injection
+        path open: one frame whose ``from`` is unbounded lands in ``members``
+        and is then re-gossiped to every peer.
+        """
+        huge = "y" * (MAX_NODE_ID_LEN + 1)
+        msg = {"from": huge, "gossip": []}
+        node = SwimMembership("node-a", _ReplayTransport([_encode(msg)]))
+        node.tick()
+        self.assertNotIn(huge, node.alive_ids())
+        self.assertNotIn(huge, node.members)
+
     def test_well_formed_gossip_still_merges(self):
         """The hardening must not have narrowed the accept path."""
         msg = {
@@ -172,6 +186,22 @@ class RoutedMessageDecodeTests(unittest.TestCase):
         original = RoutedMessage(dest="node-c", ttl=5, msg_id="m1", payload=b"\x00\xff\x01")
         decoded = RoutedMessage.from_json(original.to_json())
         self.assertEqual(decoded, original)
+
+    def test_bytearray_payload_is_snapshotted(self):
+        """``frozen=True`` freezes the binding, not the buffer behind it.
+
+        A mutable payload could be changed *after* the routing decision was
+        made on it, so the forwarded frame would not be the one authorized.
+        Applies to ``Frame`` for the same reason.
+        """
+        buf = bytearray(b"original")
+        routed = RoutedMessage(dest="node-c", ttl=5, msg_id="m1", payload=buf)
+        frame = Frame("peer-1", buf)
+        buf[:] = b"tampered"
+        self.assertEqual(routed.payload, b"original")
+        self.assertEqual(frame.payload, b"original")
+        self.assertIsInstance(routed.payload, bytes)
+        self.assertIsInstance(frame.payload, bytes)
 
     def test_direct_construction_validates_too(self):
         """``from_json`` delegates type checks to ``__post_init__``.

@@ -132,6 +132,12 @@ deliverables carry `**Landed (v0):**` annotations in
   - Peer-supplied identifiers are length-bounded (`MAX_NODE_ID_LEN`,
     `MAX_MSG_ID_LEN`): a gossiped node id is stored *and re-gossiped*, and a
     relay records every `msg_id` in its seen-set, so unbounded ids are
-    unbounded memory that propagates.
+    unbounded memory that propagates. The bound covers a gossip message's
+    `from` field as well as the digest entries — `_mark_heard` stores the
+    sender, so bounding only the digest would leave the cheaper path open.
+  - `Frame` and `RoutedMessage` snapshot a `bytearray` payload to `bytes`.
+    `frozen=True` freezes the binding, not the buffer behind it, so a
+    mutable payload could be changed *after* the routing decision was made
+    on it — the forwarded frame would not be the one that was authorized.
 
 [Unreleased]: https://github.com/JoshuaRamirez/WalkieTalkie/commits/main

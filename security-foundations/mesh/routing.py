@@ -81,6 +81,13 @@ class RoutedMessage:
             raise TransportError("ttl must not be negative")
         if not isinstance(self.payload, (bytes, bytearray)):
             raise TransportError("payload must be bytes")
+        if isinstance(self.payload, bytearray):
+            # `frozen=True` freezes the *binding*, not the object behind it.
+            # A bytearray payload stays mutable, so a caller holding a
+            # reference could change the bytes after the routing decision
+            # was made on them — the forwarded frame would no longer be the
+            # one that was authorized. Snapshot it so frozen means frozen.
+            object.__setattr__(self, "payload", bytes(self.payload))
 
     def to_json(self) -> bytes:
         return json.dumps(

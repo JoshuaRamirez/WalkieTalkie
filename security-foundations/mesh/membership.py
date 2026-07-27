@@ -224,7 +224,11 @@ class SwimMembership:
             if isinstance(gossip, list):
                 self._merge(gossip)
             sender = msg.get("from")
-            if not isinstance(sender, str):
+            # Same bound as a gossiped id: `_mark_heard` stores the sender in
+            # `members`, and `_digest()` re-gossips every known id to every
+            # peer — so an unbounded `from` is unbounded memory that
+            # propagates across the cluster, not just this node.
+            if not isinstance(sender, str) or not sender or len(sender) > MAX_NODE_ID_LEN:
                 continue
             self._mark_heard(sender)
             if msg.get("type") == _PING and sender:
