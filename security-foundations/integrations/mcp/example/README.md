@@ -190,7 +190,15 @@ integration:
 - Replace the demo `read_file` / `exec_sql` tools with your actual
   MCP tool handlers.
 - Replace `InMemoryReplayCache` with `SQLiteReplayCache` (or any
-  `ReplayCache` subclass) when you need persistence.
+  `ReplayCache` subclass) when you need persistence. If you write your
+  own, `mark_if_new` must reserve the nonce **atomically in your
+  backend** — `SET NX`, `INSERT ... ON CONFLICT DO NOTHING`, or the
+  equivalent. Checking `seen()` and then calling `mark()` is a race:
+  concurrent callers all observe "not seen" and are all told they were
+  first, which accepts the replay. The interface makes `mark_if_new`
+  abstract so this is a decision you make rather than one you inherit;
+  a local lock is *not* sufficient for a shared backend, since it does
+  nothing across processes.
 - Replace `InMemoryAuditSink` with `JsonlAuditSink` pointed at a
   durable path.
 - Replace the in-memory key-lookup callbacks with

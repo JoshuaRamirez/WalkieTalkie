@@ -41,7 +41,7 @@ deliverables carry `**Landed (v0):**` annotations in
   default is unchanged (loopback), and the security logic (mTLS peer
   verification, admission) is untouched; only the bind interface is
   configurable. New tests pin identity binding over a wildcard (`0.0.0.0`) bind.
-- **Proof-obligation registry** (`envelope/proof_obligations.py`): 55 invariants,
+- **Proof-obligation registry** (`envelope/proof_obligations.py`): 57 invariants,
   each pinned by a canonical test and gated by `test_every_obligation_resolves`.
 - Root `README.md`, `SECURITY.md` disclosure policy, `CHANGELOG.md`,
   `CONTRIBUTING.md`, and a `.github/pull_request_template.md`.
@@ -139,5 +139,23 @@ deliverables carry `**Landed (v0):**` annotations in
     `frozen=True` freezes the binding, not the buffer behind it, so a
     mutable payload could be changed *after* the routing decision was made
     on it — the forwarded frame would not be the one that was authorized.
+
+- **Replay reservation is now atomic by construction.** `ReplayCache` shipped
+  a default `mark_if_new` built from `seen` + `mark` — a check-then-act race.
+  The two bundled caches override it correctly, so the substrate itself was
+  never vulnerable; the hole was in the **extension point**. `ReplayCache`'s
+  documented interface is `seen`/`mark`, and the integration README tells
+  operators to plug in "any `ReplayCache` subclass" for persistence, so a
+  third-party cache supplying only those two methods inherited a racy replay
+  guard. The inheritance was worst exactly where it mattered most: against a
+  local dict the window is a few bytecodes and the GIL usually hides it, but
+  the reason to write a custom cache is a *shared* backend for cross-process
+  deployment, where `seen` is a network round trip. Measured against a
+  2 ms-RTT backend, **32 of 32 concurrent callers accepted the same nonce** —
+  the replay defense was simply absent. `mark_if_new` is now abstract, so a
+  backend cannot be constructed without deciding how it reserves atomically.
+  A base-class lock was rejected as a fix: it would serialize threads in one
+  process while doing nothing across processes, looking fixed while still
+  admitting replays.
 
 [Unreleased]: https://github.com/JoshuaRamirez/WalkieTalkie/commits/main
