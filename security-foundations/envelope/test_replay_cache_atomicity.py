@@ -30,6 +30,7 @@ import tempfile
 import threading
 import unittest
 from datetime import timedelta
+from typing import NamedTuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
@@ -39,29 +40,52 @@ _SENDER = "spiffe://mesh/ns-a/service-a"
 _TTL = timedelta(minutes=5)
 
 
-def count_winners(cache, nonce: str, *, threads: int = 32) -> int:
-    """Race ``threads`` callers on one nonce; return how many were told "new".
+class RaceResult(NamedTuple):
+    winners: int
+    losers: int
+    errors: tuple[BaseException, ...]
+
+
+def race_one_nonce(cache, nonce: str, *, threads: int = 32) -> RaceResult:
+    """Race ``threads`` callers on one nonce; return every outcome.
 
     A barrier releases every thread at once so they contend on the same
     check-and-reserve rather than running in sequence. A correct cache
     returns True to exactly one.
+
+    Every outcome is recorded, including exceptions. Counting only the
+    winners would let a false green through: if one caller returned True
+    and the rest *crashed* (a backend raising ``OperationalError`` under
+    lock contention, say), ``Thread.join()` swallows those exceptions and
+    the winner count is still 1 — but the contract says the losers must
+    return False, not die. The caller asserts on all three counts.
     """
-    winners: list[int] = []
+    outcomes: list[bool] = []
+    errors: list[BaseException] = []
     lock = threading.Lock()
     barrier = threading.Barrier(threads)
 
     def worker() -> None:
         barrier.wait()
-        if cache.mark_if_new(_SENDER, nonce, _TTL):
+        try:
+            reserved = cache.mark_if_new(_SENDER, nonce, _TTL)
+        except BaseException as exc:  # noqa: BLE001 - recorded, then asserted on
             with lock:
-                winners.append(1)
+                errors.append(exc)
+            return
+        with lock:
+            outcomes.append(reserved)
 
     workers = [threading.Thread(target=worker) for _ in range(threads)]
     for t in workers:
         t.start()
     for t in workers:
         t.join()
-    return len(winners)
+    return RaceResult(
+        winners=outcomes.count(True),
+        losers=outcomes.count(False),
+        errors=tuple(errors),
+    )
 
 
 class InterfaceForcesAtomicityTests(unittest.TestCase):
@@ -125,46 +149,72 @@ class InterfaceForcesAtomicityTests(unittest.TestCase):
         cache = CompleteCache()
         self.assertTrue(cache.mark_if_new(_SENDER, "n1", _TTL))
         self.assertFalse(cache.mark_if_new(_SENDER, "n1", _TTL))
-        self.assertEqual(count_winners(cache, "raced"), 1)
+        raced = race_one_nonce(cache, "raced", threads=32)
+        self.assertEqual(raced.errors, ())
+        self.assertEqual(raced.winners, 1)
+        self.assertEqual(raced.losers, 31)
 
 
 class BundledCacheAtomicityTests(unittest.TestCase):
     """The shipped caches reserve atomically under real contention."""
 
+    def assert_exactly_one_winner(self, result: RaceResult, threads: int) -> None:
+        self.assertEqual(result.errors, (), "no caller may raise")
+        self.assertEqual(result.winners, 1, "exactly one caller reserves")
+        self.assertEqual(result.losers, threads - 1, "every other caller is told replay")
+
     def test_in_memory_cache_admits_exactly_one_winner(self):
         cache = InMemoryReplayCache()
         for round_no in range(25):
             with self.subTest(round=round_no):
-                self.assertEqual(count_winners(cache, f"nonce-{round_no}"), 1)
+                self.assert_exactly_one_winner(
+                    race_one_nonce(cache, f"nonce-{round_no}", threads=32), 32
+                )
 
     def test_sqlite_cache_admits_exactly_one_winner(self):
         with tempfile.TemporaryDirectory() as tmp:
             cache = SQLiteReplayCache(pathlib.Path(tmp) / "replay.db")
             for round_no in range(10):
                 with self.subTest(round=round_no):
-                    self.assertEqual(
-                        count_winners(cache, f"nonce-{round_no}", threads=8), 1
+                    self.assert_exactly_one_winner(
+                        race_one_nonce(cache, f"nonce-{round_no}", threads=8), 8
                     )
 
-    def test_distinct_nonces_all_win_concurrently(self):
-        """Atomicity must not degenerate into serializing unrelated nonces."""
+    def test_concurrent_distinct_nonces_all_reserve(self):
+        """Distinct keys must each reserve — contention on one must not
+        spill over into rejecting unrelated nonces.
+
+        This is a *correctness* claim, not a throughput one: it says nothing
+        about whether the calls overlap. ``InMemoryReplayCache`` holds a
+        single lock, so in fact they do not — and that is a fine design.
+        Serialized reservation costs throughput, not safety, and per this
+        repo's honesty rule a performance property earns no safety claim.
+        """
         cache = InMemoryReplayCache()
-        results: list[bool] = []
+        outcomes: list[bool] = []
+        errors: list[BaseException] = []
         lock = threading.Lock()
         barrier = threading.Barrier(32)
 
         def worker(i: int) -> None:
             barrier.wait()
-            ok = cache.mark_if_new(_SENDER, f"distinct-{i}", _TTL)
+            try:
+                ok = cache.mark_if_new(_SENDER, f"distinct-{i}", _TTL)
+            except BaseException as exc:  # noqa: BLE001 - recorded, then asserted on
+                with lock:
+                    errors.append(exc)
+                return
             with lock:
-                results.append(ok)
+                outcomes.append(ok)
 
         workers = [threading.Thread(target=worker, args=(i,)) for i in range(32)]
         for t in workers:
             t.start()
         for t in workers:
             t.join()
-        self.assertEqual(results.count(True), 32)
+        self.assertEqual(errors, [])
+        self.assertEqual(outcomes.count(True), 32)
+        self.assertEqual(outcomes.count(False), 0)
 
     def test_same_nonce_from_different_senders_is_not_a_replay(self):
         """The reservation key is (sender, nonce), not nonce alone."""
