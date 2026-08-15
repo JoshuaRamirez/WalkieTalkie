@@ -225,6 +225,43 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             ".test_sink_failure_on_allow_path_downgrades_to_deny"
         ),
     ),
+    ProofObligation(
+        name="replay_reservation_is_atomic",
+        phase=Phase.PHASE_1,
+        track="A",
+        statement=(
+            "Concurrent callers racing the same (sender, nonce) yield "
+            "exactly one reservation. Replay rejection is the invariant "
+            "that requires atomicity — a check-then-act mark_if_new lets "
+            "every racing caller observe 'not seen' and be told it was "
+            "first, so the replay is accepted. Pinned for both bundled "
+            "caches under real thread contention."
+        ),
+        canonical_test=(
+            "test_replay_cache_atomicity.BundledCacheAtomicityTests"
+            ".test_in_memory_cache_admits_exactly_one_winner"
+        ),
+    ),
+    ProofObligation(
+        name="replay_cache_interface_forces_atomic_reservation",
+        phase=Phase.PHASE_1,
+        track="A",
+        statement=(
+            "ReplayCache.mark_if_new is abstract, so a backend cannot be "
+            "constructed without deciding how it reserves atomically. "
+            "There is no correct generic default: a base-class lock "
+            "serializes threads in one process while doing nothing across "
+            "the processes that motivate a shared backend, so it would "
+            "look fixed and still admit replays. A partial implementation "
+            "now fails at construction rather than silently racing under "
+            "load — which is where the substrate's documented extension "
+            "point ('any ReplayCache subclass') previously led."
+        ),
+        canonical_test=(
+            "test_replay_cache_atomicity.InterfaceForcesAtomicityTests"
+            ".test_partial_implementation_cannot_be_instantiated"
+        ),
+    ),
     # ----- Phase 1 capability token -----
     ProofObligation(
         name="capability_cnf_binding_prevents_reuse",

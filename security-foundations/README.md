@@ -667,6 +667,21 @@ compatibility policy, schema test vectors, and change control.
 - Replay cache implementations:
   - `InMemoryReplayCache` for local use,
   - `SQLiteReplayCache` for cross-process replay protection.
+- **Atomic replay reservation** (`envelope/verify_envelope.py`): `ReplayCache`
+  is an ABC whose three methods — including `mark_if_new` — are **all
+  abstract**, deliberately. Replay rejection is the one invariant that
+  *requires* atomicity, and there is no correct generic default: a
+  `mark_if_new` built from `seen` + `mark` is a check-then-act race in which
+  every concurrent caller observes "not seen" and is told it was first.
+  Supplying a lock in the base class would be worse than supplying nothing —
+  a local lock serializes threads in one process while doing nothing across
+  the processes that motivate a shared backend, so it would look fixed and
+  still admit replays. Each backend must therefore implement atomicity in its
+  own terms (`INSERT OR IGNORE` + `rowcount` for SQLite, a held lock for the
+  in-memory cache, `SET NX` for Redis). A partial implementation now fails at
+  construction rather than silently racing under load. Proof obligations
+  `replay_reservation_is_atomic`,
+  `replay_cache_interface_forces_atomic_reservation`.
 - `FileSystemTrustStore` reference implementation (`envelope/trust_store.py`)
   that loads trusted keys from a directory or a JSON manifest with optional
   `not_after` expiry.

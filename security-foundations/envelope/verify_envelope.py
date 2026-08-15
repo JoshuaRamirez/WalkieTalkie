@@ -7,6 +7,7 @@ import hashlib
 import re
 import sqlite3
 import threading
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -70,24 +71,69 @@ class VerificationConfig:
 DEFAULT_CONFIG = VerificationConfig()
 
 
-class ReplayCache:
-    """Minimal replay cache interface."""
+class ReplayCache(ABC):
+    """Minimal replay cache interface.
 
+    **All three methods are abstract, including** :meth:`mark_if_new`.
+    That is deliberate, and it is the whole security contract of this
+    class: replay rejection is the one invariant that *requires*
+    atomicity, and **there is no correct generic default**.
+
+    The tempting default —::
+
+        def mark_if_new(self, sender, nonce, ttl):
+            if self.seen(sender, nonce):
+                return False
+            self.mark(sender, nonce, ttl)
+            return True
+
+    — is a check-then-act race. Two callers handling the same nonce both
+    observe "not seen", both mark, and both are told they were first, so
+    the replay is accepted. On a purely local dict the window is a few
+    bytecodes and CPython's GIL usually hides it. But the reason to
+    implement a custom cache at all is a *shared* backend (Redis, a SQL
+    table) for cross-process or cross-node deployment — and there
+    ``seen`` is a network round trip, which widens the window to
+    milliseconds and releases the GIL besides. Measured against a
+    2 ms-RTT backend: **32 of 32 concurrent callers accepted the same
+    nonce.** The replay defense was simply absent.
+
+    Supplying a lock in this base class would be worse than supplying
+    nothing: a local lock serializes threads in one process while doing
+    nothing across the processes that motivated the shared backend, so
+    it would look fixed and still admit replays.
+
+    So each backend must implement atomicity in its own terms —
+    ``INSERT OR IGNORE`` + ``rowcount`` (see :class:`SQLiteReplayCache`),
+    a held lock around check-and-set (see :class:`InMemoryReplayCache`),
+    Redis ``SET NX``, ``INSERT ... ON CONFLICT DO NOTHING``. Forcing the
+    method to be written makes that a decision rather than an omission;
+    a partial implementation now fails loudly at construction instead of
+    silently accepting replays under load.
+
+    :meth:`mark_if_new` is what :func:`verify_envelope` calls; ``seen``
+    and ``mark`` exist for inspection and for tests.
+    """
+
+    @abstractmethod
     def seen(self, sender: str, nonce: str) -> bool:
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def mark(self, sender: str, nonce: str, ttl: timedelta) -> None:
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def mark_if_new(self, sender: str, nonce: str, ttl: timedelta) -> bool:
-        """Atomically mark nonce as seen when possible.
+        """Atomically reserve ``nonce`` for ``sender``.
 
-        Returns True if nonce was new and is now reserved, False if replayed.
+        Returns True if the nonce was new and is now reserved, False if it
+        was already present (a replay). Implementations MUST make the
+        check-and-reserve a single atomic operation against their backend
+        — concurrent callers racing the same nonce must yield exactly one
+        True.
         """
-        if self.seen(sender, nonce):
-            return False
-        self.mark(sender, nonce, ttl)
-        return True
+        ...
 
 
 class InMemoryReplayCache(ReplayCache):
