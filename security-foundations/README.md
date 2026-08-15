@@ -482,8 +482,16 @@ each entry names the module that implements it.
   transient hiccup can't permanently evict it). Transport-agnostic —
   runs over `InMemoryTransport` or `TlsSocketTransport`. Membership
   answers *"who is reachable"*, not *"who is allowed"* (that's
-  `peer_admission`). Proof obligations `gossip_membership_converges`,
-  `gossip_detects_downed_node`.
+  `peer_admission`). **Malformed frames are skipped, never raised** —
+  the digest is parsed in the clear before anything authenticates its
+  contents, and `tick()` drives failure detection in a background loop,
+  so a peer sending a non-object frame or an unhashable node id would
+  otherwise freeze the node's view of the whole cluster. Gossiped node
+  ids are length-bounded (`MAX_NODE_ID_LEN`): each one is stored *and
+  re-gossiped*, so unbounded ids are unbounded memory that propagates.
+  Proof obligations `gossip_membership_converges`,
+  `gossip_detects_downed_node`,
+  `mesh_malformed_gossip_does_not_halt_membership`.
 - **Gossip discovery + admission v0** (`mesh/gossip_discovery.py`,
   Phase 6 Track B): `GossipDiscovery` couples the membership view to a
   `PeerAdmissionPolicy` — `routable_peers()` is the intersection of
@@ -500,8 +508,18 @@ each entry names the module that implements it.
   toward an admitted/routable next hop), **loop-safe** (per-hop TTL +
   a per-node seen-set of message ids), and the intermediary is never the
   envelope's recipient — moving bytes grants no authority. `RoutedMessage`
-  wraps the opaque signed envelope with dest/ttl/msg_id. Proof
-  obligations `mesh_forwarding_deny_by_default`, `mesh_forwarding_loop_safe`.
+  wraps the opaque signed envelope with dest/ttl/msg_id, validating field
+  types in `__post_init__` exactly as `Frame` does. **`from_json` fails
+  closed:** it decodes peer-controlled bytes before the signed envelope
+  inside is verified, so a malformed frame denies with `TransportError`
+  rather than raising a raw `KeyError`/`ValueError`/base64 error the
+  relay loop has no reason to catch. `b64decode` runs with
+  `validate=True` — without it, junk characters are silently discarded
+  and a crafted payload decodes to *something* instead of being
+  rejected. `dest`/`msg_id` are length-bounded, since a relay records
+  every `msg_id` in its seen-set. Proof obligations
+  `mesh_forwarding_deny_by_default`, `mesh_forwarding_loop_safe`,
+  `mesh_routed_frame_decode_fails_closed`.
 - **Pooled connection transport v0** (`mesh/connection_pool.py`, Phase 6
   Track D): `PooledSocketTransport` implements the `Transport` ABC with
   **persistent, reused** connections (one TCP connection per destination

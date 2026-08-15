@@ -32,11 +32,20 @@ safety) hold regardless of how the table is computed.
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 
+from transport import TransportError
+
 _DEFAULT_TTL = 8
+
+# Bounds on peer-supplied identifiers. A relay records msg_ids in its
+# seen-set and dest strings in routing decisions, so an unbounded id is
+# unbounded memory per frame. Both are far above real SPIFFE-style ids.
+MAX_NODE_ID_LEN = 256
+MAX_MSG_ID_LEN = 256
 
 
 @dataclass(frozen=True)
@@ -53,6 +62,33 @@ class RoutedMessage:
     msg_id: str
     payload: bytes
 
+    def __post_init__(self) -> None:
+        # Same contract as ``Frame``: constructing a RoutedMessage with a
+        # field of the wrong type is a TransportError, not a downstream
+        # surprise in the forwarding engine.
+        if not isinstance(self.dest, str) or not self.dest:
+            raise TransportError("dest must be a non-empty string")
+        if len(self.dest) > MAX_NODE_ID_LEN:
+            raise TransportError("dest exceeds maximum length")
+        if not isinstance(self.msg_id, str) or not self.msg_id:
+            raise TransportError("msg_id must be a non-empty string")
+        if len(self.msg_id) > MAX_MSG_ID_LEN:
+            raise TransportError("msg_id exceeds maximum length")
+        # bool is an int subclass; ttl=True would otherwise pass.
+        if not isinstance(self.ttl, int) or isinstance(self.ttl, bool):
+            raise TransportError("ttl must be an integer")
+        if self.ttl < 0:
+            raise TransportError("ttl must not be negative")
+        if not isinstance(self.payload, (bytes, bytearray)):
+            raise TransportError("payload must be bytes")
+        if isinstance(self.payload, bytearray):
+            # `frozen=True` freezes the *binding*, not the object behind it.
+            # A bytearray payload stays mutable, so a caller holding a
+            # reference could change the bytes after the routing decision
+            # was made on them — the forwarded frame would no longer be the
+            # one that was authorized. Snapshot it so frozen means frozen.
+            object.__setattr__(self, "payload", bytes(self.payload))
+
     def to_json(self) -> bytes:
         return json.dumps(
             {
@@ -65,12 +101,43 @@ class RoutedMessage:
 
     @classmethod
     def from_json(cls, data: bytes) -> RoutedMessage:
-        obj = json.loads(data)
+        """Decode a routed frame off the wire.
+
+        Every byte here is peer-controlled — a relay calls this on
+        ``frame.payload`` before it knows anything about the sender beyond
+        the transport. So a malformed frame is an expected input and must
+        deny as a :class:`TransportError`, never crash the relay with a
+        raw KeyError / ValueError / binascii error.
+        """
+        try:
+            obj = json.loads(data)
+        except (ValueError, TypeError) as exc:
+            raise TransportError(f"routed message is not valid JSON: {exc}") from exc
+        if not isinstance(obj, dict):
+            raise TransportError("routed message must be a JSON object")
+
+        missing = sorted({"dest", "ttl", "msg_id", "payload_b64"} - set(obj))
+        if missing:
+            raise TransportError(f"routed message missing fields: {','.join(missing)}")
+
+        payload_b64 = obj["payload_b64"]
+        if not isinstance(payload_b64, str):
+            raise TransportError("payload_b64 must be a string")
+        try:
+            # validate=True: without it b64decode silently discards
+            # non-alphabet characters, so a corrupted or crafted payload
+            # decodes to *something* instead of being rejected.
+            payload = base64.b64decode(payload_b64, validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise TransportError("payload_b64 is not valid base64") from exc
+
+        # dest/ttl/msg_id types are enforced by __post_init__, which raises
+        # TransportError — the same type this method contracts to raise.
         return cls(
             dest=obj["dest"],
-            ttl=int(obj["ttl"]),
+            ttl=obj["ttl"],
             msg_id=obj["msg_id"],
-            payload=base64.b64decode(obj["payload_b64"]),
+            payload=payload,
         )
 
 

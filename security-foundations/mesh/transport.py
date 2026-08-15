@@ -48,6 +48,11 @@ class Frame:
             raise TransportError("source must be a non-empty string")
         if not isinstance(self.payload, (bytes, bytearray)):
             raise TransportError("payload must be bytes")
+        if isinstance(self.payload, bytearray):
+            # `frozen=True` freezes the binding, not the buffer behind it —
+            # a bytearray payload stays mutable after the Frame is built.
+            # Snapshot it, same as RoutedMessage.
+            object.__setattr__(self, "payload", bytes(self.payload))
 
 
 class Transport(ABC):
