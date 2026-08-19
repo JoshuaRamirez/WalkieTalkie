@@ -108,15 +108,26 @@ Phase 2 target: stable A1, controlled pilot for A2.
 
 ### A3. Non-Escalation Proof Tests
 - Property-based tests for random delegation graphs.
+  **Landed (v0):** `envelope/test_delegation_receipt_properties.py`
+  generates random valid chains (Hypothesis `@given`) and asserts
+  they verify hop-by-hop; structured mutations of those graphs fail
+  closed with the matching `DenyReason` family. Settings:
+  `derandomize=True`, explicit `@seed(96)`, bounded `max_examples`
+  / `deadline` for CI. Pins the existing non-escalation invariants
+  only — no new safety claims, no scope-narrowing semantics.
 - Differential tests under mixed policy versions.
+  **Not applicable in v0:** receipts have no policy-version claim;
+  mixed-bundle issuance is a different primitive (`policy_bundle.py`).
 
 **Acceptance Criteria**
 - No test case can produce broader privilege at child hop.
   **Landed (deterministic v0 tests):** explicit cases for scope
   divergence (both directions), audience drift, TTL extension, hop
   reordering, parent-jti mismatch, and depth overrun all raise
-  `DelegationError` with the matching `DenyReason` family. A3's
-  property/fuzz tests remain a follow-up.
+  `DelegationError` with the matching `DenyReason` family.
+  **Landed (property v0):** Hypothesis suite over random graphs
+  (`ValidChainTests.test_random_valid_chain_verifies`,
+  `MutationFailClosedTests.test_mutation_fails_closed_with_expected_reason`).
 - Invalid chain receipt always denies execution.
   **Landed:** the validator raises on every invariant breach; the
   consumer never sees a partial-success return value.

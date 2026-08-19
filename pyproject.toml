@@ -44,6 +44,7 @@ Issues = "https://github.com/JoshuaRamirez/WalkieTalkie/issues"
 [project.optional-dependencies]
 dev = [
   "ruff>=0.5",
+  "hypothesis>=6.100",
 ]
 
 [tool.hatch.build.targets.wheel]

@@ -341,6 +341,22 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             ".test_depth_limit_enforced"
         ),
     ),
+    ProofObligation(
+        name="delegation_random_graph_non_escalation",
+        phase=Phase.PHASE_2,
+        track="A",
+        statement=(
+            "Over randomly generated delegation graphs, a child hop "
+            "cannot verify after scope drift, audience drift, TTL "
+            "extension, broken parent/hop/issuer bindings, depth "
+            "overrun, or signature invalidation. Same invariants as "
+            "the case-based pins; proven by a Hypothesis suite."
+        ),
+        canonical_test=(
+            "envelope.test_delegation_receipt_properties.MutationFailClosedTests"
+            ".test_mutation_fails_closed_with_expected_reason"
+        ),
+    ),
     # ----- Phase 2 Track B retrieval policy -----
     ProofObligation(
         name="retrieval_cross_tenant_default_deny",

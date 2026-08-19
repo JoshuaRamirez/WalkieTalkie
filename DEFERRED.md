@@ -51,10 +51,17 @@ this attestation proof has at least X work units" callable from
 the issuance pipeline.
 
 ### Property / fuzz tests for delegation chains (Phase 2 Track A A3)
-The substrate ships deterministic case-based tests for every
-non-escalation invariant. The plan calls for property-based tests
-over random delegation graphs as a follow-up; Hypothesis-shaped
-suite would be the right v0.
+**Shipped.** `security-foundations/envelope/test_delegation_receipt_properties.py`
+is a Hypothesis suite over random valid and mutated delegation
+graphs. Valid chains verify hop-by-hop; mutations that widen or
+narrow scope, drift audience, extend TTL, break parent/hop/issuer
+bindings, overrun `max_chain_depth`, or invalidate the signature
+fail closed with the matching `DenyReason`. v0 still requires
+identical `scope` at every hop (partial-order narrowing remains
+deferred below). Deterministic case-based tests in
+`test_delegation_receipt.py` are unchanged. `hypothesis` is a
+`[dev]` extra only. Proof obligation
+`delegation_random_graph_non_escalation` pins the suite.
 
 ### ML classifiers for output scanning (Phase 2 Track C C1)
 The deterministic-patterns half is shipped. `ScanResult.matches`
