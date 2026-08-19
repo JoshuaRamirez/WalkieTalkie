@@ -7,12 +7,15 @@ learned peer must still pass the deny-by-default admission policy before
 it becomes **routable**.
 
 The security invariant this preserves at network scope: **discovery is
-not authorization.** A node can *appear* in the gossip view — it can even
-be alive and reachable — and still be denied a place in the routing
-table. Only the intersection of *reachable* (gossip says ALIVE) and
-*allowed* (admission policy permits its `(spiffe_id, env_tier)`) is
-routable. This is vision §8.1 ("unauthorized peer cannot join") enforced
-against gossiped membership.
+not authorization.** Only the intersection of *reachable* (gossip says
+ALIVE) and *allowed* (admission policy permits its `(spiffe_id,
+env_tier)`) is routable. When `SwimMembership` is constructed with the
+same admission/tier pair, an unadmitted id never enters the members
+table either (leftover #104) — routing deny-by-default still holds, and
+the table is then bounded by the admitted set. Callers that omit the
+membership gate can still *see* a gossiped peer as alive; this module
+still denies it a place in the routing table. Vision §8.1
+("unauthorized peer cannot join") enforced against gossiped membership.
 
 Why self-asserted tier can't escalate: admission is a deny-by-default
 allowlist keyed on the exact `(spiffe_id, env_tier)` pair. A peer that

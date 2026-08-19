@@ -1,9 +1,67 @@
 """Tests for the gossip membership protocol (Phase 6 Track B D6.3)."""
 
+import json
 import unittest
 
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+from envelope.peer_admission import (
+    AdmissionRule,
+    PeerAdmissionPolicy,
+    public_key_fingerprint,
+)
 from mesh.membership import Member, MemberState, SwimMembership, _supersedes
-from mesh.transport import InMemoryTransport, Switchboard
+from mesh.transport import (
+    Frame,
+    InMemoryTransport,
+    Switchboard,
+    Transport,
+    TransportError,
+)
+
+_A = "spiffe://mesh.local/a"
+_B = "spiffe://mesh.local/b"
+_C = "spiffe://mesh.local/c"
+_ROGUE = "spiffe://mesh.local/rogue"
+_TIER = "prod"
+
+_POLICY_AB = PeerAdmissionPolicy(
+    rules=(
+        AdmissionRule(spiffe_id=_A, env_tier=_TIER),
+        AdmissionRule(spiffe_id=_B, env_tier=_TIER),
+    )
+)
+_POLICY_ABC = PeerAdmissionPolicy(
+    rules=(
+        AdmissionRule(spiffe_id=_A, env_tier=_TIER),
+        AdmissionRule(spiffe_id=_B, env_tier=_TIER),
+        AdmissionRule(spiffe_id=_C, env_tier=_TIER),
+    )
+)
+
+
+class _QueueTransport(Transport):
+    """Hands the node a fixed list of payloads, then goes quiet."""
+
+    def __init__(self, payloads, *, address="node-a"):
+        self._addr = address
+        self._queue = [p if isinstance(p, bytes) else json.dumps(p).encode("utf-8") for p in payloads]
+        self.sent: list[tuple[str, bytes]] = []
+
+    @property
+    def address(self) -> str:
+        return self._addr
+
+    def send(self, dest, payload):
+        self.sent.append((dest, payload))
+
+    def receive(self):
+        if not self._queue:
+            return None
+        return Frame("peer-1", self._queue.pop(0))
+
+    def close(self):
+        pass
 
 
 def _cluster(n, *, seed_all_to_first=True):
@@ -93,6 +151,204 @@ class PrecedenceTests(unittest.TestCase):
     def test_member_dataclass_defaults(self):
         m = Member("x", 0, MemberState.ALIVE)
         self.assertEqual(m.ticks_since_heard, 0)
+
+
+class AdmissionGateTests(unittest.TestCase):
+    """Leftover #104: optional admission gate on the members table."""
+
+    def test_unadmitted_gossiped_id_does_not_enter_table(self):
+        sb = Switchboard()
+        node = SwimMembership(
+            _A, InMemoryTransport(_A, sb),
+            admission=_POLICY_AB, peer_tier=lambda _p: _TIER,
+        )
+        node._merge([[_ROGUE, 0, "alive"], [_B, 0, "alive"]])
+        self.assertNotIn(_ROGUE, node.members)
+        self.assertNotIn(_ROGUE, node.alive_ids())
+        self.assertIn(_B, node.members)
+        # Unadmitted ids are not re-gossiped: _digest is not truncated,
+        # they simply never entered the table.
+        digest_ids = {row[0] for row in node._digest()}
+        self.assertNotIn(_ROGUE, digest_ids)
+        self.assertIn(_B, digest_ids)
+        self.assertIn(_A, digest_ids)
+
+    def test_unadmitted_sender_does_not_enter_via_mark_heard(self):
+        sb = Switchboard()
+        node = SwimMembership(
+            _A, InMemoryTransport(_A, sb),
+            admission=_POLICY_AB, peer_tier=lambda _p: _TIER,
+        )
+        node._mark_heard(_ROGUE)
+        self.assertNotIn(_ROGUE, node.members)
+        node._mark_heard(_B)
+        self.assertIn(_B, node.members)
+
+    def test_admitted_peers_still_converge(self):
+        sb = Switchboard()
+        ids = [_A, _B, _C]
+        mem = {}
+        for i in ids:
+            seeds = [] if i == _A else [_A]
+            mem[i] = SwimMembership(
+                i, InMemoryTransport(i, sb), seeds=seeds,
+                admission=_POLICY_ABC, peer_tier=lambda _p: _TIER,
+            )
+        for m in mem.values():
+            m.join()
+        for _ in range(25):
+            for i in ids:
+                mem[i].tick()
+        for i in ids:
+            self.assertEqual(
+                mem[i].alive_ids(), set(ids) - {i},
+                f"{i} view: {mem[i].alive_ids()}",
+            )
+
+    def test_no_admission_callers_still_learn_any_id(self):
+        sb = Switchboard()
+        node = SwimMembership("n0", InMemoryTransport("n0", sb))
+        node._merge([["stranger", 0, "alive"]])
+        node._mark_heard("other")
+        self.assertIn("stranger", node.members)
+        self.assertIn("other", node.members)
+
+    def test_operator_seeds_are_retained(self):
+        sb = Switchboard()
+        node = SwimMembership(
+            _A, InMemoryTransport(_A, sb), seeds=[_ROGUE],
+            admission=_POLICY_AB, peer_tier=lambda _p: _TIER,
+        )
+        self.assertIn(_ROGUE, node.members)
+        # State updates for a seed still apply; the gate does not evict.
+        node._merge([[_ROGUE, 1, "suspect"]])
+        self.assertEqual(node.state_of(_ROGUE), MemberState.SUSPECT)
+        self.assertEqual(node.members[_ROGUE].incarnation, 1)
+        node._mark_heard(_ROGUE)
+        self.assertEqual(node.state_of(_ROGUE), MemberState.ALIVE)
+
+    def test_unknown_tier_and_wrong_tier_deny_new_entries(self):
+        unknown = SwimMembership(
+            _A, InMemoryTransport(_A, Switchboard()),
+            admission=_POLICY_AB, peer_tier=lambda _p: None,
+        )
+        unknown._merge([[_B, 0, "alive"]])
+        self.assertNotIn(_B, unknown.members)
+
+        wrong = SwimMembership(
+            _A, InMemoryTransport(_A, Switchboard()),
+            admission=_POLICY_AB, peer_tier=lambda _p: "root",
+        )
+        wrong._merge([[_B, 0, "alive"]])
+        self.assertNotIn(_B, wrong.members)
+
+    def test_invalid_spiffe_fails_closed(self):
+        sb = Switchboard()
+        node = SwimMembership(
+            _A, InMemoryTransport(_A, sb),
+            admission=_POLICY_AB, peer_tier=lambda _p: _TIER,
+        )
+        node._merge([["not-a-spiffe", 0, "alive"]])
+        self.assertNotIn("not-a-spiffe", node.members)
+
+    def test_admission_and_peer_tier_must_be_paired(self):
+        sb = Switchboard()
+        transport = InMemoryTransport("n0", sb)
+        with self.assertRaises(TransportError):
+            SwimMembership("n0", transport, admission=_POLICY_AB)
+        with self.assertRaises(TransportError):
+            SwimMembership("n0", transport, peer_tier=lambda _p: _TIER)
+        with self.assertRaises(TransportError):
+            SwimMembership("n0", transport, peer_key=lambda _p: None)
+
+    def test_raising_peer_tier_drops_candidate_and_tick_continues(self):
+        def boom_on_rogue(nid):
+            if nid == _ROGUE:
+                raise RuntimeError("tier backend down")
+            return _TIER
+
+        msg = {
+            "from": _B,
+            "type": "ping",
+            "gossip": [[_B, 0, "alive"], [_ROGUE, 0, "alive"]],
+        }
+        transport = _QueueTransport([b"123", msg])
+        node = SwimMembership(
+            _A, transport,
+            admission=_POLICY_AB, peer_tier=boom_on_rogue,
+        )
+        node.tick()  # must not raise
+        self.assertIn(_B, node.members)
+        self.assertNotIn(_ROGUE, node.members)
+
+    def test_pinned_rule_without_key_is_denied(self):
+        key = Ed25519PrivateKey.generate()
+        policy = PeerAdmissionPolicy(
+            rules=(
+                AdmissionRule(
+                    spiffe_id=_B, env_tier=_TIER,
+                    pinned_fingerprint=public_key_fingerprint(key.public_key()),
+                ),
+            )
+        )
+        node = SwimMembership(
+            _A, InMemoryTransport(_A, Switchboard()),
+            admission=policy, peer_tier=lambda _p: _TIER,
+        )
+        node._merge([[_B, 0, "alive"]])
+        self.assertNotIn(_B, node.members)
+
+    def test_pinned_rule_with_matching_key_may_learn(self):
+        key = Ed25519PrivateKey.generate()
+        policy = PeerAdmissionPolicy(
+            rules=(
+                AdmissionRule(
+                    spiffe_id=_B, env_tier=_TIER,
+                    pinned_fingerprint=public_key_fingerprint(key.public_key()),
+                ),
+            )
+        )
+        node = SwimMembership(
+            _A, InMemoryTransport(_A, Switchboard()),
+            admission=policy, peer_tier=lambda _p: _TIER,
+            peer_key=lambda nid: key.public_key() if nid == _B else None,
+        )
+        node._merge([[_B, 0, "alive"]])
+        self.assertIn(_B, node.members)
+
+    def test_unpinned_rule_unchanged_without_peer_key(self):
+        node = SwimMembership(
+            _A, InMemoryTransport(_A, Switchboard()),
+            admission=_POLICY_AB, peer_tier=lambda _p: _TIER,
+        )
+        node._merge([[_B, 0, "alive"]])
+        self.assertIn(_B, node.members)
+
+    def test_malformed_frames_still_skipped_with_gate(self):
+        transport = _QueueTransport([b"123", b"{{{", {"from": ["p"], "gossip": []}])
+        node = SwimMembership(
+            _A, transport,
+            admission=_POLICY_AB, peer_tier=lambda _p: _TIER,
+        )
+        node.tick()  # must not raise
+        self.assertEqual(node.members, {})
+
+    def test_well_formed_admitted_gossip_still_merges_with_gate(self):
+        msg = {
+            "from": _B,
+            "type": "ping",
+            "gossip": [[_B, 0, "alive"], [_ROGUE, 0, "alive"]],
+        }
+        transport = _QueueTransport([msg])
+        node = SwimMembership(
+            _A, transport,
+            admission=_POLICY_AB, peer_tier=lambda _p: _TIER,
+        )
+        node.tick()
+        self.assertIn(_B, node.alive_ids())
+        self.assertNotIn(_ROGUE, node.members)
+        self.assertTrue(any(dest == _B for dest, _ in transport.sent))
+
 
 if __name__ == "__main__":
     unittest.main()

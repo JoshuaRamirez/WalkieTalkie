@@ -115,28 +115,18 @@ narrowing is a v1 extension and would require a controlled
 vocabulary first.
 
 ### Bounded membership table under gossip pressure (Phase 6 Track B)
-`SwimMembership._merge` validates and length-bounds each gossiped
-node id, but does not cap *how many* updates one message may carry
-or how large the members table may grow. A peer that gossips many
-distinct node ids therefore grows the table, and `_digest()`
-re-gossips the whole table to every peer — so the cost amplifies
-across the cluster.
-
-Deliberately not fixed alongside the decoder hardening, because
-neither obvious fix is safe as a drive-by. Truncating a digest
-would silently break convergence in a cluster larger than the cap
-(`_digest()` legitimately sends self + every known peer). Capping
-the table needs an eviction policy, and evicting a live member
-resurrects it on the next gossip round — a churn loop worse than
-the growth. The real fix is admission-gated membership: only merge
-updates for ids that pass `peer_admission`, making the table
-bounded by the admitted set rather than by a magic number. That is
-a design change to the discovery/membership seam, so it wants its
-own slice.
-
-Bounded in practice today by the 8 MiB transport frame cap and by
-loopback/LAN deployment. Revisit when membership runs over a WAN
-with untrusted peers.
+**Shipped.** Optional `admission` + `peer_tier` on `SwimMembership`
+reuses the D6.4 `PeerAdmissionPolicy` seam. `_merge` and new
+`_mark_heard` entries insert an id only when it passes deny-by-default
+admission, so the members table is bounded by the admitted set
+rather than a magic number. Optional `peer_key` supplies a verified
+SVID public key so pinned rules can evaluate; resolver exceptions
+fail closed. Operator-supplied seeds are retained as bootstrap
+(the gate does not evict them, even if they would fail admission).
+`_digest()` is not truncated — unadmitted ids never enter, so they
+are never re-gossiped. Callers that omit the gate are unchanged.
+Proof obligation `unadmitted_gossip_does_not_enter_membership`
+pins the leftover. See leftover #104.
 
 ---
 

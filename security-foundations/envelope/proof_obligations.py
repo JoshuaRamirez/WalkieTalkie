@@ -990,17 +990,36 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
         phase=Phase.PHASE_6,
         track="B",
         statement=(
-            "Discovery is not authorization at network scope. A peer that "
-            "gossip reports as ALIVE and reachable is routable ONLY if it "
-            "also passes the deny-by-default admission policy on its "
-            "(spiffe_id, env_tier). A reachable-but-unadmitted peer (a rogue "
-            "on nobody's allowlist, an unknown tier, or a self-asserted "
-            "escalated tier) is denied a place in the routing table. Vision "
-            "§8.1 enforced against gossiped membership."
+            "Discovery is not authorization at network scope. A peer is "
+            "routable ONLY if it is gossip-ALIVE and passes the "
+            "deny-by-default admission policy on its (spiffe_id, env_tier). "
+            "When the membership gate is attached, an unadmitted rogue never "
+            "enters the members table; either way it is denied a place in "
+            "the routing table. An unknown or self-asserted-escalated tier "
+            "is also denied. Vision §8.1 enforced against gossiped "
+            "membership."
         ),
         canonical_test=(
             "mesh.test_gossip_discovery.GossipAdmissionTests"
             ".test_reachable_rogue_is_not_routable"
+        ),
+    ),
+    ProofObligation(
+        name="unadmitted_gossip_does_not_enter_membership",
+        phase=Phase.PHASE_6,
+        track="B",
+        statement=(
+            "When SwimMembership is constructed with the D6.4 "
+            "admission/tier pair, a gossiped id that fails deny-by-default "
+            "peer_admission is not inserted into members and is not "
+            "re-gossiped via _digest. Operator-supplied seeds are retained. "
+            "Callers that omit the gate are unchanged. The table is bounded "
+            "by the admitted set — no magic cap, no eviction, no digest "
+            "truncation."
+        ),
+        canonical_test=(
+            "mesh.test_membership.AdmissionGateTests"
+            ".test_unadmitted_gossiped_id_does_not_enter_table"
         ),
     ),
     ProofObligation(

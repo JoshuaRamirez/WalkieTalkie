@@ -20,14 +20,26 @@ _POLICY = PeerAdmissionPolicy(
     )
 )
 
-def _fabric():
-    """A, B, and a rogue all gossip into one cluster (all seeded to A)."""
+def _fabric(*, admission=None, peer_tier=None):
+    """A, B, and a rogue all gossip into one cluster (all seeded to A).
+
+    Pass ``admission`` (and optionally ``peer_tier``) to attach the
+    leftover #104 membership gate. Omitting it keeps the original
+    reachability-only table so routing-layer deny can be pinned on its
+    own.
+    """
     sb = Switchboard()
     ids = [_A, _B, _ROGUE]
     mem = {}
+    extra = {}
+    if admission is not None:
+        extra["admission"] = admission
+        extra["peer_tier"] = peer_tier if peer_tier is not None else (lambda _p: _TIER)
     for i in ids:
         seeds = [] if i == _A else [_A]
-        mem[i] = SwimMembership(i, InMemoryTransport(i, sb), seeds=seeds)
+        mem[i] = SwimMembership(
+            i, InMemoryTransport(i, sb), seeds=seeds, **extra
+        )
     return ids, mem
 
 def _converge(mem, ids, rounds=25):
@@ -39,15 +51,17 @@ def _converge(mem, ids, rounds=25):
 
 class GossipAdmissionTests(unittest.TestCase):
     def test_reachable_rogue_is_not_routable(self):
-        ids, mem = _fabric()
+        ids, mem = _fabric(admission=_POLICY)
         _converge(mem, ids)
-        # From A's perspective, everyone (incl. the rogue) is reachable...
         disc_a = GossipDiscovery(
             membership=mem[_A], admission=_POLICY, peer_tier=lambda _p: _TIER
         )
-        self.assertIn(_ROGUE, disc_a.alive_ids())
+        # Membership gate attached: the unadmitted rogue never enters the
+        # table (leftover #104). Routing deny-by-default still holds.
+        self.assertNotIn(_ROGUE, disc_a.alive_ids())
+        self.assertNotIn(_ROGUE, mem[_A].members)
+        self.assertNotIn(_ROGUE, mem[_B].members)
         self.assertIn(_B, disc_a.alive_ids())
-        # ...but only the admitted peer is ROUTABLE. Discovery != authorization.
         self.assertEqual(disc_a.routable_peers(), {_B})
         self.assertFalse(disc_a.is_routable(_ROGUE))
         self.assertTrue(disc_a.is_routable(_B))
