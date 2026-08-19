@@ -348,6 +348,21 @@ class IndependentSamplingTests(unittest.TestCase):
                 sampler_pools={"a": pool, "b": ["not-a-candidate"]},  # type: ignore[list-item]
             )
 
+    def test_non_iterable_sampler_pool_rejected(self):
+        pool = [_cand("spiffe://a.mesh/x/y")]
+        rule = self._rule()
+        for bad in (None, 1):
+            with self.subTest(pool=bad):
+                with self.assertRaisesRegex(
+                    EclipseResistanceError,
+                    r"sampler_pools\['b'\] must be an iterable of NeighborCandidate",
+                ):
+                    select_neighbors(
+                        pool,
+                        rule=rule,
+                        sampler_pools={"a": pool, "b": bad},  # type: ignore[dict-item]
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()

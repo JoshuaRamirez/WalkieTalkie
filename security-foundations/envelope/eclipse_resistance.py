@@ -143,7 +143,13 @@ def _normalize_sampler_pools(
             raise EclipseResistanceError(
                 f"sampler id must be a non-empty string: {sampler_id!r}"
             )
-        cands = list(pool)
+        try:
+            cands = list(pool)
+        except TypeError as exc:
+            raise EclipseResistanceError(
+                f"sampler_pools[{sampler_id!r}] must be an iterable "
+                "of NeighborCandidate"
+            ) from exc
         for index, cand in enumerate(cands):
             if not isinstance(cand, NeighborCandidate):
                 raise EclipseResistanceError(
