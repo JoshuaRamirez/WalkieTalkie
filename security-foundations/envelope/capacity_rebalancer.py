@@ -1,31 +1,50 @@
-"""Automatic capacity rebalancer v0 (Phase 3 B3 deferred half).
+"""Automatic capacity rebalancer v0 (Phase 3 B3).
 
 Phase 3 Track B B3 calls for "Automatic rebalance on cascading
-throttle detection." The capacity-budgets v0 (PR #43) shipped
+throttle detection." The capacity-budgets v0 shipped
 :meth:`BudgetController.snapshot` / :meth:`tenant_snapshot` as the
-read-only surface for live consumption, with the reactive
-controller documented as deferred. This module is that controller.
+read-only surface for live consumption. This module is the
+reactive controller on top of those snapshots.
 
 How it works
 ------------
 :class:`CapacityRebalancer` reads a :class:`BudgetController`'s
-snapshot, classifies pools as ``stressed`` (utilization at or above
-``stress_threshold``) or ``slack`` (at or below ``slack_threshold``),
-and reports whether the system is *cascading*: at least
-``cascade_min_stressed`` pools stressed AND at least one slack pool
-to draw from.
+snapshots, classifies **pools** and (when configured)
+**tenants** as ``stressed`` (utilization at or above
+``stress_threshold``) or ``slack`` (at or below
+``slack_threshold``), and reports whether each half is
+*cascading*: at least ``cascade_min_stressed`` units stressed
+AND at least one slack unit to draw from.
 
 When cascading, the rebalancer drafts a :class:`RebalanceDecision`:
-take ``transfer_fraction`` of each slack pool's unused-headroom
-(``ceiling - max(reserved, in_flight)``) and donate it to the
-stressed pools in proportion to their excess demand. Donations are
-constrained so the donor's NEW ceiling never falls below its
-``reserved`` floor or its current in-flight count.
+take ``transfer_fraction`` of each slack unit's unused-headroom
+and donate it to the stressed units in proportion to their
+excess demand.
+
+- Pools: headroom is ``ceiling - max(reserved, in_flight)``.
+  Donations are constrained so the donor's NEW ceiling never
+  falls below its ``reserved`` floor or its current in-flight
+  count, and recipient ceilings stay under the cross-pool
+  oversubscription cap.
+- Tenants: headroom is ``burst - max(reserve, in_flight)``,
+  read from :meth:`BudgetController.tenant_snapshot`. Cascade
+  detection and burst transfer are **intra-pool**: a slack
+  tenant in pool A never donates to a stressed tenant in
+  pool B. ``TenantBudget.burst`` is scoped to
+  ``(pool, tenant)``; shrinking a quota in another pool
+  would not free capacity in the recipients' pool. Donations
+  are constrained so the donor's NEW burst never falls below
+  that tenant's ``reserve`` or current in-flight. Reserved
+  stays put; only burst headroom moves. Callers that never
+  configure ``tenant_budgets`` see an empty tenant half
+  (no-op). Pool-ceiling rebalancing stays global — that
+  half already moves across pools on purpose.
 
 The decision is *advisory* by default. :meth:`apply` mutates the
-controller in place via :meth:`BudgetController.adjust_ceiling`, so
-operators can run a planning loop (``evaluate`` -> review ->
-``apply``) or just call :meth:`evaluate_and_apply` directly.
+controller in place via :meth:`BudgetController.adjust_ceiling`
+and :meth:`BudgetController.adjust_tenant_burst`, so operators
+can run a planning loop (``evaluate`` -> review -> ``apply``)
+or just call :meth:`evaluate_and_apply` directly.
 
 Invariants preserved on every apply
 -----------------------------------
@@ -36,31 +55,44 @@ Invariants preserved on every apply
 - No retroactive overcommit: a pool's ceiling never falls below the
   pool's current in-flight (operators must drain first if they want
   a deeper shrink).
+- Tenant burst floor: a tenant's burst never falls below that
+  tenant's ``reserve``.
+- Tenant no-retroactive-overcommit: a tenant's burst never falls
+  below that tenant's current in-flight.
+- ``burst >= reserve`` remains the :class:`TenantBudget` invariant.
 
-These are the same invariants :meth:`BudgetController.adjust_ceiling`
-enforces; the rebalancer just calls into it.
+These are the same invariants
+:meth:`BudgetController.adjust_ceiling` and
+:meth:`BudgetController.adjust_tenant_burst` enforce; the
+rebalancer just calls into them.
 
 Out of scope for v0
 -------------------
-- Tenant-level rebalancing. v0 only adjusts pool ceilings. Tenant
-  burst caps stay where the operator set them; a follow-up can
-  extend the same heuristic to ``TenantBudget.burst``.
 - Predictive / forecasting models. v0 reacts to current snapshots
   only.
 - Reserved redistribution. Reserved is treated as a permanent
   declaration of intent; only burst headroom (the gap between
-  reserved and ceiling) moves.
+  reserved and ceiling, or reserve and burst) moves.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import TypeVar
 
-from .capacity_budgets import BudgetController, CapacityBudgetError
+from .capacity_budgets import (
+    BudgetController,
+    CapacityBudgetError,
+    TenantBudget,
+)
+
+K = TypeVar("K")
 
 
 class RebalancerError(ValueError):
     """Raised when rebalancer inputs violate v0 invariants."""
+
 
 @dataclass(frozen=True)
 class PoolUtilization:
@@ -89,11 +121,45 @@ class PoolUtilization:
         pools."""
         return max(0, self.in_flight - self.ceiling)
 
+
+@dataclass(frozen=True)
+class TenantUtilization:
+    pool: str
+    tenant: str
+    in_flight: int
+    burst: int
+    reserve: int
+
+    @property
+    def utilization(self) -> float:
+        if self.burst <= 0:
+            return 0.0
+        return self.in_flight / self.burst
+
+    @property
+    def slack_headroom(self) -> int:
+        """How much burst can be removed without dropping below
+        ``max(reserve, in_flight)`` — the donor-side budget."""
+        floor = max(self.reserve, self.in_flight)
+        return max(0, self.burst - floor)
+
+    @property
+    def stress_excess(self) -> int:
+        """How much burst the tenant is short relative to demand. Used
+        as the share key when distributing donations among stressed
+        tenants."""
+        return max(0, self.in_flight - self.burst)
+
+
 @dataclass(frozen=True)
 class RebalanceSignals:
     stressed: tuple[PoolUtilization, ...]
     slack: tuple[PoolUtilization, ...]
     cascading: bool
+    tenant_stressed: tuple[TenantUtilization, ...] = ()
+    tenant_slack: tuple[TenantUtilization, ...] = ()
+    tenant_cascading: bool = False
+
 
 @dataclass(frozen=True)
 class CeilingChange:
@@ -105,15 +171,76 @@ class CeilingChange:
     def delta(self) -> int:
         return self.new_ceiling - self.old_ceiling
 
+
+@dataclass(frozen=True)
+class BurstChange:
+    pool: str
+    tenant: str
+    old_burst: int
+    new_burst: int
+
+    @property
+    def delta(self) -> int:
+        return self.new_burst - self.old_burst
+
+
 @dataclass(frozen=True)
 class RebalanceDecision:
     signals: RebalanceSignals
     changes: tuple[CeilingChange, ...]
     reason: str
+    tenant_changes: tuple[BurstChange, ...] = ()
 
     @property
     def is_noop(self) -> bool:
-        return not self.changes
+        return not self.changes and not self.tenant_changes
+
+
+def _allocate_transfer(
+    slack_items: Sequence[tuple[K, int]],
+    stressed_items: Sequence[tuple[K, int]],
+    transfer_fraction: float,
+) -> tuple[dict[K, int], dict[K, int], int]:
+    """Share ``transfer_fraction`` of slack headroom across stressed items.
+
+    ``slack_items`` is ``(key, slack_headroom)``; ``stressed_items``
+    is ``(key, stress_excess)``. Returns
+    ``(donors, recipients, total_donation)``. Empty when nothing
+    is transferable. Recipients share proportionally by
+    ``stress_excess``, or evenly when every excess is 0.
+    """
+    donors: dict[K, int] = {}
+    total_donation = 0
+    for key, headroom in slack_items:
+        donation = int(headroom * transfer_fraction)
+        if donation > 0:
+            donors[key] = donation
+            total_donation += donation
+    if total_donation == 0:
+        return {}, {}, 0
+
+    recipients: dict[K, int] = {}
+    excess_total = sum(excess for _, excess in stressed_items)
+    if excess_total > 0:
+        allocated = 0
+        for key, excess in stressed_items:
+            share = int(total_donation * excess / excess_total)
+            if share > 0:
+                recipients[key] = share
+                allocated += share
+        remainder = total_donation - allocated
+        if remainder > 0 and stressed_items:
+            top_key = max(stressed_items, key=lambda item: item[1])[0]
+            recipients[top_key] = recipients.get(top_key, 0) + remainder
+    else:
+        per = total_donation // len(stressed_items)
+        rem = total_donation - per * len(stressed_items)
+        for i, (key, _) in enumerate(stressed_items):
+            share = per + (1 if i < rem else 0)
+            if share > 0:
+                recipients[key] = share
+    return donors, recipients, total_donation
+
 
 @dataclass
 class CapacityRebalancer:
@@ -169,66 +296,113 @@ class CapacityRebalancer:
         cascading = (
             len(stressed) >= self.cascade_min_stressed and len(slack) >= 1
         )
+
+        tenant_snap = controller.tenant_snapshot()
+        tenant_stressed: list[TenantUtilization] = []
+        tenant_slack: list[TenantUtilization] = []
+        by_pool: dict[str, list[TenantUtilization]] = {}
+        for tb in controller.tenant_budgets:
+            t_util = TenantUtilization(
+                pool=tb.pool,
+                tenant=tb.tenant,
+                in_flight=tenant_snap.get((tb.pool, tb.tenant), 0),
+                burst=tb.burst,
+                reserve=tb.reserve,
+            )
+            by_pool.setdefault(tb.pool, []).append(t_util)
+            if t_util.utilization >= self.stress_threshold:
+                tenant_stressed.append(t_util)
+            elif t_util.utilization <= self.slack_threshold:
+                tenant_slack.append(t_util)
+        # Cascade is per-pool: two hot data-plane tenants plus a
+        # slack security-plane tenant is not a tenant cascade.
+        tenant_cascading = any(
+            _tenants_cascade_in_pool(utils, reb=self)
+            for utils in by_pool.values()
+        )
         return RebalanceSignals(
             stressed=tuple(stressed),
             slack=tuple(slack),
             cascading=cascading,
+            tenant_stressed=tuple(tenant_stressed),
+            tenant_slack=tuple(tenant_slack),
+            tenant_cascading=tenant_cascading,
         )
 
     def evaluate(self, controller: BudgetController) -> RebalanceDecision:
         sigs = self.signals(controller)
+        pool_changes, pool_reason, pool_donation = self._evaluate_pools(
+            controller, sigs
+        )
+        tenant_changes, tenant_reason, tenant_donation = (
+            self._evaluate_tenants(controller, sigs)
+        )
+
+        if not pool_changes and not tenant_changes:
+            if not sigs.cascading and not sigs.tenant_cascading:
+                reason = "no cascading throttle detected"
+            elif pool_reason and not tenant_reason:
+                reason = pool_reason
+            elif tenant_reason and not pool_reason:
+                reason = tenant_reason
+            else:
+                reason = (
+                    pool_reason
+                    or tenant_reason
+                    or (
+                        "cascading detected but ceilings already balanced "
+                        "against floor / oversubscription caps"
+                    )
+                )
+            return RebalanceDecision(
+                signals=sigs,
+                changes=(),
+                tenant_changes=(),
+                reason=reason,
+            )
+
+        parts: list[str] = []
+        if pool_changes:
+            parts.append(
+                pool_reason
+                or (
+                    f"cascading throttle: {len(sigs.stressed)} stressed, "
+                    f"{len(sigs.slack)} slack; redistributed "
+                    f"{pool_donation} units of ceiling headroom"
+                )
+            )
+        if tenant_changes:
+            parts.append(
+                tenant_reason
+                or (
+                    f"cascading tenant stress: "
+                    f"{len(sigs.tenant_stressed)} stressed, "
+                    f"{len(sigs.tenant_slack)} slack; redistributed "
+                    f"{tenant_donation} units of burst headroom"
+                )
+            )
+        return RebalanceDecision(
+            signals=sigs,
+            changes=pool_changes,
+            tenant_changes=tenant_changes,
+            reason="; ".join(parts),
+        )
+
+    def _evaluate_pools(
+        self, controller: BudgetController, sigs: RebalanceSignals
+    ) -> tuple[tuple[CeilingChange, ...], str | None, int]:
         if not sigs.cascading:
-            return RebalanceDecision(
-                signals=sigs,
-                changes=(),
-                reason="no cascading throttle detected",
-            )
+            return (), None, 0
 
-        # Donor side: take transfer_fraction of each slack pool's
-        # headroom (rounded down so we never over-transfer).
-        donors: dict[str, int] = {}
-        total_donation = 0
-        for s in sigs.slack:
-            donation = int(s.slack_headroom * self.transfer_fraction)
-            if donation > 0:
-                donors[s.name] = donation
-                total_donation += donation
+        donors, recipients, total_donation = _allocate_transfer(
+            [(s.name, s.slack_headroom) for s in sigs.slack],
+            [(p.name, p.stress_excess) for p in sigs.stressed],
+            self.transfer_fraction,
+        )
         if total_donation == 0:
-            return RebalanceDecision(
-                signals=sigs,
-                changes=(),
-                reason="slack pools have no transferable headroom",
-            )
+            return (), "slack pools have no transferable headroom", 0
 
-        # Recipient side: share by stress_excess; fall back to equal
-        # split when all stressed pools are at ceiling without overflow.
-        excess_total = sum(p.stress_excess for p in sigs.stressed)
-        recipients: dict[str, int] = {}
-        if excess_total > 0:
-            # Proportional share.
-            allocated = 0
-            for p in sigs.stressed:
-                share = int(total_donation * p.stress_excess / excess_total)
-                if share > 0:
-                    recipients[p.name] = share
-                    allocated += share
-            # Distribute rounding remainder to the most-stressed pool.
-            remainder = total_donation - allocated
-            if remainder > 0 and sigs.stressed:
-                top = max(sigs.stressed, key=lambda p: p.stress_excess)
-                recipients[top.name] = recipients.get(top.name, 0) + remainder
-        else:
-            # Even split.
-            per = total_donation // len(sigs.stressed)
-            rem = total_donation - per * len(sigs.stressed)
-            for i, p in enumerate(sigs.stressed):
-                share = per + (1 if i < rem else 0)
-                if share > 0:
-                    recipients[p.name] = share
-
-        # Build the change list (donors first, then recipients).
         changes: list[CeilingChange] = []
-        # Donors: ceiling -= donation
         snap = controller.snapshot()
         for name, donation in donors.items():
             pool = _pool_by_name(controller, name)
@@ -243,7 +417,6 @@ class CapacityRebalancer:
                         new_ceiling=new_ceiling,
                     )
                 )
-        # Recipients: ceiling += share, subject to the cross-pool cap.
         others_reserved_excluding = {
             p.name: sum(
                 op.reserved for op in controller.pools if op.name != p.name
@@ -266,22 +439,114 @@ class CapacityRebalancer:
                 )
 
         if not changes:
-            return RebalanceDecision(
-                signals=sigs,
-                changes=(),
-                reason=(
+            return (
+                (),
+                (
                     "cascading detected but ceilings already balanced "
                     "against floor / oversubscription caps"
                 ),
+                total_donation,
             )
-        return RebalanceDecision(
-            signals=sigs,
-            changes=tuple(changes),
-            reason=(
+        return (
+            tuple(changes),
+            (
                 f"cascading throttle: {len(sigs.stressed)} stressed, "
                 f"{len(sigs.slack)} slack; redistributed "
                 f"{total_donation} units of ceiling headroom"
             ),
+            total_donation,
+        )
+
+    def _evaluate_tenants(
+        self, controller: BudgetController, sigs: RebalanceSignals
+    ) -> tuple[tuple[BurstChange, ...], str | None, int]:
+        if not sigs.tenant_cascading:
+            return (), None, 0
+
+        # Allocate independently per pool. A slack tenant in pool A
+        # must never donate burst to a stressed tenant in pool B.
+        by_pool: dict[str, list[TenantUtilization]] = {}
+        for util in (*sigs.tenant_stressed, *sigs.tenant_slack):
+            by_pool.setdefault(util.pool, []).append(util)
+
+        tenant_snap = controller.tenant_snapshot()
+        by_key = {(tb.pool, tb.tenant): tb for tb in controller.tenant_budgets}
+        changes: list[BurstChange] = []
+        total_donation = 0
+        saw_cascade_without_headroom = False
+        # Walk controller.pools so multi-pool transfers stay
+        # deterministic (pool declaration order).
+        for pool in controller.pools:
+            utils = by_pool.get(pool.name, ())
+            if not utils:
+                continue
+            if not _tenants_cascade_in_pool(utils, reb=self):
+                continue
+            stressed = [
+                u for u in utils if u.utilization >= self.stress_threshold
+            ]
+            slack = [
+                u for u in utils if u.utilization <= self.slack_threshold
+            ]
+            donors, recipients, donation = _allocate_transfer(
+                [((s.pool, s.tenant), s.slack_headroom) for s in slack],
+                [((p.pool, p.tenant), p.stress_excess) for p in stressed],
+                self.transfer_fraction,
+            )
+            if donation == 0:
+                saw_cascade_without_headroom = True
+                continue
+            total_donation += donation
+            for (pool_name, tenant), amount in donors.items():
+                tb = _tenant_from_index(by_key, pool_name, tenant)
+                new_burst = tb.burst - amount
+                new_burst = max(
+                    new_burst,
+                    tb.reserve,
+                    tenant_snap.get((pool_name, tenant), 0),
+                )
+                if new_burst != tb.burst:
+                    changes.append(
+                        BurstChange(
+                            pool=pool_name,
+                            tenant=tenant,
+                            old_burst=tb.burst,
+                            new_burst=new_burst,
+                        )
+                    )
+            for (pool_name, tenant), share in recipients.items():
+                tb = _tenant_from_index(by_key, pool_name, tenant)
+                new_burst = tb.burst + share
+                if new_burst != tb.burst:
+                    changes.append(
+                        BurstChange(
+                            pool=pool_name,
+                            tenant=tenant,
+                            old_burst=tb.burst,
+                            new_burst=new_burst,
+                        )
+                    )
+
+        if not changes:
+            if saw_cascade_without_headroom and total_donation == 0:
+                return (), "slack tenants have no transferable headroom", 0
+            return (
+                (),
+                (
+                    "cascading tenant stress detected but bursts "
+                    "already balanced against reserve / in-flight floors"
+                ),
+                total_donation,
+            )
+        return (
+            tuple(changes),
+            (
+                f"cascading tenant stress: "
+                f"{len(sigs.tenant_stressed)} stressed, "
+                f"{len(sigs.tenant_slack)} slack; redistributed "
+                f"{total_donation} units of intra-pool burst headroom"
+            ),
+            total_donation,
         )
 
     # ------- write paths -------
@@ -294,17 +559,26 @@ class CapacityRebalancer:
         Donor reductions are applied BEFORE recipient increases so
         the cross-pool oversubscription guard in
         :meth:`BudgetController.adjust_ceiling` sees the most-relaxed
-        intermediate state. If any single change is rejected by the
+        intermediate state. Tenant burst shrinks apply before grows
+        for the same reason (even though tenant burst has no
+        cross-tenant cap). If any single change is rejected by the
         controller's invariants, the partial state is left as-is and
         the underlying :class:`CapacityBudgetError` is re-raised —
         operators investigating a transient state should consult
-        :meth:`BudgetController.snapshot` to see what landed.
+        :meth:`BudgetController.snapshot` /
+        :meth:`BudgetController.tenant_snapshot` to see what landed.
         """
-        # Order: shrinks first, then grows.
         shrinks = [c for c in decision.changes if c.delta < 0]
         grows = [c for c in decision.changes if c.delta > 0]
         for change in (*shrinks, *grows):
             controller.adjust_ceiling(change.pool, change.new_ceiling)
+
+        tenant_shrinks = [c for c in decision.tenant_changes if c.delta < 0]
+        tenant_grows = [c for c in decision.tenant_changes if c.delta > 0]
+        for change in (*tenant_shrinks, *tenant_grows):
+            controller.adjust_tenant_burst(
+                change.pool, change.tenant, change.new_burst
+            )
 
     def evaluate_and_apply(
         self, controller: BudgetController
@@ -314,8 +588,31 @@ class CapacityRebalancer:
             self.apply(controller, decision)
         return decision
 
+
 def _pool_by_name(controller: BudgetController, name: str):
     for p in controller.pools:
         if p.name == name:
             return p
     raise CapacityBudgetError(f"unknown pool: {name!r}")
+
+
+def _tenant_from_index(
+    by_key: dict[tuple[str, str], TenantBudget], pool: str, tenant: str
+) -> TenantBudget:
+    tb = by_key.get((pool, tenant))
+    if tb is None:
+        raise CapacityBudgetError(f"unknown tenant_budget: {(pool, tenant)!r}")
+    return tb
+
+
+def _tenants_cascade_in_pool(
+    utils: Sequence[TenantUtilization],
+    *,
+    reb: CapacityRebalancer,
+) -> bool:
+    """True iff this pool has enough stressed tenants and a slack donor."""
+    stressed = sum(
+        1 for u in utils if u.utilization >= reb.stress_threshold
+    )
+    slack = sum(1 for u in utils if u.utilization <= reb.slack_threshold)
+    return stressed >= reb.cascade_min_stressed and slack >= 1

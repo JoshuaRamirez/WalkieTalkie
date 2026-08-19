@@ -797,6 +797,22 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             ".test_apply_preserves_oversubscription_cap"
         ),
     ),
+    ProofObligation(
+        name="rebalancer_tenant_burst_respects_floors",
+        phase=Phase.PHASE_3,
+        track="B",
+        statement=(
+            "After CapacityRebalancer.apply, every TenantBudget.burst "
+            "is still >= that tenant's reserve and >= that tenant's "
+            "current in-flight — reserved stays a permanent declaration "
+            "of intent, and burst never shrinks under live consumption "
+            "(drain first)."
+        ),
+        canonical_test=(
+            "envelope.test_capacity_rebalancer.TenantApplyTests"
+            ".test_apply_preserves_tenant_floors"
+        ),
+    ),
     # ----- Phase 5 Track A: real X.509 identity -----
     ProofObligation(
         name="svid_binding_verified",

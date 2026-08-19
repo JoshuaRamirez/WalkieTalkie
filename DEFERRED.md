@@ -89,9 +89,20 @@ the sink through (no double emission). Proof obligation
 leftover #100.
 
 ### Tenant-level capacity rebalancing (Phase 3 Track B B3)
-The capacity rebalancer adjusts pool ceilings. Adjusting per-tenant
-`TenantBudget.burst` caps under the same heuristic is a follow-up
-extension of the same primitive.
+**Shipped.** `CapacityRebalancer` applies the same
+stress/slack/cascade heuristic to per-tenant `TenantBudget.burst`,
+reading live consumption from `BudgetController.tenant_snapshot()`.
+Cascade detection and burst transfer are intra-pool: a slack
+tenant in pool A never donates to a stressed tenant in pool B.
+A tenant's burst never falls below that tenant's reserve or current
+in-flight; `burst >= reserve` remains the `TenantBudget` invariant.
+Reserved stays a permanent declaration of intent — only burst
+headroom moves. Pool-ceiling rebalancing stays global. Callers that
+never configure `tenant_budgets` see a no-op tenant half.
+`BudgetController.adjust_tenant_burst` is the mutation sibling of
+`adjust_ceiling`. Proof obligation
+`rebalancer_tenant_burst_respects_floors` pins the floors. See
+leftover #102.
 
 ### Resource claim in capability tokens (Phase 1)
 Capability tokens carry `scope` but not `resource`. Adding a

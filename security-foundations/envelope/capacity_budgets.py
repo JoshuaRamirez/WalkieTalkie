@@ -30,16 +30,16 @@ half of B3 ("Fairness Controller"):
 
 Out of scope for v0
 -------------------
-- "Automatic rebalance on cascading throttle detection." That's a
-  reactive controller on top of this primitive. v0 exposes
-  consumption snapshots (:meth:`BudgetController.snapshot`) so a
-  follow-up rebalancer can read them and adjust budgets.
 - Distributed enforcement across cluster nodes. The controller is
   in-process; operators wanting cluster-wide consistency place a
   central admission service behind this primitive or back it with
   a distributed counter store.
 - Pre-emption / cancellation. v0 only refuses NEW acquisitions; it
   doesn't take running work away.
+
+The reactive rebalancer that reads :meth:`snapshot` /
+:meth:`tenant_snapshot` and adjusts pool ceilings plus per-tenant
+``burst`` lives in :mod:`capacity_rebalancer`.
 """
 
 from __future__ import annotations
@@ -285,12 +285,20 @@ class BudgetController:
     def snapshot(self) -> dict[str, int]:
         """Return a copy of current pool consumption.
 
-        Operators in a follow-up rebalancer read this to detect
-        cascading throttling and trigger capacity reallocation.
+        :class:`~envelope.capacity_rebalancer.CapacityRebalancer`
+        reads this to detect cascading pool throttle and draft
+        ceiling transfers.
         """
         return dict(self._in_flight_pool)
 
     def tenant_snapshot(self) -> dict[tuple[str, str], int]:
+        """Return a copy of current per-(pool, tenant) consumption.
+
+        :class:`~envelope.capacity_rebalancer.CapacityRebalancer`
+        reads this to detect cascading tenant stress and draft
+        ``TenantBudget.burst`` transfers. Keys are
+        ``(pool, tenant)``.
+        """
         return dict(self._in_flight_tenant)
 
     def adjust_ceiling(self, pool: str, new_ceiling: int) -> None:
@@ -346,6 +354,52 @@ class BudgetController:
             else:
                 new_pools.append(p)
         self.pools = tuple(new_pools)
+
+    def adjust_tenant_burst(
+        self, pool: str, tenant: str, new_burst: int
+    ) -> None:
+        """Replace one ``TenantBudget.burst`` in place.
+
+        Preserves ``reserve`` and any in-flight counters. Raises
+        :class:`CapacityBudgetError` if:
+        - no ``TenantBudget`` exists for ``(pool, tenant)``
+        - ``new_burst < tenant.reserve`` (would violate
+          ``burst >= reserve``)
+        - ``new_burst`` is below the tenant's current in-flight
+          count (would create an illegally-overcommitted
+          controller; the rebalancer should drain first)
+
+        Sibling of :meth:`adjust_ceiling`. The rebalancer in
+        :mod:`capacity_rebalancer` is the intended caller.
+        """
+        if not isinstance(new_burst, int) or new_burst < 0:
+            raise CapacityBudgetError(
+                f"new_burst must be a non-negative int: {new_burst!r}"
+            )
+        existing = self._tenant_budget(pool, tenant)
+        if existing is None:
+            raise CapacityBudgetError(
+                f"unknown tenant_budget: {(pool, tenant)!r}"
+            )
+        if new_burst < existing.reserve:
+            raise CapacityBudgetError(
+                f"new_burst ({new_burst}) below tenant {tenant!r} "
+                f"in pool {pool!r} reserve ({existing.reserve})"
+            )
+        in_flight = self._in_flight_tenant.get((pool, tenant), 0)
+        if new_burst < in_flight:
+            raise CapacityBudgetError(
+                f"new_burst ({new_burst}) below tenant {tenant!r} "
+                f"in pool {pool!r} current in_flight ({in_flight}); "
+                f"drain first"
+            )
+        new_budgets: list[TenantBudget] = []
+        for tb in self.tenant_budgets:
+            if tb.pool == pool and tb.tenant == tenant:
+                new_budgets.append(_dc_replace(tb, burst=new_burst))
+            else:
+                new_budgets.append(tb)
+        self.tenant_budgets = tuple(new_budgets)
 
 def build_controller(
     *,
