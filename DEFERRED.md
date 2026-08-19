@@ -37,11 +37,17 @@ Consumer import without flat source dirs on `sys.path` is pinned by
 DISTRIBUTION) and `CLAUDE.md`.
 
 ### Independent peer sampling paths (Phase 3 Track A A2)
-Multi-process / network-topology concern. v0 takes the combined
-candidate pool as input to `select_neighbors`. Follow-up would
-introduce per-sampler diagnostics so the diversity gate can detect
-"both samplers returned identical sets" — a signal that the
-operator's gossip layers aren't actually independent.
+**Shipped.** Optional `sampler_pools` on `select_neighbors` plus
+`NeighborSelection.samplers_identical`. The selector still takes
+the combined candidate pool, so the per-domain cap and
+min-distinct-domain invariants are unchanged. The diagnostic is
+True iff two or more labeled sampler outputs are the same
+`(peer_iss, peer_kid)` set — the leftover signal that the
+operator's gossip layers aren't actually independent. Combined-
+pool-only callers keep `samplers_identical is None`. No gossip
+layer is invented; callers tag their own sampler outputs. Proof
+obligation `independent_samplers_identical_sets_detected` pins
+the report. See leftover #98.
 
 ### Attestation burden tuning (Phase 3 Track A A1)
 Proof-of-work or hardware-attestation cost dial belongs in the

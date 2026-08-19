@@ -207,7 +207,12 @@ each entry names the module that implements it.
   submits) and reports `diversity_shortfall` when fewer than
   `min_distinct_trust_domains` trust domains appear in the final
   set. Rejection diagnostics distinguish `diversity_per_domain_cap`
-  from `diversity_target_reached`.
+  from `diversity_target_reached`. Optional `sampler_pools` tags
+  two (or N) sampler outputs; `NeighborSelection.samplers_identical`
+  is True when every pool is the same `(peer_iss, peer_kid)` set
+  (a signal that the operator's sampling paths are not independent)
+  and `None` when fewer than two pools are supplied. Selection
+  still runs on the combined candidate pool.
   `detect_trust_domain_surges()` returns trust domains whose
   in-window candidate count meets a configurable threshold — a
   signal for operators to investigate.

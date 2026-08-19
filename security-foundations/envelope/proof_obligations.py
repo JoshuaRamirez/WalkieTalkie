@@ -499,6 +499,22 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
         ),
     ),
     ProofObligation(
+        name="independent_samplers_identical_sets_detected",
+        phase=Phase.PHASE_3,
+        track="A",
+        statement=(
+            "When two or more labeled sampler pools are supplied to "
+            "select_neighbors, samplers_identical is True iff every "
+            "sampler returned the same (peer_iss, peer_kid) set — a "
+            "signal that the operator's sampling paths are not "
+            "independent."
+        ),
+        canonical_test=(
+            "envelope.test_eclipse_resistance.IndependentSamplingTests"
+            ".test_identical_sampler_outputs_reported"
+        ),
+    ),
+    ProofObligation(
         name="discovery_freshness_monotonic",
         phase=Phase.PHASE_3,
         track="A",
