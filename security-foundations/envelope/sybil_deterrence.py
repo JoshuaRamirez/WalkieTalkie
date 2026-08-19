@@ -44,14 +44,13 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from audit_query import trust_domain_of
-from deny_reason import DenyReason
-from verify_envelope import KID_RE, SPIFFE_ID_RE
+from .audit_query import trust_domain_of
+from .deny_reason import DenyReason
+from .verify_envelope import KID_RE, SPIFFE_ID_RE
 
 
 class SybilDeterrenceError(ValueError):
     """Raised when deterrence inputs violate v0 invariants."""
-
 
 @dataclass(frozen=True)
 class IssuanceRecord:
@@ -80,7 +79,6 @@ class IssuanceRecord:
                 "at must be a timezone-aware datetime"
             )
 
-
 class SybilLedger(ABC):
     """Ledger ABC. ``record`` is fire-and-forget; ``count_*`` window-counts."""
 
@@ -97,7 +95,6 @@ class SybilLedger(ABC):
     @abstractmethod
     def count_for_tenant(self, trust_domain: str, *, since: datetime) -> int:
         ...
-
 
 @dataclass
 class InMemorySybilLedger(SybilLedger):
@@ -142,7 +139,6 @@ class InMemorySybilLedger(SybilLedger):
             for r in self._events
             if trust_domain_of(r.issuer_iss) == trust_domain and r.at >= cutoff
         )
-
 
 @dataclass
 class IssuerReputation:
@@ -215,13 +211,11 @@ class IssuerReputation:
         self._scores[key] = (new_score, now.astimezone(UTC))
         return new_score
 
-
 @dataclass(frozen=True)
 class IssuanceDecision:
     allowed: bool
     reason: str
     reason_code: str = ""
-
 
 @dataclass
 class SybilDeterrence:

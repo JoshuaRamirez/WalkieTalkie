@@ -27,17 +27,13 @@ returns claims or raises ``EnvelopeVerificationError`` carrying a
 chain that still verifies.** Nothing else escapes.
 """
 
-import pathlib
-import sys
 import tracemalloc
 import unittest
 from datetime import UTC, datetime, timedelta
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from audit import AuditSink, InMemoryAuditSink, verify_chain
-from deny_reason import DenyReason
-from test_verify_envelope import (
+from envelope.audit import AuditSink, InMemoryAuditSink, verify_chain
+from envelope.deny_reason import DenyReason
+from envelope.test_verify_envelope import (
     _ISSUER_IDENTITY,
     _ISSUER_KID,
     _PURPOSE,
@@ -48,7 +44,7 @@ from test_verify_envelope import (
     mint_capability_token,
     sign,
 )
-from verify_envelope import (
+from envelope.verify_envelope import (
     DEFAULT_CONFIG,
     EnvelopeVerificationError,
     InMemoryReplayCache,
@@ -66,7 +62,6 @@ def nest(depth: int, *, kind: str = "list"):
     for _ in range(depth):
         value = [value] if kind == "list" else {"k": value}
     return value
-
 
 class _VerifierFixture(unittest.TestCase):
     """A real signed envelope plus a verify-with-audit helper."""
@@ -146,7 +141,6 @@ class _VerifierFixture(unittest.TestCase):
         verify_chain(sink.events)
         return ctx.exception
 
-
 class MalformedFieldTypeTests(_VerifierFixture):
     """Every string-typed envelope field must reject non-strings, not crash.
 
@@ -197,7 +191,6 @@ class MalformedFieldTypeTests(_VerifierFixture):
                 self.assert_denies(value, datetime(2026, 4, 14, 12, tzinfo=UTC),
                                    DenyReason.ENVELOPE_NOT_OBJECT)
 
-
 class NonCanonicalizableTests(_VerifierFixture):
     """Values outside the JSON data model deny instead of escaping as TypeError.
 
@@ -211,7 +204,6 @@ class NonCanonicalizableTests(_VerifierFixture):
                 envelope, now = self.valid_envelope()
                 envelope["payload"] = value
                 self.assert_denies(envelope, now, DenyReason.ENVELOPE_NOT_CANONICALIZABLE)
-
 
 class NestingDepthTests(_VerifierFixture):
     """A few KB of ``[[[[...]]]]`` must not exhaust the interpreter stack."""
@@ -302,7 +294,6 @@ class NestingDepthTests(_VerifierFixture):
                     check_json_depth(value, 64)
                 self.assertEqual(ctx.exception.reason, DenyReason.ENVELOPE_TOO_DEEP)
 
-
 class AuditContextSanitizationTests(_VerifierFixture):
     """The deny path must survive the values it is trying to report on.
 
@@ -346,7 +337,6 @@ class AuditContextSanitizationTests(_VerifierFixture):
         self.assertTrue(audit_safe("x" * 5_000).endswith("…<truncated>"))
         self.assertLess(len(audit_safe("x" * 5_000)), 400)
 
-
 class AuditSinkFailureTests(_VerifierFixture):
     """A sink that raises must not leak its exception type out of the verifier.
 
@@ -384,7 +374,6 @@ class AuditSinkFailureTests(_VerifierFixture):
             self.verify(envelope, now, sink=self.BrokenSink())
         self.assertEqual(ctx.exception.reason, DenyReason.AUDIT_SINK_FAILURE)
 
-
 class InternalErrorBackstopTests(_VerifierFixture):
     """Unanticipated failures deny with a trace rather than escaping raw.
 
@@ -417,7 +406,6 @@ class InternalErrorBackstopTests(_VerifierFixture):
         with self.assertRaises(KeyboardInterrupt):
             self.verify(envelope, now, key_lookup=interrupting_lookup)
 
-
 class ValidEnvelopeStillVerifiesTests(_VerifierFixture):
     """The hardening must not have narrowed the accept path."""
 
@@ -433,7 +421,6 @@ class ValidEnvelopeStillVerifiesTests(_VerifierFixture):
         ]
         self.assertEqual(len(allows), 1)
         verify_chain(sink.events)
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,13 +1,9 @@
 """Tests for revocation convergence (Phase 3 Track D D2)."""
 
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime, timedelta
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from revocation_convergence import (
+from envelope.revocation_convergence import (
     ConvergenceSnapshot,
     InMemoryConvergenceTracker,
     RevocationBroadcast,
@@ -22,7 +18,6 @@ _NOW = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
 _JTI = "01900000-0000-7000-8000-aaaaaaaaaaa1"
 _OTHER_JTI = "01900000-0000-7000-8000-aaaaaaaaaaa2"
 
-
 def _broadcast(
     *,
     fast_path: bool = False,
@@ -36,14 +31,12 @@ def _broadcast(
         expected_nodes=frozenset(nodes),
     )
 
-
 def _policy(*, target: float = 0.75) -> SLOPolicy:
     return SLOPolicy(
         target_coverage=target,
         normal_deadline=timedelta(minutes=5),
         fast_path_deadline=timedelta(seconds=30),
     )
-
 
 class BroadcastValidationTests(unittest.TestCase):
     def test_empty_expected_nodes_rejected(self):
@@ -75,7 +68,6 @@ class BroadcastValidationTests(unittest.TestCase):
                 reason="x",
                 expected_nodes=frozenset({"n1"}),
             )
-
 
 class TrackerTests(unittest.TestCase):
     def test_register_and_ack(self):
@@ -112,7 +104,6 @@ class TrackerTests(unittest.TestCase):
         tracker.record_ack(_JTI, "n1", at=_NOW + timedelta(seconds=20))
         acks = tracker.acks_for(_JTI)
         self.assertEqual(acks["n1"], (_NOW + timedelta(seconds=10)).astimezone(UTC))
-
 
 class SLOEvaluationTests(unittest.TestCase):
     def _populated_tracker(self, n_acks: int, *, fast_path: bool = False, base_delta_s: int = 0):
@@ -182,7 +173,6 @@ class SLOEvaluationTests(unittest.TestCase):
         )
         self.assertEqual(snap.status, SLOStatus.MISSED)
 
-
 class PendingBroadcastsTests(unittest.TestCase):
     def test_pending_broadcasts_skips_meeting(self):
         tracker = InMemoryConvergenceTracker()
@@ -216,7 +206,6 @@ class PendingBroadcastsTests(unittest.TestCase):
         self.assertEqual(result[0].jti, _OTHER_JTI)
         self.assertEqual(result[0].status, SLOStatus.MISSED)
 
-
 class SLOPolicyValidationTests(unittest.TestCase):
     def test_target_outside_range_rejected(self):
         with self.assertRaisesRegex(RevocationConvergenceError, "target_coverage"):
@@ -233,7 +222,6 @@ class SLOPolicyValidationTests(unittest.TestCase):
                 normal_deadline=timedelta(0),
                 fast_path_deadline=timedelta(seconds=5),
             )
-
 
 if __name__ == "__main__":
     unittest.main()

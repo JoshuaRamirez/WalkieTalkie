@@ -1,16 +1,13 @@
 """Tests for session tokens (Phase 2 Track E E2)."""
 
 import dataclasses
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime, timedelta
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from session_token import (
+
+from envelope.session_token import (
     SessionError,
     SessionToken,
     from_json,
@@ -19,7 +16,7 @@ from session_token import (
     verify_resume,
     verify_session_token,
 )
-from verify_envelope import EnvelopeVerificationError
+from envelope.verify_envelope import EnvelopeVerificationError
 
 _NOW = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
 _NOW_TS = int(_NOW.timestamp())
@@ -32,7 +29,6 @@ _JTI_OPEN = "01900000-0000-7000-8000-aaaaaaaaaaa2"
 _JTI_RESUME_1 = "01900000-0000-7000-8000-aaaaaaaaaaa3"
 _JTI_RESUME_2 = "01900000-0000-7000-8000-aaaaaaaaaaa4"
 
-
 def _make_keypair():
     priv = Ed25519PrivateKey.generate()
     pem = priv.public_key().public_bytes(
@@ -40,7 +36,6 @@ def _make_keypair():
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
     return priv, pem
-
 
 def _lookup(pem: bytes):
     def _f(iss: str, kid: str) -> bytes:
@@ -50,7 +45,6 @@ def _lookup(pem: bytes):
             )
         return pem
     return _f
-
 
 def _open_token(**overrides) -> SessionToken:
     kwargs = dict(
@@ -70,7 +64,6 @@ def _open_token(**overrides) -> SessionToken:
     kwargs.update(overrides)
     return SessionToken(**kwargs)
 
-
 def _resume_token(prev: SessionToken, **overrides) -> SessionToken:
     kwargs = dict(
         session_id=prev.session_id,
@@ -88,7 +81,6 @@ def _resume_token(prev: SessionToken, **overrides) -> SessionToken:
     )
     kwargs.update(overrides)
     return SessionToken(**kwargs)
-
 
 class OpenTokenTests(unittest.TestCase):
     def test_well_formed_open_token_verifies(self):
@@ -120,7 +112,6 @@ class OpenTokenTests(unittest.TestCase):
                 signed, issuer_lookup=_lookup(pem), current=_NOW
             )
         self.assertEqual(ctx.exception.reason.value, "session_malformed")
-
 
 class WindowTests(unittest.TestCase):
     def test_expired_token_rejected(self):
@@ -166,7 +157,6 @@ class WindowTests(unittest.TestCase):
             )
         self.assertEqual(ctx.exception.reason.value, "session_ttl_exceeded")
 
-
 class SignatureTests(unittest.TestCase):
     def test_tampered_token_rejected(self):
         priv, pem = _make_keypair()
@@ -191,7 +181,6 @@ class SignatureTests(unittest.TestCase):
             )
         self.assertEqual(ctx.exception.reason.value, "session_unknown_issuer")
 
-
 class ResumeHappyPathTests(unittest.TestCase):
     def test_first_resume_verifies(self):
         priv, pem = _make_keypair()
@@ -205,7 +194,6 @@ class ResumeHappyPathTests(unittest.TestCase):
             current=_NOW,
         )
         self.assertIs(result, resumed)
-
 
 class ResumeChainTests(unittest.TestCase):
     def setUp(self):
@@ -285,7 +273,6 @@ class ResumeChainTests(unittest.TestCase):
             ctx.exception.reason.value, "session_resume_session_mismatch"
         )
 
-
 class ResumeDriftTests(unittest.TestCase):
     def setUp(self):
         self.priv, self.pem = _make_keypair()
@@ -321,7 +308,6 @@ class ResumeDriftTests(unittest.TestCase):
         self.assertEqual(
             ctx.exception.reason.value, "session_resume_subject_drift"
         )
-
 
 class ResumeLifetimeTests(unittest.TestCase):
     def test_cumulative_lifetime_capped(self):
@@ -359,7 +345,6 @@ class ResumeLifetimeTests(unittest.TestCase):
             ctx.exception.reason.value, "session_resume_lifetime_exceeded"
         )
 
-
 class JsonRoundTripTests(unittest.TestCase):
     def test_round_trip(self):
         priv, _ = _make_keypair()
@@ -372,7 +357,6 @@ class JsonRoundTripTests(unittest.TestCase):
         with self.assertRaises(SessionError) as ctx:
             from_json(b'{"session_id": "x"}')
         self.assertEqual(ctx.exception.reason.value, "session_malformed")
-
 
 if __name__ == "__main__":
     unittest.main()

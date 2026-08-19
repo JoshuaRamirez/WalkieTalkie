@@ -1,13 +1,10 @@
 """Tests for peer admission (Phase 5 Track A A3)."""
 
-import pathlib
-import sys
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from peer_admission import (
+
+from envelope.peer_admission import (
     AdmissionRule,
     PeerAdmissionDenied,
     PeerAdmissionError,
@@ -19,7 +16,6 @@ from peer_admission import (
 
 _PROD_PEER = "spiffe://mesh.example/ns-a/agent-1"
 _UNKNOWN_PEER = "spiffe://mesh.example/ns-z/stranger"
-
 
 class RuleValidationTests(unittest.TestCase):
     def test_invalid_spiffe_rejected(self):
@@ -36,7 +32,6 @@ class RuleValidationTests(unittest.TestCase):
                 spiffe_id=_PROD_PEER, env_tier="prod", pinned_fingerprint="short"
             )
 
-
 class PolicyValidationTests(unittest.TestCase):
     def test_duplicate_rule_rejected(self):
         rule = AdmissionRule(spiffe_id=_PROD_PEER, env_tier="prod")
@@ -51,7 +46,6 @@ class PolicyValidationTests(unittest.TestCase):
                 AdmissionRule(spiffe_id=_PROD_PEER, env_tier="staging"),
             )
         )
-
 
 class AdmissionTests(unittest.TestCase):
     def _policy(self):
@@ -79,7 +73,6 @@ class AdmissionTests(unittest.TestCase):
         )
         self.assertFalse(decision.allowed)
         self.assertEqual(decision.reason_code, "admission_tier_mismatch")
-
 
 class CertPinningTests(unittest.TestCase):
     def _pinned_policy(self, key):
@@ -126,7 +119,6 @@ class CertPinningTests(unittest.TestCase):
         self.assertFalse(decision.allowed)
         self.assertEqual(decision.reason_code, "admission_cert_pin_mismatch")
 
-
 class RequireAdmissionTests(unittest.TestCase):
     def test_allow_returns_decision(self):
         policy = PeerAdmissionPolicy(
@@ -142,7 +134,6 @@ class RequireAdmissionTests(unittest.TestCase):
         self.assertEqual(
             ctx.exception.decision.reason_code, "admission_peer_not_allowed"
         )
-
 
 if __name__ == "__main__":
     unittest.main()

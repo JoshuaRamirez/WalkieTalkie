@@ -49,16 +49,25 @@ deliverables carry `**Landed (v0):**` annotations in
 ### Changed
 
 - Version set to `0.1.0` (first coherent milestone: Phases 0–6 complete).
-- CI now runs the full test suite (all six import roots — envelope, mesh, and the
-  MCP examples), not just the envelope package.
+- CI now runs the full test suite against the installed/editable packages
+  (`python -m unittest discover -s security-foundations -p 'test_*.py'`).
 - Packaging metadata modernized: accurate description, `readme`, `license`
   (EPL-2.0), authors, keywords, trove classifiers, and project URLs.
-- Packaging scoped honestly to the current reality: the project runs from a
-  source checkout and is not yet a `pip install`-able library (the
-  import-restructure that would make it one is tracked in `DEFERRED.md`).
+- **Installable-package import restructure.** Intra-package imports are
+  relative; cross-package imports are fully qualified. `pip install` /
+  `pip install -e .` produces an importable library
+  (`import envelope.verify_envelope`). The retired flat-dir convention
+  (`unittest discover -s <pkg> -t <pkg>` plus `sys.path.insert` of each
+  package dir) is gone. See `DEFERRED.md` (item marked shipped) and
+  `envelope/test_installable_import.py`.
 
 ### Fixed
 
+- Example MCP host is importable from a non-editable wheel: the host's
+  default tool handlers live in `default_tools.py` (not `demo_*.py`), so
+  the wheel exclude no longer drops a module `host.py` imports at load
+  time. `test_wheel_install_imports_as_a_library` now imports
+  `integrations.mcp.host`.
 - Resolved a stranded, disjoint-history branch against `main` so the two no
   longer conflict.
 - Raised the `cryptography` dependency floor from `>=41` to `>=42`: the X.509

@@ -32,8 +32,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from audit import AuditSink
-from policy_engine import (
+from .audit import AuditSink
+from .policy_engine import (
     ANY,
     Condition,
     ConditionOp,
@@ -48,7 +48,6 @@ from policy_engine import (
 # The audit event type for a policy decision. Joins the existing
 # taxonomy (envelope.verify, capability.issue, tool.gate, ...).
 POLICY_DECIDE_EVENT = "policy.decide"
-
 
 def decide_and_audit(
     *,
@@ -84,7 +83,6 @@ def decide_and_audit(
         timestamp=now,
     )
     return decision
-
 
 def build_baseline_engine(
     *,

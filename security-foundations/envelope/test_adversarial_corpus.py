@@ -22,35 +22,33 @@ from __future__ import annotations
 import hashlib
 import json
 import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime
 from typing import Any
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from data_classification import DataClass, classify
-from egress_policy import (
+
+from envelope.data_classification import DataClass, classify
+from envelope.egress_policy import (
     EgressAction,
     EgressMatrixCell,
     MatrixEgressPolicy,
 )
-from instruction_isolation import (
+from envelope.instruction_isolation import (
     ContentChannel,
     ContentSegment,
     InstructionIsolationError,
     Trust,
     assemble_isolated_prompt,
 )
-from output_scanning import RiskLevel, scan
-from retrieval_policy import (
+from envelope.output_scanning import RiskLevel, scan
+from envelope.retrieval_policy import (
     AllowlistRetrievalPolicy,
     CrossTenantRetrieval,
     RetrievalRule,
 )
-from tool_policy_gate import (
+from envelope.tool_policy_gate import (
     RiskTier,
     ToolCall,
     ToolPolicy,
@@ -71,11 +69,9 @@ _HOME_CALLER = "spiffe://mesh.example/ns-a/agent-1"
 _FOREIGN_CALLER = "spiffe://other-mesh.example/ns-z/agent-x"
 _KID = "kid-a"
 
-
 # ----------------------------------------------------------------------
 # Checkers per gate
 # ----------------------------------------------------------------------
-
 
 def _check_instruction_isolation(entry: dict[str, Any]) -> None:
     expected = entry["expected"]
@@ -149,7 +145,6 @@ def _check_instruction_isolation(entry: dict[str, Any]) -> None:
         f"unknown instruction_isolation expectation: {expected!r}"
     )
 
-
 def _payload(entry: dict[str, Any]) -> str:
     """Return the entry's payload, joining fragments if present.
 
@@ -162,7 +157,6 @@ def _payload(entry: dict[str, Any]) -> str:
         return "".join(entry["payload_fragments"])
     return entry["payload"]
 
-
 def _check_output_scanning(entry: dict[str, Any]) -> None:
     expected_risk = RiskLevel(entry["expected_risk"])
     result = scan(_payload(entry))
@@ -174,7 +168,6 @@ def _check_output_scanning(entry: dict[str, Any]) -> None:
         f"{expected_risk.value}, got {result.risk.value}"
     )
 
-
 def _make_issuer_keypair():
     priv = Ed25519PrivateKey.generate()
     pem = priv.public_key().public_bytes(
@@ -182,7 +175,6 @@ def _make_issuer_keypair():
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
     return priv, pem
-
 
 def _check_tool_policy_gate(entry: dict[str, Any]) -> None:
     expected_reason = entry["expected_reason"]
@@ -234,7 +226,6 @@ def _check_tool_policy_gate(entry: dict[str, Any]) -> None:
         f"unknown tool_policy_gate expectation: {expected_reason!r}"
     )
 
-
 def _make_classified(
     *,
     data_class: DataClass = DataClass.INTERNAL,
@@ -247,7 +238,6 @@ def _make_classified(
         actor_kid=_KID,
         now=_NOW,
     )
-
 
 def _check_retrieval_policy(entry: dict[str, Any]) -> None:
     expected = entry["expected_reason"]
@@ -284,7 +274,6 @@ def _check_retrieval_policy(entry: dict[str, Any]) -> None:
         f"unknown retrieval_policy expectation: {expected!r}"
     )
 
-
 def _check_egress_policy(entry: dict[str, Any]) -> None:
     expected = entry["expected_reason"]
     if expected == "egress_restricted_no_export":
@@ -308,7 +297,6 @@ def _check_egress_policy(entry: dict[str, Any]) -> None:
         f"unknown egress_policy expectation: {expected!r}"
     )
 
-
 _CHECKERS = {
     "instruction_isolation": _check_instruction_isolation,
     "output_scanning": _check_output_scanning,
@@ -317,16 +305,13 @@ _CHECKERS = {
     "egress_policy": _check_egress_policy,
 }
 
-
 # ----------------------------------------------------------------------
 # Harness
 # ----------------------------------------------------------------------
 
-
 def _load_corpus() -> dict[str, Any]:
     with _CORPUS_PATH.open("r", encoding="utf-8") as f:
         return json.load(f)
-
 
 class AdversarialCorpusTests(unittest.TestCase):
     """100 % block-rate gate.
@@ -376,7 +361,6 @@ class AdversarialCorpusTests(unittest.TestCase):
             set(_CHECKERS.keys()),
             "every v0 gate must have at least one adversarial corpus entry",
         )
-
 
 if __name__ == "__main__":
     unittest.main()

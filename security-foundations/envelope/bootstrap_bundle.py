@@ -34,8 +34,9 @@ from pathlib import Path
 import jcs
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from issuer_trust_store import IssuerKey, IssuerTrustStore
-from verify_envelope import (
+
+from .issuer_trust_store import IssuerKey, IssuerTrustStore
+from .verify_envelope import (
     KID_RE,
     SPIFFE_ID_RE,
     decode_base64url,
@@ -45,10 +46,8 @@ from verify_envelope import (
 BOOTSTRAP_TYP = "wt-bootstrap-bundle/v0"
 _TRUST_DOMAIN_RE = "^[a-zA-Z0-9._-]+$"
 
-
 class BootstrapBundleError(ValueError):
     """Raised when a bootstrap bundle fails shape or signature verification."""
-
 
 @dataclass(frozen=True)
 class BootstrapAnchor:
@@ -61,7 +60,6 @@ class BootstrapAnchor:
             return decode_base64url(self.pem_b64)
         except Exception as exc:
             raise BootstrapBundleError("invalid anchor pem_b64 encoding") from exc
-
 
 @dataclass(frozen=True)
 class BootstrapBundle:
@@ -76,7 +74,6 @@ class BootstrapBundle:
     def to_dict(self) -> dict:
         return dataclasses.asdict(self)
 
-
 def _body_for_signing(bundle: BootstrapBundle) -> bytes:
     body = {
         "typ": BOOTSTRAP_TYP,
@@ -90,24 +87,19 @@ def _body_for_signing(bundle: BootstrapBundle) -> bytes:
     }
     return jcs.canonicalize(body)
 
-
 def _b64u(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
 
 def encode_anchor_pem(pem_bytes: bytes) -> str:
     """Helper: encode a raw PEM blob to the ``pem_b64`` field's expected form."""
     return _b64u(pem_bytes)
 
-
 def sign_bundle(bundle: BootstrapBundle, root_signing_key: Ed25519PrivateKey) -> BootstrapBundle:
     sig = _b64u(root_signing_key.sign(_body_for_signing(bundle)))
     return dataclasses.replace(bundle, signature=sig)
 
-
 def to_json(bundle: BootstrapBundle) -> bytes:
     return json.dumps(bundle.to_dict(), separators=(",", ":")).encode("utf-8")
-
 
 def from_json(data: bytes) -> BootstrapBundle:
     try:
@@ -138,7 +130,6 @@ def from_json(data: bytes) -> BootstrapBundle:
         anchors=tuple(anchors),
         signature=obj["signature"],
     )
-
 
 def _validate_shape(bundle: BootstrapBundle) -> None:
     import re
@@ -171,7 +162,6 @@ def _validate_shape(bundle: BootstrapBundle) -> None:
             raise BootstrapBundleError(
                 f"anchors[{index}] PEM is not a valid Ed25519 public key"
             ) from exc
-
 
 def verify_bundle(
     bundle: BootstrapBundle,
@@ -215,10 +205,8 @@ def verify_bundle(
     }
     return IssuerTrustStore(keys)
 
-
 def write_bundle(bundle: BootstrapBundle, path: str | Path) -> None:
     Path(path).write_bytes(to_json(bundle))
-
 
 def read_bundle(path: str | Path) -> BootstrapBundle:
     return from_json(Path(path).read_bytes())

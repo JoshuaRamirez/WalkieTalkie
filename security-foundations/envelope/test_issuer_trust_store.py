@@ -1,6 +1,5 @@
 import json
 import pathlib
-import sys
 import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -9,10 +8,8 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.asymmetric.rsa import generate_private_key as generate_rsa_private_key
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from issuer_trust_store import IssuerTrustStore
-from verify_envelope import EnvelopeVerificationError
+from envelope.issuer_trust_store import IssuerTrustStore
+from envelope.verify_envelope import EnvelopeVerificationError
 
 
 def _ed25519_pem() -> bytes:
@@ -22,7 +19,6 @@ def _ed25519_pem() -> bytes:
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
 
-
 def _rsa_pem() -> bytes:
     key = generate_rsa_private_key(public_exponent=65537, key_size=2048)
     return key.public_key().public_bytes(
@@ -30,12 +26,10 @@ def _rsa_pem() -> bytes:
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
 
-
 def _write_manifest(tmp_path: pathlib.Path, entries: list[dict]) -> pathlib.Path:
     manifest = tmp_path / "manifest.json"
     manifest.write_text(json.dumps({"keys": entries}))
     return manifest
-
 
 class IssuerTrustStoreTests(unittest.TestCase):
     def test_manifest_lookup_returns_pem(self):
@@ -199,7 +193,6 @@ class IssuerTrustStoreTests(unittest.TestCase):
             )
             with self.assertRaisesRegex(ValueError, "invalid kid"):
                 IssuerTrustStore.from_manifest(bad_kid_manifest)
-
 
 if __name__ == "__main__":
     unittest.main()

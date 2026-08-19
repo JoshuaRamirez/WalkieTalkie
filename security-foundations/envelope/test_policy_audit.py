@@ -1,24 +1,19 @@
 """Tests for policy-decision audit wiring (Phase 5 Track B B2)."""
 
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from audit import InMemoryAuditSink, verify_chain
-from policy_audit import (
+from envelope.audit import InMemoryAuditSink, verify_chain
+from envelope.policy_audit import (
     POLICY_DECIDE_EVENT,
     build_baseline_engine,
     decide_and_audit,
 )
-from policy_engine import Effect, PolicyRequest
+from envelope.policy_engine import Effect, PolicyRequest
 
 _NOW = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
 _CALLER = "spiffe://mesh.example/ns-a/agent-1"
 _OTHER = "spiffe://mesh.example/ns-z/stranger"
-
 
 class BaselineEngineTests(unittest.TestCase):
     def _engine(self):
@@ -72,7 +67,6 @@ class BaselineEngineTests(unittest.TestCase):
             now=_NOW,
         )
         self.assertTrue(d.permitted)
-
 
 class DecideAndAuditTests(unittest.TestCase):
     def test_permit_emits_allow_event_with_decision_id(self):
@@ -134,7 +128,6 @@ class DecideAndAuditTests(unittest.TestCase):
         self.assertTrue(
             any(decision.decision_id in e.reason for e in sink.events)
         )
-
 
 if __name__ == "__main__":
     unittest.main()

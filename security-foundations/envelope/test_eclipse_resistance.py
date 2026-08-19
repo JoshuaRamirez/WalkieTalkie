@@ -1,13 +1,9 @@
 """Tests for eclipse resistance (Phase 3 Track A A2)."""
 
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime, timedelta
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from eclipse_resistance import (
+from envelope.eclipse_resistance import (
     DiversityRule,
     EclipseResistanceError,
     NeighborCandidate,
@@ -19,7 +15,6 @@ from eclipse_resistance import (
 _NOW = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
 _KID = "peer-kid-1"
 
-
 def _cand(spiffe: str, *, at_offset_min: int = 0) -> NeighborCandidate:
     return NeighborCandidate(
         peer_iss=spiffe,
@@ -27,13 +22,11 @@ def _cand(spiffe: str, *, at_offset_min: int = 0) -> NeighborCandidate:
         last_seen=_NOW - timedelta(minutes=at_offset_min),
     )
 
-
 def _cluster(prefix: str, count: int, *, base_offset: int = 0) -> list[NeighborCandidate]:
     return [
         _cand(f"{prefix}/svc-{i}", at_offset_min=base_offset + i)
         for i in range(count)
     ]
-
 
 class CandidateValidationTests(unittest.TestCase):
     def test_invalid_spiffe_rejected(self):
@@ -47,7 +40,6 @@ class CandidateValidationTests(unittest.TestCase):
                 peer_kid=_KID,
                 last_seen=datetime(2026, 4, 14, 12),
             )
-
 
 class RuleValidationTests(unittest.TestCase):
     def test_negative_target_rejected(self):
@@ -65,7 +57,6 @@ class RuleValidationTests(unittest.TestCase):
                 max_per_trust_domain=1,
                 min_distinct_trust_domains=5,
             )
-
 
 class DiversityCapTests(unittest.TestCase):
     def test_per_domain_cap_blocks_sybil_dominance(self):
@@ -173,7 +164,6 @@ class DiversityCapTests(unittest.TestCase):
             ("spiffe://p.mesh/ns/y", "diversity_target_reached"), reasons
         )
 
-
 class SelectionShapeTests(unittest.TestCase):
     def test_returns_neighbor_selection(self):
         rule = DiversityRule(
@@ -188,7 +178,6 @@ class SelectionShapeTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(EclipseResistanceError, "candidates\\[0\\]"):
             select_neighbors(["not-a-candidate"], rule=rule)  # type: ignore[list-item]
-
 
 class SurgeDetectionTests(unittest.TestCase):
     def test_detects_surge_within_window(self):
@@ -237,7 +226,6 @@ class SurgeDetectionTests(unittest.TestCase):
                 window_end=_NOW,
                 surge_threshold=0,
             )
-
 
 if __name__ == "__main__":
     unittest.main()

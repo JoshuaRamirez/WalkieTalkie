@@ -12,16 +12,11 @@ from __future__ import annotations
 
 import pathlib
 import subprocess
-import sys
 import tempfile
 import time
 
-_HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE))
-sys.path.insert(0, str(_HERE.parents[2] / "mesh"))
-
-from watch import WorkspaceWatcher, render_digest  # noqa: E402
-from workspace_server import (  # noqa: E402
+from integrations.mcp.workspace.watch import WorkspaceWatcher, render_digest
+from integrations.mcp.workspace.workspace_server import (
     Visibility,
     WorkspaceServer,
     WorkspaceServerNode,
@@ -40,10 +35,8 @@ def _git_repo(tmp):
     subprocess.run(["git", "commit", "-q", "-m", "scaffold retry handler"], **kw)
     return repo
 
-
 def line(c="-"):
     print(c * 66)
-
 
 def main():
     with tempfile.TemporaryDirectory() as td:
@@ -107,7 +100,6 @@ def main():
             alice.close()
             mallory.close()
             node.close()
-
 
 if __name__ == "__main__":
     main()

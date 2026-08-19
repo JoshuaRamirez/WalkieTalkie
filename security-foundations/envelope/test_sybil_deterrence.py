@@ -1,13 +1,9 @@
 """Tests for Sybil deterrence (Phase 3 Track A A1)."""
 
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime, timedelta
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from sybil_deterrence import (
+from envelope.sybil_deterrence import (
     InMemorySybilLedger,
     IssuanceRecord,
     IssuerReputation,
@@ -21,7 +17,6 @@ _ISSUER_B = "spiffe://mesh.example/ns-iss/issuer-b"
 _FOREIGN_ISSUER = "spiffe://other-mesh.example/ns-iss/issuer-z"
 _KID = "issuer-kid-1"
 
-
 def _record(*, issuer: str = _ISSUER_A, minted: str | None = None, at: datetime = _NOW) -> IssuanceRecord:
     return IssuanceRecord(
         issuer_iss=issuer,
@@ -29,7 +24,6 @@ def _record(*, issuer: str = _ISSUER_A, minted: str | None = None, at: datetime 
         minted_iss=minted or f"spiffe://mesh.example/ns-a/svc-{int(at.timestamp())}",
         at=at,
     )
-
 
 def _gate(**overrides) -> SybilDeterrence:
     kwargs = dict(
@@ -42,7 +36,6 @@ def _gate(**overrides) -> SybilDeterrence:
     )
     kwargs.update(overrides)
     return SybilDeterrence(**kwargs)
-
 
 class IssuanceRecordTests(unittest.TestCase):
     def test_invalid_issuer_rejected(self):
@@ -62,7 +55,6 @@ class IssuanceRecordTests(unittest.TestCase):
                 minted_iss="spiffe://mesh.example/ns-x/svc-1",
                 at=datetime(2026, 4, 14, 12),  # naive
             )
-
 
 class LedgerCountingTests(unittest.TestCase):
     def test_window_excludes_old_entries(self):
@@ -94,7 +86,6 @@ class LedgerCountingTests(unittest.TestCase):
             _ISSUER_A, _KID, since=_NOW - timedelta(hours=1)
         )
         self.assertEqual(count, 1)
-
 
 class ReputationDecayTests(unittest.TestCase):
     def test_initial_score_seeded(self):
@@ -149,7 +140,6 @@ class ReputationDecayTests(unittest.TestCase):
         rep = IssuerReputation()
         with self.assertRaisesRegex(SybilDeterrenceError, "positive"):
             rep.reward(_ISSUER_A, _KID, amount=0, now=_NOW)
-
 
 class DeterrenceGateTests(unittest.TestCase):
     def test_allows_within_quota(self):
@@ -245,7 +235,6 @@ class DeterrenceGateTests(unittest.TestCase):
         with self.assertRaisesRegex(SybilDeterrenceError, "window"):
             _gate(window=timedelta(0))
 
-
 class WindowSlideTests(unittest.TestCase):
     def test_old_admissions_age_out_of_window(self):
         gate = _gate(max_per_issuer=2, window=timedelta(minutes=10))
@@ -261,7 +250,6 @@ class WindowSlideTests(unittest.TestCase):
             issuer_iss=_ISSUER_A, issuer_kid=_KID, now=_NOW
         )
         self.assertTrue(decision.allowed)
-
 
 if __name__ == "__main__":
     unittest.main()

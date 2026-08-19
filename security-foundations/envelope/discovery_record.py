@@ -39,8 +39,9 @@ from typing import TYPE_CHECKING
 import jcs
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from deny_reason import DenyReason
-from verify_envelope import (
+
+from .deny_reason import DenyReason
+from .verify_envelope import (
     KID_RE,
     SPIFFE_ID_RE,
     decode_base64url,
@@ -49,7 +50,7 @@ from verify_envelope import (
 )
 
 if TYPE_CHECKING:
-    from audit import AuditSink
+    from .audit import AuditSink
 
 DISCOVERY_EVENT_TYPE = "discovery.verify"
 DISCOVERY_ARTIFACT_VERSION = "wt-discovery-record/v0"
@@ -57,7 +58,6 @@ DISCOVERY_ARTIFACT_VERSION = "wt-discovery-record/v0"
 DISCOVERY_TYP = "wt-discovery-record/v0"
 DEFAULT_MAX_RECORD_TTL = timedelta(hours=1)
 DEFAULT_CLOCK_SKEW = timedelta(seconds=60)
-
 
 class DiscoveryRecordError(ValueError):
     """Raised when a discovery record fails verification.
@@ -74,7 +74,6 @@ class DiscoveryRecordError(ValueError):
     @property
     def reason_code(self) -> str:
         return self.reason.value if self.reason is not None else ""
-
 
 @dataclass(frozen=True)
 class DiscoveryRecord:
@@ -95,7 +94,6 @@ class DiscoveryRecord:
         d["endpoints"] = list(self.endpoints)
         return d
 
-
 def _body_for_signing(record: DiscoveryRecord) -> bytes:
     body = {
         "typ": DISCOVERY_TYP,
@@ -110,19 +108,15 @@ def _body_for_signing(record: DiscoveryRecord) -> bytes:
     }
     return jcs.canonicalize(body)
 
-
 def _b64u(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
 
 def sign_record(record: DiscoveryRecord, signing_key: Ed25519PrivateKey) -> DiscoveryRecord:
     sig = _b64u(signing_key.sign(_body_for_signing(record)))
     return dataclasses.replace(record, signature=sig)
 
-
 def to_json(record: DiscoveryRecord) -> bytes:
     return json.dumps(record.to_dict(), separators=(",", ":")).encode("utf-8")
-
 
 def from_json(data: bytes) -> DiscoveryRecord:
     try:
@@ -164,7 +158,6 @@ def from_json(data: bytes) -> DiscoveryRecord:
         signature=obj["signature"],
     )
 
-
 def _validate_shape(record: DiscoveryRecord) -> None:
     def _malformed(msg: str) -> DiscoveryRecordError:
         return DiscoveryRecordError(msg, reason=DenyReason.DISCOVERY_MALFORMED)
@@ -185,15 +178,12 @@ def _validate_shape(record: DiscoveryRecord) -> None:
         if not isinstance(ep, str) or not ep:
             raise _malformed(f"endpoints[{index}] must be a non-empty string")
 
-
 @dataclass(frozen=True)
 class DiscoveryVerificationConfig:
     max_clock_skew: timedelta = field(default_factory=lambda: DEFAULT_CLOCK_SKEW)
     max_record_ttl: timedelta = field(default_factory=lambda: DEFAULT_MAX_RECORD_TTL)
 
-
 DEFAULT_DISCOVERY_CONFIG = DiscoveryVerificationConfig()
-
 
 def verify_record(
     record: DiscoveryRecord,

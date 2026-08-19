@@ -40,7 +40,8 @@ from datetime import UTC, datetime
 from enum import StrEnum
 
 import jcs
-from verify_envelope import HEX_SHA256_RE, KID_RE, SPIFFE_ID_RE
+
+from .verify_envelope import HEX_SHA256_RE, KID_RE, SPIFFE_ID_RE
 
 
 class DataClass(StrEnum):
@@ -56,7 +57,6 @@ class DataClass(StrEnum):
     CONFIDENTIAL = "confidential"
     RESTRICTED = "restricted"
 
-
 _RANK = {
     DataClass.PUBLIC: 0,
     DataClass.INTERNAL: 1,
@@ -64,15 +64,12 @@ _RANK = {
     DataClass.RESTRICTED: 3,
 }
 
-
 class DataClassificationError(ValueError):
     """Raised when a classification or derivation breaks the lineage rules."""
-
 
 def is_more_restrictive(a: DataClass, b: DataClass) -> bool:
     """``True`` iff ``a`` is strictly more restrictive than ``b``."""
     return _RANK[a] > _RANK[b]
-
 
 def max_class(klasses: Iterable[DataClass]) -> DataClass:
     """Return the most restrictive class from ``klasses`` (non-empty)."""
@@ -80,7 +77,6 @@ def max_class(klasses: Iterable[DataClass]) -> DataClass:
     if not ks:
         raise DataClassificationError("max_class requires at least one class")
     return max(ks, key=_RANK.__getitem__)
-
 
 @dataclass(frozen=True)
 class LineageTag:
@@ -120,9 +116,7 @@ class LineageTag:
             "parent_digest": self.parent_digest,
         }
 
-
 _GENESIS_PARENT_DIGEST = "0" * 64
-
 
 @dataclass(frozen=True)
 class ClassifiedData:
@@ -192,11 +186,9 @@ class ClassifiedData:
         }
         return hashlib.sha256(jcs.canonicalize(body)).hexdigest()
 
-
 def _rfc3339(now: datetime | None) -> str:
     when = (now or datetime.now(UTC)).astimezone(UTC)
     return when.isoformat().replace("+00:00", "Z")
-
 
 def classify(
     *,
@@ -226,7 +218,6 @@ def classify(
         lineage=(tag,),
         metadata=tuple(metadata),
     )
-
 
 def derive(
     parent: ClassifiedData,
@@ -267,7 +258,6 @@ def derive(
         lineage=(*parent.lineage, tag),
         metadata=tuple(metadata) if metadata is not None else parent.metadata,
     )
-
 
 def combine(
     parents: Iterable[ClassifiedData],

@@ -1,16 +1,13 @@
 """Tests for signed safe-mode artifacts (Phase 3 D3.3 circle-back)."""
 
 import dataclasses
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from safe_mode_engine import (
+
+from envelope.safe_mode_engine import (
     SafeModeEngine,
     SafeModeEngineError,
     SafeModeState,
@@ -18,7 +15,7 @@ from safe_mode_engine import (
     TriggerKind,
     trigger_for,
 )
-from signed_safe_mode import (
+from envelope.signed_safe_mode import (
     SignedDowngradeApproval,
     SignedSafeModeError,
     approval_from_json,
@@ -32,7 +29,7 @@ from signed_safe_mode import (
     verify_downgrade_approval,
     verify_transition,
 )
-from verify_envelope import EnvelopeVerificationError
+from envelope.verify_envelope import EnvelopeVerificationError
 
 _NOW = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
 _NOW_TS = int(_NOW.timestamp())
@@ -43,7 +40,6 @@ _APP_KID = "approver-kid-1"
 _TRANS_JTI = "01900000-0000-7000-8000-aaaaaaaaaaa1"
 _APP_JTI = "01900000-0000-7000-8000-aaaaaaaaaaa2"
 
-
 def _make_keypair():
     priv = Ed25519PrivateKey.generate()
     pem = priv.public_key().public_bytes(
@@ -51,7 +47,6 @@ def _make_keypair():
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
     return priv, pem
-
 
 def _lookup_for(iss: str, kid: str, pem: bytes):
     def _f(want_iss: str, want_kid: str) -> bytes:
@@ -62,7 +57,6 @@ def _lookup_for(iss: str, kid: str, pem: bytes):
         return pem
     return _f
 
-
 def _engine_with_trigger() -> SafeModeEngine:
     engine = SafeModeEngine()
     engine.observe(
@@ -70,11 +64,9 @@ def _engine_with_trigger() -> SafeModeEngine:
     )
     return engine
 
-
 # ---------------------------------------------------------------------
 # Signed transition tests
 # ---------------------------------------------------------------------
-
 
 class TransitionHappyPathTests(unittest.TestCase):
     def test_round_trip_and_verify(self):
@@ -121,7 +113,6 @@ class TransitionHappyPathTests(unittest.TestCase):
         self.assertEqual(
             list(signed.active_kinds), sorted(signed.active_kinds)
         )
-
 
 class TransitionFailureTests(unittest.TestCase):
     def test_tampered_transition_rejected(self):
@@ -198,7 +189,6 @@ class TransitionFailureTests(unittest.TestCase):
             )
         self.assertEqual(ctx.exception.reason.value, "safe_mode_artifact_malformed")
 
-
 class TransitionJsonTests(unittest.TestCase):
     def test_round_trip(self):
         priv, _pem = _make_keypair()
@@ -234,11 +224,9 @@ class TransitionJsonTests(unittest.TestCase):
             )
         self.assertEqual(ctx.exception.reason.value, "safe_mode_artifact_malformed")
 
-
 # ---------------------------------------------------------------------
 # Signed downgrade approval tests
 # ---------------------------------------------------------------------
-
 
 def _unsigned_approval(**overrides) -> SignedDowngradeApproval:
     kwargs = dict(
@@ -254,7 +242,6 @@ def _unsigned_approval(**overrides) -> SignedDowngradeApproval:
     kwargs.update(overrides)
     return SignedDowngradeApproval(**kwargs)
 
-
 class ApprovalHappyPathTests(unittest.TestCase):
     def test_signed_approval_verifies(self):
         priv, pem = _make_keypair()
@@ -265,7 +252,6 @@ class ApprovalHappyPathTests(unittest.TestCase):
             current=_NOW,
         )
         self.assertIs(result, signed)
-
 
 class ApprovalFailureTests(unittest.TestCase):
     def test_tampered_approval_rejected(self):
@@ -340,7 +326,6 @@ class ApprovalFailureTests(unittest.TestCase):
             ctx.exception.reason.value, "safe_mode_artifact_malformed"
         )
 
-
 class VerifiedDowngradeTests(unittest.TestCase):
     def test_end_to_end_downgrade_succeeds(self):
         priv, pem = _make_keypair()
@@ -402,7 +387,6 @@ class VerifiedDowngradeTests(unittest.TestCase):
             )
         self.assertIn("unauthorized", str(ctx.exception))
 
-
 class ApprovalJsonTests(unittest.TestCase):
     def test_round_trip(self):
         priv, _pem = _make_keypair()
@@ -419,7 +403,6 @@ class ApprovalJsonTests(unittest.TestCase):
                 b'"signature":"sig"}'
             )
         self.assertEqual(ctx.exception.reason.value, "safe_mode_artifact_malformed")
-
 
 if __name__ == "__main__":
     unittest.main()

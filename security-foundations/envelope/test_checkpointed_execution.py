@@ -1,15 +1,11 @@
 """Tests for checkpointed execution (Phase 2 Track E E1)."""
 
 import hashlib
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from capability_token import CapabilityClaims
-from checkpointed_execution import (
+from envelope.capability_token import CapabilityClaims
+from envelope.checkpointed_execution import (
     Checkpoint,
     CheckpointAction,
     CheckpointDecision,
@@ -26,7 +22,6 @@ _CKPT_ID = "01900000-0000-7000-8000-000000000002"
 _CAP_JTI = "01900000-0000-7000-8000-000000000003"
 _ENV_DIGEST = hashlib.sha256(b"env").hexdigest()
 
-
 def _checkpoint(**overrides) -> Checkpoint:
     kwargs = dict(
         checkpoint_id=_CKPT_ID,
@@ -37,7 +32,6 @@ def _checkpoint(**overrides) -> Checkpoint:
     )
     kwargs.update(overrides)
     return Checkpoint(**kwargs)
-
 
 def _capability(**overrides) -> CapabilityClaims:
     kwargs = dict(
@@ -55,12 +49,10 @@ def _capability(**overrides) -> CapabilityClaims:
     kwargs.update(overrides)
     return CapabilityClaims(**kwargs)
 
-
 def _policy(**overrides) -> CheckpointPolicy:
     kwargs = dict(expected_epoch="epoch-2026-04-14-01")
     kwargs.update(overrides)
     return CheckpointPolicy(**kwargs)
-
 
 class CheckpointShapeTests(unittest.TestCase):
     def test_invalid_task_id_rejected(self):
@@ -75,7 +67,6 @@ class CheckpointShapeTests(unittest.TestCase):
         with self.assertRaisesRegex(CheckpointError, "intended_action"):
             _checkpoint(intended_action="")
 
-
 class PolicyShapeTests(unittest.TestCase):
     def test_empty_epoch_rejected(self):
         with self.assertRaisesRegex(CheckpointError, "expected_epoch"):
@@ -84,7 +75,6 @@ class PolicyShapeTests(unittest.TestCase):
     def test_commit_as_failure_action_rejected(self):
         with self.assertRaisesRegex(CheckpointError, "COMMIT"):
             _policy(on_capability_revoked=CheckpointAction.COMMIT)
-
 
 class HappyPathTests(unittest.TestCase):
     def test_commit_when_all_checks_pass(self):
@@ -99,7 +89,6 @@ class HappyPathTests(unittest.TestCase):
         self.assertIsInstance(decision, CheckpointDecision)
         self.assertEqual(decision.action, CheckpointAction.COMMIT)
         self.assertEqual(decision.reason_code, "ok")
-
 
 class ExpirationTests(unittest.TestCase):
     def test_expired_capability_aborted(self):
@@ -127,7 +116,6 @@ class ExpirationTests(unittest.TestCase):
         )
         self.assertEqual(decision.action, CheckpointAction.DOWNGRADE)
         self.assertEqual(decision.reason_code, "checkpoint_capability_expired")
-
 
 class RevocationTests(unittest.TestCase):
     def test_revoked_capability_blocked_at_next_checkpoint(self):
@@ -172,7 +160,6 @@ class RevocationTests(unittest.TestCase):
         with self.assertRaisesRegex(CheckpointError, "reason"):
             ledger.revoke(_CAP_JTI, at=_NOW, reason="")
 
-
 class EpochMismatchTests(unittest.TestCase):
     def test_epoch_mismatch_aborts_by_default(self):
         decision = validate_checkpoint(
@@ -196,7 +183,6 @@ class EpochMismatchTests(unittest.TestCase):
             current=_NOW,
         )
         self.assertEqual(decision.action, CheckpointAction.DOWNGRADE)
-
 
 class CheckOrderingTests(unittest.TestCase):
     def test_expiration_check_runs_before_revocation(self):
@@ -231,7 +217,6 @@ class CheckOrderingTests(unittest.TestCase):
         )
         self.assertEqual(decision.reason_code, "checkpoint_capability_revoked")
 
-
 class InputValidationTests(unittest.TestCase):
     def test_non_capability_rejected(self):
         with self.assertRaisesRegex(CheckpointError, "CapabilityClaims"):
@@ -254,7 +239,6 @@ class InputValidationTests(unittest.TestCase):
                 ledger=InMemoryRevocationLedger(),
                 current=_NOW,
             )
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -33,13 +33,12 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from deny_reason import DenyReason
-from verifier import VerificationResult, Verifier
-from verify_envelope import EnvelopeVerificationError
+from .deny_reason import DenyReason
+from .verifier import VerificationResult, Verifier
+from .verify_envelope import EnvelopeVerificationError
 
 if TYPE_CHECKING:
     pass
-
 
 @dataclass(frozen=True)
 class RateLimitDecision:
@@ -47,7 +46,6 @@ class RateLimitDecision:
     identity: str
     reason: str
     retry_after_seconds: int = 0
-
 
 class RateLimitExceededError(EnvelopeVerificationError):
     """Raised by :meth:`RateLimitedVerifier.verify` when the limit is hit.
@@ -60,7 +58,6 @@ class RateLimitExceededError(EnvelopeVerificationError):
     def __init__(self, decision: RateLimitDecision) -> None:
         super().__init__(decision.reason, reason=DenyReason.RATE_LIMITED)
         self.decision = decision
-
 
 @dataclass
 class IdentityRateLimiter:
@@ -126,7 +123,6 @@ class IdentityRateLimiter:
         else:
             for ident in identities:
                 self._buckets.pop(ident, None)
-
 
 @dataclass
 class RateLimitedVerifier:

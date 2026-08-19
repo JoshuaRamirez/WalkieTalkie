@@ -46,19 +46,17 @@ import time
 import uuid
 from datetime import UTC, datetime, timedelta
 
-# --- substrate imports (sibling packages) --------------------------------
-_HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE.parent))  # integrations/mcp (envelope_adapter)
-sys.path.insert(0, str(_HERE.parents[2] / "envelope"))
-sys.path.insert(0, str(_HERE.parents[2] / "mesh"))
+import jcs
+from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
-import jcs  # noqa: E402
-from audit import JsonlAuditSink  # noqa: E402
-from capability_issuer import CapabilityIssuer, generate_uuidv7  # noqa: E402
-from cryptography.hazmat.primitives.serialization import (  # noqa: E402
-    load_pem_private_key,
+from envelope.audit import JsonlAuditSink
+from envelope.capability_issuer import CapabilityIssuer, generate_uuidv7
+from envelope.verify_envelope import (
+    EnvelopeVerificationError,
+    InMemoryReplayCache,
+    verify_envelope,
 )
-from envelope_adapter import (  # noqa: E402
+from integrations.mcp.envelope_adapter import (
     EnvelopeFields,
     MCPRequest,
     build_envelope,
@@ -67,11 +65,6 @@ from envelope_adapter import (  # noqa: E402
     mcp_request_to_payload,
     sign_envelope,
     unwrap_request,
-)
-from verify_envelope import (  # noqa: E402
-    EnvelopeVerificationError,
-    InMemoryReplayCache,
-    verify_envelope,
 )
 
 _MSG_SCOPE = "agent_message"
@@ -83,16 +76,13 @@ _PROTOCOL_FALLBACK = "2025-06-18"
 # their mailboxes without any path wiring. See gen_bridge_config.py.
 DEFAULT_CONFIG_DIR = pathlib.Path.home() / ".claude" / "mesh"
 
-
 def _log(msg: str) -> None:
     """Everything human-facing goes to stderr — stdout is JSON-RPC only."""
     print(f"[bridge] {msg}", file=sys.stderr, flush=True)
 
-
 # ---------------------------------------------------------------------------
 # Config / trust
 # ---------------------------------------------------------------------------
-
 
 class BridgeConfig:
     """Loads a bridge's identity + the shared trust manifest and exposes the
@@ -177,11 +167,9 @@ class BridgeConfig:
     def audit_path(self) -> pathlib.Path:
         return self.dir / f"audit-{self.name}.jsonl"
 
-
 # ---------------------------------------------------------------------------
 # Inbox (file-backed, shared with the pre-hook)
 # ---------------------------------------------------------------------------
-
 
 def read_unread(inbox: pathlib.Path) -> list[dict]:
     """Return inbox entries not yet marked read, and mark them read.
@@ -211,7 +199,6 @@ def read_unread(inbox: pathlib.Path) -> list[dict]:
         finally:
             fcntl.flock(lf, fcntl.LOCK_UN)
 
-
 def _append_inbox(inbox: pathlib.Path, entry: dict) -> None:
     import fcntl
 
@@ -224,11 +211,9 @@ def _append_inbox(inbox: pathlib.Path, entry: dict) -> None:
         finally:
             fcntl.flock(lf, fcntl.LOCK_UN)
 
-
 # ---------------------------------------------------------------------------
 # The bridge
 # ---------------------------------------------------------------------------
-
 
 class MeshBridge:
     def __init__(
@@ -248,7 +233,7 @@ class MeshBridge:
         self._stop = threading.Event()
 
         # Lazy import so the module is importable without a bound socket.
-        from socket_transport import LocalSocketTransport
+        from mesh.socket_transport import LocalSocketTransport
 
         # Default binds loopback (same-machine). Pass bind_host="0.0.0.0" +
         # advertise_host=<this host's routable IP> to let a peer on another
@@ -375,7 +360,6 @@ class MeshBridge:
         self._stop.set()
         self.transport.close()
 
-
 # ---------------------------------------------------------------------------
 # Minimal MCP server over stdio (JSON-RPC 2.0, newline-delimited)
 # ---------------------------------------------------------------------------
@@ -409,18 +393,14 @@ _TOOLS = [
     },
 ]
 
-
 def _result(id_, result):
     return {"jsonrpc": "2.0", "id": id_, "result": result}
-
 
 def _error(id_, code, message):
     return {"jsonrpc": "2.0", "id": id_, "error": {"code": code, "message": message}}
 
-
 def _text_result(text: str, is_error: bool = False):
     return {"content": [{"type": "text", "text": text}], "isError": is_error}
-
 
 def serve_stdio(bridge: MeshBridge) -> None:
     """Read newline-delimited JSON-RPC from stdin, write replies to stdout."""
@@ -473,7 +453,6 @@ def serve_stdio(bridge: MeshBridge) -> None:
         sys.stdout.write(json.dumps(reply) + "\n")
         sys.stdout.flush()
 
-
 def _dispatch_tool(bridge: MeshBridge, params: dict) -> dict:
     name = params.get("name")
     args = params.get("arguments") or {}
@@ -489,7 +468,6 @@ def _dispatch_tool(bridge: MeshBridge, params: dict) -> dict:
     if name == "check_inbox":
         return _text_result(bridge.check_inbox())
     return _text_result(f"unknown tool: {name}", True)
-
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="WalkieTalkie mesh MCP bridge")
@@ -525,7 +503,6 @@ def main() -> None:
         serve_stdio(bridge)
     finally:
         bridge.close()
-
 
 if __name__ == "__main__":
     main()

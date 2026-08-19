@@ -7,26 +7,9 @@ retire the obligation. That's the "block release on model/proof
 regression" requirement from E3.
 """
 
-import pathlib
-import sys
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-# Also expose Phase 4+ integration and Phase 5 mesh test modules so
-# canonical_test strings can point at them.
-sys.path.insert(
-    0,
-    str(
-        pathlib.Path(__file__).resolve().parent.parent
-        / "integrations"
-        / "mcp"
-    ),
-)
-sys.path.insert(
-    0, str(pathlib.Path(__file__).resolve().parent.parent / "mesh")
-)
-
-from proof_obligations import (
+from envelope.proof_obligations import (
     OBLIGATIONS,
     Phase,
     ProofObligation,
@@ -57,13 +40,17 @@ class RegistryShapeTests(unittest.TestCase):
 
     def test_each_obligation_has_canonical_test_format(self):
         for o in OBLIGATIONS:
+            parts = o.canonical_test.rsplit(".", 2)
             self.assertEqual(
-                o.canonical_test.count("."),
-                2,
-                f"{o.name}: canonical_test must be 'module.Class.method': "
-                f"{o.canonical_test!r}",
+                len(parts),
+                3,
+                f"{o.name}: canonical_test must be "
+                f"'dotted.module.Class.method': {o.canonical_test!r}",
             )
-
+            self.assertTrue(
+                parts[0].startswith(("envelope.", "mesh.", "integrations.")),
+                f"{o.name}: module must be a packaged test path: {parts[0]!r}",
+            )
 
 class ResolutionTests(unittest.TestCase):
     """The hard CI guarantee: every obligation must resolve to a real
@@ -83,7 +70,6 @@ class ResolutionTests(unittest.TestCase):
                 "or the obligation should be retired:\n  - "
                 + "\n  - ".join(failures)
             )
-
 
 class QueryHelperTests(unittest.TestCase):
     def test_by_phase_returns_only_that_phase(self):
@@ -106,7 +92,6 @@ class QueryHelperTests(unittest.TestCase):
         with self.assertRaisesRegex(ProofObligationError, "unknown"):
             find("not-a-thing")
 
-
 class ObligationValidationTests(unittest.TestCase):
     def test_bad_canonical_test_format_rejected(self):
         with self.assertRaisesRegex(ProofObligationError, "canonical_test"):
@@ -128,7 +113,6 @@ class ObligationValidationTests(unittest.TestCase):
                 canonical_test="m.C.test_x",
             )
 
-
 class CoverageBreadthTests(unittest.TestCase):
     """The registry should keep covering every Phase 2/3 track we ship.
     If a future change removes ALL obligations for a track, that's a
@@ -145,7 +129,6 @@ class CoverageBreadthTests(unittest.TestCase):
         tracks = {o.track for o in phase_3}
         for required in ("A", "B", "C", "D"):
             self.assertIn(required, tracks, f"Phase 3 Track {required} unrepresented")
-
 
 if __name__ == "__main__":
     unittest.main()

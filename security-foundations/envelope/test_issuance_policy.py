@@ -5,14 +5,10 @@ itself (this file) and its integration with CapabilityIssuer (the
 new test classes in test_capability_issuer.py).
 """
 
-import pathlib
-import sys
 import unittest
 from datetime import timedelta
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from issuance_policy import (
+from envelope.issuance_policy import (
     AllowAllPolicy,
     AllowlistPolicy,
     PolicyDecision,
@@ -22,7 +18,6 @@ _SUB = "spiffe://mesh/ns-a/service-a"
 _AUD = "spiffe://mesh/ns-b/service-b"
 _SCOPE = "invoke_tool"
 
-
 class AllowAllPolicyTests(unittest.TestCase):
     def test_always_allows(self):
         decision = AllowAllPolicy().evaluate(
@@ -30,7 +25,6 @@ class AllowAllPolicyTests(unittest.TestCase):
         )
         self.assertTrue(decision.allowed)
         self.assertEqual(decision.reason, "permissive")
-
 
 class AllowlistPolicyTests(unittest.TestCase):
     def test_allows_listed_grant(self):
@@ -95,7 +89,6 @@ class AllowlistPolicyTests(unittest.TestCase):
         bad = policy.evaluate(sub=_SUB, aud=_AUD, scope=_SCOPE, ttl=timedelta(minutes=5, seconds=1))
         self.assertFalse(bad.allowed)
 
-
 class PolicyDecisionTests(unittest.TestCase):
     def test_is_frozen(self):
         from dataclasses import FrozenInstanceError
@@ -103,7 +96,6 @@ class PolicyDecisionTests(unittest.TestCase):
         d = PolicyDecision(allowed=True, reason="ok")
         with self.assertRaises(FrozenInstanceError):
             d.allowed = False  # type: ignore[misc]
-
 
 if __name__ == "__main__":
     unittest.main()

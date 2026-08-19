@@ -64,8 +64,9 @@ from datetime import UTC, datetime, timedelta
 import jcs
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from deny_reason import DenyReason
-from verify_envelope import (
+
+from .deny_reason import DenyReason
+from .verify_envelope import (
     KID_RE,
     SPIFFE_ID_RE,
     UUID_V7_RE,
@@ -76,10 +77,8 @@ from verify_envelope import (
 
 SESSION_TYP = "wt-session/v0"
 
-
 class SessionError(EnvelopeVerificationError):
     """Raised when a session token fails verification."""
-
 
 @dataclass(frozen=True)
 class SessionToken:
@@ -100,7 +99,6 @@ class SessionToken:
     def to_dict(self) -> dict:
         return dataclasses.asdict(self)
 
-
 def _session_body(token: SessionToken) -> bytes:
     body = {
         "typ": SESSION_TYP,
@@ -119,10 +117,8 @@ def _session_body(token: SessionToken) -> bytes:
     }
     return jcs.canonicalize(body)
 
-
 def _b64u(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
 
 def sign_session(
     token: SessionToken, signing_key: Ed25519PrivateKey
@@ -130,10 +126,8 @@ def sign_session(
     sig = _b64u(signing_key.sign(_session_body(token)))
     return dataclasses.replace(token, signature=sig)
 
-
 def to_json(token: SessionToken) -> bytes:
     return json.dumps(token.to_dict(), separators=(",", ":")).encode("utf-8")
-
 
 def from_json(data: bytes) -> SessionToken:
     try:
@@ -160,10 +154,8 @@ def from_json(data: bytes) -> SessionToken:
         )
     return SessionToken(**{k: obj[k] for k in required})
 
-
 def _malformed(msg: str) -> SessionError:
     return SessionError(msg, reason=DenyReason.SESSION_MALFORMED)
-
 
 def _validate_shape(token: SessionToken) -> None:
     if not isinstance(token.session_id, str) or not UUID_V7_RE.match(token.session_id):
@@ -200,7 +192,6 @@ def _validate_shape(token: SessionToken) -> None:
             raise _malformed(f"{name} must be a NumericDate (int)")
     if not isinstance(token.signature, str) or not token.signature:
         raise _malformed("signature must be a non-empty string")
-
 
 def verify_session_token(
     token: SessionToken,
@@ -271,7 +262,6 @@ def verify_session_token(
         ) from exc
 
     return token
-
 
 def verify_resume(
     token: SessionToken,

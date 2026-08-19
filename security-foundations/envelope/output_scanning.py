@@ -58,7 +58,6 @@ from enum import StrEnum
 class OutputScanningError(ValueError):
     """Raised when scanner inputs violate v0 invariants."""
 
-
 class RiskLevel(StrEnum):
     """Aggregate / per-match risk levels in increasing severity."""
 
@@ -68,7 +67,6 @@ class RiskLevel(StrEnum):
     HIGH = "high"
     CRITICAL = "critical"
 
-
 _RISK_RANK = {
     RiskLevel.NONE: 0,
     RiskLevel.LOW: 1,
@@ -77,11 +75,9 @@ _RISK_RANK = {
     RiskLevel.CRITICAL: 4,
 }
 
-
 def is_more_severe(a: RiskLevel, b: RiskLevel) -> bool:
     """``True`` iff ``a`` is strictly more severe than ``b``."""
     return _RISK_RANK[a] > _RISK_RANK[b]
-
 
 def _max_risk(levels: Iterable[RiskLevel]) -> RiskLevel:
     best = RiskLevel.NONE
@@ -89,7 +85,6 @@ def _max_risk(levels: Iterable[RiskLevel]) -> RiskLevel:
         if _RISK_RANK[level] > _RISK_RANK[best]:
             best = level
     return best
-
 
 @dataclass(frozen=True)
 class SecretPattern:
@@ -114,7 +109,6 @@ class SecretPattern:
             raise OutputScanningError(
                 "severity=NONE is reserved for clean ScanResults"
             )
-
 
 # --- Built-in patterns ---
 #
@@ -184,7 +178,6 @@ BUILTIN_PATTERNS: tuple[SecretPattern, ...] = (
     ),
 )
 
-
 @dataclass(frozen=True)
 class PatternRegistry:
     """An immutable set of patterns, queried by :func:`scan`."""
@@ -219,7 +212,6 @@ class PatternRegistry:
         """Return a new registry with ``extra`` patterns appended."""
         return PatternRegistry(patterns=(*self.patterns, *tuple(extra)))
 
-
 @dataclass(frozen=True)
 class ScanMatch:
     """One detection: which pattern, where, and how severe."""
@@ -234,7 +226,6 @@ class ScanMatch:
             raise OutputScanningError(
                 f"invalid match span: ({self.start}, {self.end})"
             )
-
 
 @dataclass(frozen=True)
 class ScanResult:
@@ -281,7 +272,6 @@ class ScanResult:
             cursor = m.end
         chunks.append(self.text[cursor:])
         return "".join(chunks)
-
 
 def scan(text: str, *, registry: PatternRegistry | None = None) -> ScanResult:
     """Scan ``text`` against ``registry`` (default: :func:`PatternRegistry.builtin`).

@@ -12,34 +12,29 @@ this slice tight.
 """
 
 import pathlib
-import sys
 import unittest
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-sys.path.insert(
-    0, str(pathlib.Path(__file__).resolve().parent.parent.parent / "envelope")
-)
-
-from audit import InMemoryAuditSink
-from demo_tools import DEMO_TOOLS, tool_exec_sql, tool_read_file
-from egress_policy import EgressAction, EgressMatrixCell, MatrixEgressPolicy
-from host import (
+from envelope.audit import InMemoryAuditSink
+from envelope.data_classification import DataClass
+from envelope.egress_policy import EgressAction, EgressMatrixCell, MatrixEgressPolicy
+from envelope.output_scanning import PatternRegistry, RiskLevel
+from envelope.tool_policy_gate import RiskTier, ToolPolicy, ToolRule
+from envelope.verify_envelope import EnvelopeVerificationError, InMemoryReplayCache
+from integrations.mcp.default_tools import DEMO_TOOLS, tool_exec_sql, tool_read_file
+from integrations.mcp.host import (
     ExampleMCPHost,
     ExampleMCPHostError,
     HandleOptions,
     HostConfig,
 )
-from host_support import (
+from integrations.mcp.host_support import (
     derive_reply_id,
     derive_reply_nonce,
     exc_reason_code,
     request_id_from_envelope,
 )
-from output_scanning import PatternRegistry, RiskLevel
-from tool_policy_gate import RiskTier, ToolPolicy, ToolRule
-from verify_envelope import EnvelopeVerificationError, InMemoryReplayCache
 
 
 def _config():
@@ -68,16 +63,13 @@ def _config():
             cells=(
                 EgressMatrixCell(
                     risk=RiskLevel.NONE,
-                    data_class=__import__(
-                        "data_classification"
-                    ).DataClass.INTERNAL,
+                    data_class=DataClass.INTERNAL,
                     action=EgressAction.ALLOW,
                 ),
             )
         ),
         audit_sink=InMemoryAuditSink(),
     )
-
 
 class ConfigValidationTests(unittest.TestCase):
     def test_empty_host_identity_rejected(self):
@@ -102,7 +94,6 @@ class ConfigValidationTests(unittest.TestCase):
         config = _config()
         self.assertIsInstance(config.pattern_registry, PatternRegistry)
 
-
 class HostConstructionTests(unittest.TestCase):
     def test_default_tools_are_loaded(self):
         host = ExampleMCPHost(_config())
@@ -112,7 +103,6 @@ class HostConstructionTests(unittest.TestCase):
         custom = {"only_this": lambda p: {"ok": True}}
         host = ExampleMCPHost(_config(), tools=custom)
         self.assertEqual(set(host.tools.keys()), {"only_this"})
-
 
 class DemoToolShapeTests(unittest.TestCase):
     def test_read_file_returns_path_and_contents(self):
@@ -131,7 +121,6 @@ class DemoToolShapeTests(unittest.TestCase):
         self.assertEqual(out["query"], "SELECT 1")
         self.assertIsInstance(out["rows"], list)
         self.assertGreater(len(out["rows"]), 0)
-
 
 class HelperFunctionTests(unittest.TestCase):
     def test_request_id_from_envelope_pulls_payload_id(self):
@@ -166,7 +155,6 @@ class HelperFunctionTests(unittest.TestCase):
         nonce = derive_reply_nonce(env)
         self.assertTrue(nonce.startswith("replynonce-"))
 
-
 class DemoToolsRegistryTests(unittest.TestCase):
     def test_demo_tools_carry_known_keys(self):
         self.assertEqual(set(DEMO_TOOLS.keys()), {"read_file", "exec_sql"})
@@ -174,7 +162,6 @@ class DemoToolsRegistryTests(unittest.TestCase):
     def test_demo_tools_are_callable(self):
         for name, tool in DEMO_TOOLS.items():
             self.assertTrue(callable(tool), f"{name} not callable")
-
 
 class SecurityConfigFieldTests(unittest.TestCase):
     """The rate_limiter and revocation_list config fields default to
@@ -189,8 +176,8 @@ class SecurityConfigFieldTests(unittest.TestCase):
     def test_rate_limiter_and_revocation_accepted_when_set(self):
         from datetime import timedelta
 
-        from rate_limiter import IdentityRateLimiter
-        from revocation_list import InMemoryRevocationList
+        from envelope.rate_limiter import IdentityRateLimiter
+        from envelope.revocation_list import InMemoryRevocationList
         base = _config()
         base.rate_limiter = IdentityRateLimiter(
             limit=5, window=timedelta(minutes=1)
@@ -200,13 +187,11 @@ class SecurityConfigFieldTests(unittest.TestCase):
         self.assertIsNotNone(host.config.rate_limiter)
         self.assertIsNotNone(host.config.revocation_list)
 
-
 class HandleOptionsTests(unittest.TestCase):
     def test_handle_options_default_construction(self):
         opts = HandleOptions()
         self.assertIsNone(opts.now)
         self.assertIsNone(opts.step_up)
-
 
 class HostLineCountTests(unittest.TestCase):
     """Phase 4 §6 acceptance criterion #4: example host code under 500 lines."""
@@ -219,7 +204,6 @@ class HostLineCountTests(unittest.TestCase):
             500,
             f"host.py is {line_count} lines; Phase 4 §6 ceiling is 500",
         )
-
 
 if __name__ == "__main__":
     unittest.main()

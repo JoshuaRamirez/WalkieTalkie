@@ -1,17 +1,13 @@
 """Tests for discovery record integrity (Phase 1 Track A A2)."""
 
 import json
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime, timedelta
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from discovery_record import (
+from envelope.discovery_record import (
     DEFAULT_DISCOVERY_CONFIG,
     DiscoveryRecord,
     DiscoveryRecordError,
@@ -29,7 +25,6 @@ _ISSUER_KID = "discovery-kid-1"
 _ENDPOINTS = ("mesh://node-a.example.test:443",)
 _NOW = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
 
-
 def _keypair():
     priv = Ed25519PrivateKey.generate()
     pub_pem = priv.public_key().public_bytes(
@@ -37,7 +32,6 @@ def _keypair():
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
     return priv, pub_pem
-
 
 def _record(
     *,
@@ -62,7 +56,6 @@ def _record(
         issued_at=issued_at.isoformat().replace("+00:00", "Z"),
         expires_at=expires_at.isoformat().replace("+00:00", "Z"),
     )
-
 
 class SignAndVerifyTests(unittest.TestCase):
     def setUp(self):
@@ -112,7 +105,6 @@ class SignAndVerifyTests(unittest.TestCase):
 
         with self.assertRaisesRegex(DiscoveryRecordError, "unknown discovery issuer key"):
             verify_record(signed, issuer_lookup=lookup, now=_NOW)
-
 
 class TimeWindowTests(unittest.TestCase):
     def setUp(self):
@@ -167,7 +159,6 @@ class TimeWindowTests(unittest.TestCase):
         with self.assertRaisesRegex(DiscoveryRecordError, "ttl exceeds maximum"):
             verify_record(signed, issuer_lookup=self.lookup, now=_NOW, config=tight)
 
-
 class ShapeValidationTests(unittest.TestCase):
     def setUp(self):
         self.priv, self.pem = _keypair()
@@ -198,7 +189,6 @@ class ShapeValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(DiscoveryRecordError, r"endpoints\[1\]"):
             verify_record(signed, issuer_lookup=self.lookup, now=_NOW)
 
-
 class JsonRoundTripTests(unittest.TestCase):
     def setUp(self):
         self.priv, self.pem = _keypair()
@@ -221,7 +211,6 @@ class JsonRoundTripTests(unittest.TestCase):
         with self.assertRaisesRegex(DiscoveryRecordError, "endpoints must be a list"):
             from_json(json.dumps(obj).encode())
 
-
 class AuditEmissionTests(unittest.TestCase):
     """The discovery checkpoint is part of Phase 1 Track D D1."""
 
@@ -230,7 +219,7 @@ class AuditEmissionTests(unittest.TestCase):
         self.lookup = lambda iss, kid: self.pem
 
     def _new_sink(self):
-        from audit import InMemoryAuditSink
+        from envelope.audit import InMemoryAuditSink
         return InMemoryAuditSink()
 
     def test_allow_event_on_success(self):
@@ -292,7 +281,6 @@ class AuditEmissionTests(unittest.TestCase):
         with self.assertRaises(DiscoveryRecordError):
             verify_record(signed, issuer_lookup=self.lookup, now=_NOW, audit_sink=sink)
         self.assertEqual(sink.events[0].reason_code, "discovery_malformed")
-
 
 if __name__ == "__main__":
     unittest.main()

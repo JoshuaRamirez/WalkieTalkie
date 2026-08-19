@@ -82,35 +82,26 @@ implementation-plan/   per-phase plans with landed-status annotations
 
 ## Install and test
 
-WalkieTalkie currently **runs from a source checkout** — it is not yet a
-`pip install`-able library. The editable install below is for pulling
-dependencies and running the suites; importing the packages as an installed
-library is a tracked follow-up (see [`DEFERRED.md`](./DEFERRED.md),
-"Installable-package import restructure").
+`pip install -e .` produces an importable library. Hatch ships three
+top-level packages — `envelope`, `mesh`, and `integrations` — from
+`security-foundations/`. After install, `import envelope.verify_envelope`
+works without putting package directories on `sys.path`.
 
 ```sh
 python -m venv .venv
 .venv/bin/python -m pip install -e ".[dev]"
+.venv/bin/python -c "import envelope.verify_envelope, mesh.transport, integrations.mcp.envelope_adapter"
 ```
 
-Each package and example is its own import root (some MCP subdirs have no
-`__init__.py` and set up `sys.path` per test), so run the suites per-root:
+Tests run against the installed/editable package:
 
 ```sh
-for r in \
-  security-foundations/envelope \
-  security-foundations/mesh \
-  security-foundations/integrations/mcp \
-  security-foundations/integrations/mcp/bridge \
-  security-foundations/integrations/mcp/federation \
-  security-foundations/integrations/mcp/workspace ; do
-  .venv/bin/python -m unittest discover -s "$r" -t "$r"
-done
+.venv/bin/python -m unittest discover -s security-foundations -p 'test_*.py'
 .venv/bin/python -m ruff check security-foundations
 ```
 
 CI (`.github/workflows/test.yml`) runs the same install, `compileall`, `ruff`,
-and all six suites on Python 3.11 and 3.12.
+and the full suite on Python 3.11 and 3.12.
 
 > Note: the envelope suite needs `cryptography >= 42` for the modern X.509 API.
 > A system-packaged `cryptography 41` (as some distros ship) will fail to

@@ -1,13 +1,9 @@
 """Tests for output scanning v0 (Phase 2 Track C C1)."""
 
-import pathlib
 import re
-import sys
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from output_scanning import (
+from envelope.output_scanning import (
     BUILTIN_PATTERNS,
     OutputScanningError,
     PatternRegistry,
@@ -28,7 +24,6 @@ class RiskLevelOrderingTests(unittest.TestCase):
         self.assertTrue(is_more_severe(RiskLevel.LOW, RiskLevel.NONE))
         self.assertFalse(is_more_severe(RiskLevel.NONE, RiskLevel.NONE))
         self.assertFalse(is_more_severe(RiskLevel.MEDIUM, RiskLevel.HIGH))
-
 
 class SecretPatternValidationTests(unittest.TestCase):
     def test_empty_name_rejected(self):
@@ -52,7 +47,6 @@ class SecretPatternValidationTests(unittest.TestCase):
                 regex=re.compile("x"),
                 severity=RiskLevel.NONE,
             )
-
 
 class PatternRegistryTests(unittest.TestCase):
     def test_builtin_registry_loads(self):
@@ -80,7 +74,6 @@ class PatternRegistryTests(unittest.TestCase):
         bigger = base.extend([extra])
         self.assertEqual(len(base.patterns), 1)
         self.assertEqual(len(bigger.patterns), 2)
-
 
 class BuiltinPatternDetectionTests(unittest.TestCase):
     def test_clean_text_returns_none(self):
@@ -145,7 +138,6 @@ class BuiltinPatternDetectionTests(unittest.TestCase):
         self.assertEqual(names.count("openai_api_key"), 0)
         self.assertEqual(names.count("anthropic_api_key"), 1)
 
-
 class AggregateRiskTests(unittest.TestCase):
     def test_aggregate_is_max_severity(self):
         text = (
@@ -155,7 +147,6 @@ class AggregateRiskTests(unittest.TestCase):
         # github_personal_token = HIGH; aws_access_key_id = CRITICAL.
         # Aggregate must be CRITICAL.
         self.assertEqual(result.risk, RiskLevel.CRITICAL)
-
 
 class RedactionTests(unittest.TestCase):
     def test_clean_text_passes_through(self):
@@ -199,7 +190,6 @@ class RedactionTests(unittest.TestCase):
         # Tie on start (both at 0): higher severity (high_wide) wins.
         self.assertEqual(result.redact(), "[REDACTED:high_wide]")
 
-
 class CustomRegistryTests(unittest.TestCase):
     def test_custom_pattern_detected(self):
         reg = PatternRegistry.from_patterns(
@@ -219,7 +209,6 @@ class CustomRegistryTests(unittest.TestCase):
         with self.assertRaisesRegex(OutputScanningError, "text"):
             scan(b"bytes-not-string")  # type: ignore[arg-type]
 
-
 class ScanResultShapeTests(unittest.TestCase):
     def test_result_is_a_scan_result(self):
         result = scan("plain")
@@ -230,7 +219,6 @@ class ScanResultShapeTests(unittest.TestCase):
         m = result.matches[0]
         self.assertIsInstance(m, ScanMatch)
         self.assertEqual(result.text[m.start : m.end], "AKIAIOSFODNN7EXAMPLE")
-
 
 if __name__ == "__main__":
     unittest.main()

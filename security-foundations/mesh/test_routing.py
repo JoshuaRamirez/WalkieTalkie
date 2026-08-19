@@ -1,12 +1,8 @@
 """Tests for routing + multi-hop forwarding (Phase 6 Track C D6.5)."""
 
-import pathlib
-import sys
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from routing import RoutedMessage, Router
+from mesh.routing import RoutedMessage, Router
 
 # Linear topology A — B — C. B is the only path between A and C.
 _A, _B, _C = "node-a", "node-b", "node-c"
@@ -16,10 +12,8 @@ _NEXT = {
     _C: {_A: _B, _B: _B},   # C reaches A via B
 }
 
-
 def _router(node, *, routable=lambda _n: True):
     return Router(node, next_hop=lambda d: _NEXT[node].get(d), is_routable=routable)
-
 
 class MultiHopTests(unittest.TestCase):
     def test_message_reaches_far_node_via_intermediary(self):
@@ -36,7 +30,6 @@ class MultiHopTests(unittest.TestCase):
         dec_c = c.handle(dec_b.forwarded)
         self.assertEqual(dec_c.action, "deliver")
         self.assertEqual(dec_c.payload, b"signed-envelope-bytes")
-
 
 class LoopSafetyTests(unittest.TestCase):
     def test_duplicate_message_id_is_dropped(self):
@@ -56,7 +49,6 @@ class LoopSafetyTests(unittest.TestCase):
         self.assertEqual(dec.action, "drop")
         self.assertEqual(dec.reason, "ttl_exhausted")
 
-
 class DenyByDefaultForwardingTests(unittest.TestCase):
     def test_forward_denied_to_unadmitted_next_hop(self):
         # B knows the route to C but is NOT allowed to route to C.
@@ -73,13 +65,11 @@ class DenyByDefaultForwardingTests(unittest.TestCase):
         self.assertEqual(dec.action, "drop")
         self.assertEqual(dec.reason, "no_route")
 
-
 class SerializationTests(unittest.TestCase):
     def test_routed_message_json_round_trip(self):
         m = RoutedMessage(dest=_C, ttl=5, msg_id="s1", payload=b"\x00\x01binary")
         back = RoutedMessage.from_json(m.to_json())
         self.assertEqual(back, m)
-
 
 if __name__ == "__main__":
     unittest.main()

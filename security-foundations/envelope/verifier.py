@@ -21,8 +21,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from audit import AuditSink
-from verify_envelope import (
+from .audit import AuditSink
+from .verify_envelope import (
     DEFAULT_CONFIG,
     EnvelopeVerificationError,
     ReplayCache,
@@ -31,16 +31,14 @@ from verify_envelope import (
 )
 
 if TYPE_CHECKING:
-    from capability_token import CapabilityClaims
-    from revocation_list import RevocationList
-
+    from .capability_token import CapabilityClaims
+    from .revocation_list import RevocationList
 
 @dataclass(frozen=True)
 class VerificationResult:
     ok: bool
     reason: str
     claims: CapabilityClaims | None
-
 
 @dataclass(frozen=True)
 class Verifier:

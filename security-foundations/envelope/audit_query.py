@@ -31,12 +31,11 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Iterator
 
-from audit import AuditEvent
+from .audit import AuditEvent
 
 # Trust domain is the host component of a SPIFFE ID
 # (``spiffe://<trust_domain>/<workload-path>``).
 _SPIFFE_TRUST_DOMAIN_RE = re.compile(r"^spiffe://([^/]+)")
-
 
 def trust_domain_of(spiffe_id: str) -> str | None:
     """Return the trust domain segment of a SPIFFE ID, or ``None``."""
@@ -45,39 +44,30 @@ def trust_domain_of(spiffe_id: str) -> str | None:
     m = _SPIFFE_TRUST_DOMAIN_RE.match(spiffe_id)
     return m.group(1) if m else None
 
-
 def allows(events: Iterable[AuditEvent]) -> Iterator[AuditEvent]:
     return (e for e in events if e.outcome == "allow")
-
 
 def denies(events: Iterable[AuditEvent]) -> Iterator[AuditEvent]:
     return (e for e in events if e.outcome == "deny")
 
-
 def with_event_type(events: Iterable[AuditEvent], event_type: str) -> Iterator[AuditEvent]:
     return (e for e in events if e.event_type == event_type)
-
 
 def with_reason_code(events: Iterable[AuditEvent], reason_code: str) -> Iterator[AuditEvent]:
     return (e for e in events if e.reason_code == reason_code)
 
-
 def with_sender(events: Iterable[AuditEvent], sender: str) -> Iterator[AuditEvent]:
     return (e for e in events if e.sender == sender)
-
 
 def with_recipient(events: Iterable[AuditEvent], recipient: str) -> Iterator[AuditEvent]:
     return (e for e in events if e.recipient == recipient)
 
-
 def with_message_id(events: Iterable[AuditEvent], message_id: str) -> Iterator[AuditEvent]:
     return (e for e in events if e.message_id == message_id)
-
 
 def replays(events: Iterable[AuditEvent]) -> Iterator[AuditEvent]:
     """Events where the replay cache rejected a previously-seen nonce."""
     return with_reason_code(events, "replay_detected")
-
 
 def cross_tenant_attempts(events: Iterable[AuditEvent]) -> Iterator[AuditEvent]:
     """Events whose sender and recipient live in different SPIFFE trust domains.
@@ -91,7 +81,6 @@ def cross_tenant_attempts(events: Iterable[AuditEvent]) -> Iterator[AuditEvent]:
         recipient_td = trust_domain_of(e.recipient)
         if sender_td and recipient_td and sender_td != recipient_td:
             yield e
-
 
 def break_glass_attempts(events: Iterable[AuditEvent]) -> Iterator[AuditEvent]:
     """Reserved hook for break-glass governance events.

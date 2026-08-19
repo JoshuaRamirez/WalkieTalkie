@@ -20,15 +20,12 @@ import unittest
 import uuid
 from datetime import UTC, datetime, timedelta
 
-_HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE))
-sys.path.insert(0, str(_HERE.parent))
-sys.path.insert(0, str(_HERE.parents[2] / "envelope"))
-sys.path.insert(0, str(_HERE.parents[2] / "mesh"))
+import jcs
 
-import jcs  # noqa: E402
-from capability_issuer import generate_uuidv7  # noqa: E402
-from envelope_adapter import (  # noqa: E402
+from envelope.capability_issuer import generate_uuidv7
+from integrations.mcp.bridge.gen_bridge_config import generate
+from integrations.mcp.bridge.mesh_mcp_bridge import BridgeConfig, MeshBridge
+from integrations.mcp.envelope_adapter import (
     EnvelopeFields,
     MCPRequest,
     build_envelope,
@@ -36,17 +33,14 @@ from envelope_adapter import (  # noqa: E402
     mcp_request_to_payload,
     sign_envelope,
 )
-from gen_bridge_config import generate  # noqa: E402
-from mesh_mcp_bridge import BridgeConfig, MeshBridge  # noqa: E402
 
+_HERE = pathlib.Path(__file__).resolve().parent
 _BRIDGE = _HERE / "mesh_mcp_bridge.py"
-
 
 def _mkconfig(tmp: pathlib.Path) -> pathlib.Path:
     cfgdir = tmp / "mesh-config"
     generate(cfgdir, ["alice", "bob"])
     return cfgdir
-
 
 def _wait_inbox(path: pathlib.Path, want: int, timeout: float = 4.0) -> list:
     deadline = time.monotonic() + timeout
@@ -61,7 +55,6 @@ def _wait_inbox(path: pathlib.Path, want: int, timeout: float = 4.0) -> list:
         if path.exists()
         else []
     )
-
 
 class MCPProtocolTests(unittest.TestCase):
     """Drive the stdio handshake as Claude Code would."""
@@ -116,7 +109,6 @@ class MCPProtocolTests(unittest.TestCase):
                 proc.stdin.close()
                 proc.terminate()
                 proc.wait(timeout=5)
-
 
 class SecureDeliveryTests(unittest.TestCase):
     """Two bridges over the real mesh transport."""
@@ -248,7 +240,6 @@ class SecureDeliveryTests(unittest.TestCase):
                 alice.close()
                 bob.close()
 
-
 def _build_signed(sender_cfg, recipient_cfg, body, *, signing_key, kid) -> bytes:
     """Build a signed envelope from sender->recipient. Caller controls the
     signing key + kid so tests can forge (wrong key) deliberately."""
@@ -270,7 +261,6 @@ def _build_signed(sender_cfg, recipient_cfg, body, *, signing_key, kid) -> bytes
         issued_at=now, ttl=timedelta(minutes=5),
     )
     return envelope_to_json(sign_envelope(build_envelope(payload=payload, fields=fields), signing_key))
-
 
 if __name__ == "__main__":
     unittest.main()

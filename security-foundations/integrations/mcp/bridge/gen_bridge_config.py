@@ -31,14 +31,12 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 _TRUST_DOMAIN = "mesh.local"
 
-
 def _priv_pem(key: Ed25519PrivateKey) -> str:
     return key.private_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption(),
     ).decode("ascii")
-
 
 def _pub_pem(key: Ed25519PrivateKey) -> str:
     return (
@@ -49,7 +47,6 @@ def _pub_pem(key: Ed25519PrivateKey) -> str:
         )
         .decode("ascii")
     )
-
 
 def generate(out_dir: pathlib.Path, names: list[str]) -> None:
     if out_dir.exists() and any(out_dir.iterdir()):
@@ -96,14 +93,12 @@ def generate(out_dir: pathlib.Path, names: list[str]) -> None:
     print(f"  wrote {trust_path}  (shared public trust manifest)", file=sys.stderr)
     print(f"\nGenerated {len(names)} identities in {out_dir}", file=sys.stderr)
 
-
 # Default home: user-scoped ~/.claude/mesh so two local Claude instances
 # share one discovery/trust/mailbox location out of the box. It MUST be a
 # shared, user-scoped dir (not a per-project .claude) because the two
 # bridges rendezvous through it — and private keys must never live in a
 # git-tracked project dir.
 DEFAULT_CONFIG_DIR = pathlib.Path.home() / ".claude" / "mesh"
-
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
@@ -116,7 +111,6 @@ def main() -> None:
     )
     args = ap.parse_args()
     generate(args.out, args.agents)
-
 
 if __name__ == "__main__":
     main()

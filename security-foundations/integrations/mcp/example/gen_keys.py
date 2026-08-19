@@ -41,10 +41,8 @@ HOST_KID = "host-kid-1"
 ISSUER_ISS = "spiffe://mesh.example/ns-iss/cap-issuer-1"
 ISSUER_KID = "issuer-kid-1"
 
-
 def _seed(label: str) -> bytes:
     return hashlib.sha256(f"walkietalkie-phase4-example::{label}".encode()).digest()
-
 
 def _mint(out: pathlib.Path, label: str) -> Ed25519PrivateKey:
     priv = Ed25519PrivateKey.from_private_bytes(_seed(label))
@@ -60,7 +58,6 @@ def _mint(out: pathlib.Path, label: str) -> Ed25519PrivateKey:
     (out / f"{label}-priv.pem").write_bytes(priv_pem)
     (out / f"{label}-pub.pem").write_bytes(pub_pem)
     return priv
-
 
 def main() -> None:
     out = pathlib.Path(__file__).resolve().parent
@@ -93,7 +90,6 @@ def main() -> None:
     )
 
     print(f"wrote example trust material under {out}")
-
 
 if __name__ == "__main__":
     main()

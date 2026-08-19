@@ -1,6 +1,5 @@
 import base64
 import pathlib
-import sys
 import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -11,11 +10,9 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 )
 from cryptography.hazmat.primitives.asymmetric.rsa import generate_private_key as generate_rsa_private_key
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from audit import InMemoryAuditSink, verify_chain
-from trust_store import FileSystemTrustStore
-from verify_envelope import (
+from envelope.audit import InMemoryAuditSink, verify_chain
+from envelope.trust_store import FileSystemTrustStore
+from envelope.verify_envelope import (
     EnvelopeVerificationError,
     InMemoryReplayCache,
     SQLiteReplayCache,
@@ -38,12 +35,10 @@ def generate_ed25519_keypair():
     )
     return priv_pem, pub_pem
 
-
 def sign(signing_input: bytes, private_key_pem: bytes):
     private_key = serialization.load_pem_private_key(private_key_pem, password=None)
     assert isinstance(private_key, Ed25519PrivateKey)
     return base64.urlsafe_b64encode(private_key.sign(signing_input)).rstrip(b"=").decode("ascii")
-
 
 def mint_capability_token(
     *,
@@ -58,7 +53,7 @@ def mint_capability_token(
     ttl_seconds: int = 240,
 ) -> str:
     """Test helper that wraps CapabilityIssuer for fixture-style use."""
-    from capability_issuer import CapabilityIssuer
+    from envelope.capability_issuer import CapabilityIssuer
 
     issuer_priv = serialization.load_pem_private_key(issuer_priv_pem, password=None)
     assert isinstance(issuer_priv, Ed25519PrivateKey)
@@ -78,13 +73,11 @@ def mint_capability_token(
         now=now,
     )
 
-
 _ISSUER_IDENTITY = "spiffe://mesh/cap-issuer-1"
 _ISSUER_KID = "issuer-kid-1"
 _SENDER = "spiffe://mesh/ns-a/service-a"
 _RECIPIENT = "spiffe://mesh/ns-b/service-b"
 _PURPOSE = "invoke_tool"
-
 
 class VerifyEnvelopeTests(unittest.TestCase):
     @classmethod
@@ -441,7 +434,7 @@ class VerifyEnvelopeTests(unittest.TestCase):
         verify_chain(sink.events)
 
     def test_envelope_with_revoked_token_rejected(self):
-        from revocation_list import InMemoryRevocationList
+        from envelope.revocation_list import InMemoryRevocationList
 
         envelope, now = self._valid_envelope()
         # mint_capability_token bakes this jti into the cap token.
@@ -457,7 +450,7 @@ class VerifyEnvelopeTests(unittest.TestCase):
             )
 
     def test_envelope_revocation_failure_does_not_reserve_nonce(self):
-        from revocation_list import InMemoryRevocationList
+        from envelope.revocation_list import InMemoryRevocationList
 
         envelope, now = self._valid_envelope()
         replay_cache = InMemoryReplayCache()
@@ -483,7 +476,6 @@ class VerifyEnvelopeTests(unittest.TestCase):
             now=now,
         )
 
-
 class CanonicalizationSemanticsTests(unittest.TestCase):
     def test_int_and_float_collide_under_jcs(self):
         self.assertEqual(_digest_payload({"a": 1.0}), _digest_payload({"a": 1}))
@@ -495,7 +487,6 @@ class CanonicalizationSemanticsTests(unittest.TestCase):
             _digest_payload({"k": precomposed}),
             _digest_payload({"k": decomposed}),
         )
-
 
 if __name__ == "__main__":
     unittest.main()

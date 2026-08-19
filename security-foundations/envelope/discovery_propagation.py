@@ -48,18 +48,16 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from deny_reason import DenyReason
-from discovery_record import DiscoveryRecord
+from .deny_reason import DenyReason
+from .discovery_record import DiscoveryRecord
 
 
 def _parse_rfc3339(s: str) -> datetime:
     """Local helper — mirrors the discovery-record parse semantics."""
     return datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(UTC)
 
-
 class DiscoveryPropagationError(ValueError):
     """Raised when propagation inputs violate v0 invariants."""
-
 
 @dataclass(frozen=True)
 class PropagationDecision:
@@ -67,11 +65,9 @@ class PropagationDecision:
     reason: str
     reason_code: str = ""
 
-
 # ---------------------------------------------------------------------
 # Freshness tracker
 # ---------------------------------------------------------------------
-
 
 class DiscoveryFreshnessTracker(ABC):
     @abstractmethod
@@ -81,7 +77,6 @@ class DiscoveryFreshnessTracker(ABC):
     @abstractmethod
     def commit(self, record: DiscoveryRecord) -> None:
         ...
-
 
 @dataclass
 class InMemoryDiscoveryFreshnessTracker(DiscoveryFreshnessTracker):
@@ -145,11 +140,9 @@ class InMemoryDiscoveryFreshnessTracker(DiscoveryFreshnessTracker):
             del self._highest[k]
         return len(to_drop)
 
-
 # ---------------------------------------------------------------------
 # Rate limiter
 # ---------------------------------------------------------------------
-
 
 class DiscoveryPropagationLimiter(ABC):
     @abstractmethod
@@ -159,7 +152,6 @@ class DiscoveryPropagationLimiter(ABC):
     @abstractmethod
     def commit(self, record: DiscoveryRecord, *, at: datetime) -> None:
         ...
-
 
 @dataclass
 class InMemoryDiscoveryPropagationLimiter(DiscoveryPropagationLimiter):
@@ -221,11 +213,9 @@ class InMemoryDiscoveryPropagationLimiter(DiscoveryPropagationLimiter):
         queue.append(at.astimezone(UTC))
         self._trim(queue, at)
 
-
 # ---------------------------------------------------------------------
 # Composite gate
 # ---------------------------------------------------------------------
-
 
 @dataclass
 class DiscoveryAdmissionGate:

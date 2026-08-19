@@ -48,12 +48,11 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
-from verify_envelope import UUID_V7_RE
+from .verify_envelope import UUID_V7_RE
 
 
 class RevocationConvergenceError(ValueError):
     """Raised when convergence inputs violate v0 invariants."""
-
 
 @dataclass(frozen=True)
 class RevocationBroadcast:
@@ -96,7 +95,6 @@ class RevocationBroadcast:
                     f"node ids must be non-empty strings: {node!r}"
                 )
 
-
 class ConvergenceTracker(ABC):
     @abstractmethod
     def register_broadcast(self, broadcast: RevocationBroadcast) -> None:
@@ -113,7 +111,6 @@ class ConvergenceTracker(ABC):
     @abstractmethod
     def broadcast(self, jti: str) -> RevocationBroadcast | None:
         ...
-
 
 @dataclass
 class InMemoryConvergenceTracker(ConvergenceTracker):
@@ -163,17 +160,14 @@ class InMemoryConvergenceTracker(ConvergenceTracker):
     def broadcast(self, jti: str) -> RevocationBroadcast | None:
         return self._broadcasts.get(jti)
 
-
 # ---------------------------------------------------------------------
 # SLO evaluation
 # ---------------------------------------------------------------------
-
 
 class SLOStatus(StrEnum):
     MEETING = "meeting"     # coverage met within deadline
     PENDING = "pending"     # not yet met, but deadline hasn't passed
     MISSED = "missed"       # deadline passed without meeting coverage
-
 
 @dataclass(frozen=True)
 class SLOPolicy:
@@ -214,7 +208,6 @@ class SLOPolicy:
             self.fast_path_deadline if broadcast.fast_path else self.normal_deadline
         )
 
-
 @dataclass(frozen=True)
 class ConvergenceSnapshot:
     jti: str
@@ -226,7 +219,6 @@ class ConvergenceSnapshot:
     deadline: timedelta
     status: SLOStatus
     fast_path: bool
-
 
 def evaluate_slo(
     *,
@@ -288,7 +280,6 @@ def evaluate_slo(
         status=status,
         fast_path=broadcast.fast_path,
     )
-
 
 def pending_broadcasts(
     tracker: ConvergenceTracker,

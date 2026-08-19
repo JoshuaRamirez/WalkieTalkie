@@ -1,6 +1,5 @@
 import json
 import pathlib
-import sys
 import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -9,10 +8,8 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.asymmetric.rsa import generate_private_key as generate_rsa_private_key
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from trust_store import FileSystemTrustStore
-from verify_envelope import EnvelopeVerificationError
+from envelope.trust_store import FileSystemTrustStore
+from envelope.verify_envelope import EnvelopeVerificationError
 
 
 def _ed25519_pem() -> bytes:
@@ -22,14 +19,12 @@ def _ed25519_pem() -> bytes:
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
 
-
 def _rsa_pem() -> bytes:
     key = generate_rsa_private_key(public_exponent=65537, key_size=2048)
     return key.public_key().public_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
-
 
 class FileSystemTrustStoreTests(unittest.TestCase):
     def test_directory_lookup_returns_pem(self):
@@ -140,7 +135,6 @@ class FileSystemTrustStoreTests(unittest.TestCase):
             store = FileSystemTrustStore.from_manifest(manifest)
             with self.assertRaisesRegex(EnvelopeVerificationError, "key expired"):
                 store("kid-1")
-
 
 if __name__ == "__main__":
     unittest.main()

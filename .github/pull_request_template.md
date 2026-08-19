@@ -22,7 +22,7 @@ Fill in what applies; delete what doesn't. See CONTRIBUTING.md and CLAUDE.md.
 
 ## Checklist
 
-- [ ] All six test suites pass (`envelope`, `mesh`, `integrations/mcp`, `bridge`, `federation`, `workspace`) and `ruff check security-foundations` is clean.
+- [ ] The full suite passes (`python -m unittest discover -s security-foundations -p 'test_*.py'`) and `ruff check security-foundations` is clean.
 - [ ] New/changed behavior has deterministic, case-based tests in the style of the existing suites.
 - [ ] **Proof obligations:** a new safety invariant adds a `ProofObligation` entry (pointing at its backing test) in the same commit; a retired one deletes its entry. `test_every_obligation_resolves` still passes.
 - [ ] **Plan annotation:** a landed deliverable is marked `**Landed (v0):**` in the relevant `implementation-plan/phases/*.md`.

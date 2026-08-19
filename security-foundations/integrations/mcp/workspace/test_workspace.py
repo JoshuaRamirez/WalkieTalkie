@@ -2,17 +2,12 @@
 
 import pathlib
 import subprocess
-import sys
 import tempfile
 import time
 import unittest
 
-_HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE))
-sys.path.insert(0, str(_HERE.parents[2] / "mesh"))
-
-from watch import WorkspaceWatcher  # noqa: E402
-from workspace_server import (  # noqa: E402
+from integrations.mcp.workspace.watch import WorkspaceWatcher
+from integrations.mcp.workspace.workspace_server import (
     Visibility,
     WorkspaceServer,
     WorkspaceServerNode,
@@ -30,7 +25,6 @@ def _git_repo(tmp: pathlib.Path) -> pathlib.Path:
     subprocess.run(["git", "add", "."], **env_args)
     subprocess.run(["git", "commit", "-q", "-m", "add app"], **env_args)
     return repo
-
 
 class VisibilityTests(unittest.TestCase):
     def _server(self, repo, vis):
@@ -64,7 +58,6 @@ class VisibilityTests(unittest.TestCase):
             self.assertIn("app.py", s["changed_files"])
             # Names only — the actual change ('v2') is never exposed.
             self.assertNotIn("v2", str(s))
-
 
 class PermissionTests(unittest.TestCase):
     def _server(self, repo):
@@ -103,7 +96,6 @@ class PermissionTests(unittest.TestCase):
             watchers = {e["watcher"]: e["granted"] for e in log}
             self.assertTrue(watchers["alice"])
             self.assertFalse(watchers["mallory"])
-
 
 class DeliveryTests(unittest.TestCase):
     def test_watcher_pulls_over_the_mesh_and_denied_is_denied(self):
@@ -162,7 +154,6 @@ class DeliveryTests(unittest.TestCase):
                 self.assertIn("error", resp)
             finally:
                 alice.close()
-
 
 if __name__ == "__main__":
     unittest.main()

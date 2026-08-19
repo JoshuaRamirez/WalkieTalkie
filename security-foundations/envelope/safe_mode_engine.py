@@ -50,12 +50,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 
-from deny_reason import DenyReason
+from .deny_reason import DenyReason
 
 
 class SafeModeEngineError(ValueError):
     """Raised when engine inputs violate v0 invariants."""
-
 
 class SafeModeState(StrEnum):
     """Plan §4.2 global state semantics, ordered by severity."""
@@ -66,7 +65,6 @@ class SafeModeState(StrEnum):
     S3_QUARANTINE = "s3_quarantine"
     S4_LOCKDOWN = "s4_lockdown"
 
-
 _STATE_RANK = {
     SafeModeState.S0_NORMAL: 0,
     SafeModeState.S1_GUARDED: 1,
@@ -75,10 +73,8 @@ _STATE_RANK = {
     SafeModeState.S4_LOCKDOWN: 4,
 }
 
-
 def is_more_severe_state(a: SafeModeState, b: SafeModeState) -> bool:
     return _STATE_RANK[a] > _STATE_RANK[b]
-
 
 def max_state(states: Iterable[SafeModeState]) -> SafeModeState:
     best = SafeModeState.S0_NORMAL
@@ -86,7 +82,6 @@ def max_state(states: Iterable[SafeModeState]) -> SafeModeState:
         if _STATE_RANK[s] > _STATE_RANK[best]:
             best = s
     return best
-
 
 class TriggerCategory(StrEnum):
     """Plan §4.1 authority hierarchy, ordered by precedence.
@@ -102,7 +97,6 @@ class TriggerCategory(StrEnum):
     DATA_PROTECTION = "data_protection"
     AVAILABILITY = "availability"
 
-
 _CATEGORY_RANK = {
     TriggerCategory.AVAILABILITY: 0,
     TriggerCategory.DATA_PROTECTION: 1,
@@ -110,10 +104,8 @@ _CATEGORY_RANK = {
     TriggerCategory.CRYPTO_TRUST: 3,
 }
 
-
 def is_higher_authority(a: TriggerCategory, b: TriggerCategory) -> bool:
     return _CATEGORY_RANK[a] > _CATEGORY_RANK[b]
-
 
 class TriggerKind(StrEnum):
     """Plan §C1 trigger taxonomy."""
@@ -123,7 +115,6 @@ class TriggerKind(StrEnum):
     POLICY_ROLLBACK = "policy_rollback"
     REVOCATION_UNCERTAINTY = "revocation_uncertainty"
     ANOMALY_QUARANTINE = "anomaly_quarantine"
-
 
 # Default kind → state + category mapping derived from §4.1 / §4.2.
 # Operators can construct a Trigger with their own minimum_state /
@@ -151,11 +142,9 @@ _DEFAULT_TRIGGER_PROFILE: dict[TriggerKind, tuple[SafeModeState, TriggerCategory
     ),
 }
 
-
 def default_profile_for(kind: TriggerKind) -> tuple[SafeModeState, TriggerCategory]:
     """Return the (state, category) defaults for ``kind``."""
     return _DEFAULT_TRIGGER_PROFILE[kind]
-
 
 @dataclass(frozen=True)
 class Trigger:
@@ -191,7 +180,6 @@ class Trigger:
         if not isinstance(self.detail, str):
             raise SafeModeEngineError("detail must be a string")
 
-
 def trigger_for(
     kind: TriggerKind,
     *,
@@ -209,7 +197,6 @@ def trigger_for(
         observed_at=observed_at,
         detail=detail,
     )
-
 
 @dataclass(frozen=True)
 class DowngradeApproval:
@@ -241,7 +228,6 @@ class DowngradeApproval:
                 "issued_at must be a timezone-aware datetime"
             )
 
-
 @dataclass(frozen=True)
 class StateTransition:
     from_state: SafeModeState
@@ -250,7 +236,6 @@ class StateTransition:
     cause: str  # "trigger" | "clear" | "downgrade"
     active_kinds: tuple[TriggerKind, ...]
     detail: str = ""
-
 
 @dataclass
 class SafeModeEngine:
@@ -397,7 +382,6 @@ class SafeModeEngine:
             active_kinds=tuple(self._active.keys()),
             detail=detail,
         )
-
 
 def require_authorized_downgrade(
     engine: SafeModeEngine,

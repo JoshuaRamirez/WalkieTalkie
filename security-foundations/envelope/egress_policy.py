@@ -53,9 +53,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
 
-from data_classification import DataClass
-from deny_reason import DenyReason
-from output_scanning import RiskLevel
+from .data_classification import DataClass
+from .deny_reason import DenyReason
+from .output_scanning import RiskLevel
 
 
 class EgressAction(StrEnum):
@@ -63,13 +63,11 @@ class EgressAction(StrEnum):
     QUARANTINE = "quarantine"
     DENY = "deny"
 
-
 @dataclass(frozen=True)
 class EgressDecision:
     action: EgressAction
     reason: str
     reason_code: str = ""
-
 
 @dataclass(frozen=True)
 class EgressMatrixCell:
@@ -85,7 +83,6 @@ class EgressMatrixCell:
         if not isinstance(self.action, EgressAction):
             raise ValueError(f"action must be an EgressAction: {self.action!r}")
 
-
 class EgressPolicy(ABC):
     @abstractmethod
     def evaluate(
@@ -95,7 +92,6 @@ class EgressPolicy(ABC):
         data_class: DataClass,
     ) -> EgressDecision:
         ...
-
 
 @dataclass(frozen=True)
 class MatrixEgressPolicy(EgressPolicy):
@@ -184,14 +180,12 @@ class MatrixEgressPolicy(EgressPolicy):
             reason_code=DenyReason.EGRESS_NO_MATRIX_ENTRY.value,
         )
 
-
 class EgressError(ValueError):
     """Raised by :func:`require_egress` on non-ALLOW verdicts."""
 
     def __init__(self, decision: EgressDecision) -> None:
         super().__init__(decision.reason)
         self.decision = decision
-
 
 def require_egress(
     *,

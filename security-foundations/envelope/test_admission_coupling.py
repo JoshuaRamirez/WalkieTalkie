@@ -1,27 +1,22 @@
 """Tests for admission coupling (Phase 1 Track A A3)."""
 
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime, timedelta
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from admission_coupling import (
+from envelope.admission_coupling import (
     AdmissionDecision,
     AdmissionError,
     AdmissionPolicy,
     admit,
     require_admission,
 )
-from discovery_record import DiscoveryRecord
+from envelope.discovery_record import DiscoveryRecord
 
 _NOW = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
 _WORKLOAD_A = "spiffe://mesh.example/ns-a/svc"
 _WORKLOAD_B = "spiffe://mesh.example/ns-b/svc"
 _WORKLOAD_UNAPPROVED = "spiffe://mesh.example/ns-z/intruder"
 _ENDPOINTS = ("mesh://node.example.test:443",)
-
 
 def _record(workload_iss: str = _WORKLOAD_A, version: str = "v0") -> DiscoveryRecord:
     return DiscoveryRecord(
@@ -35,7 +30,6 @@ def _record(workload_iss: str = _WORKLOAD_A, version: str = "v0") -> DiscoveryRe
         expires_at=(_NOW + timedelta(minutes=10)).isoformat().replace("+00:00", "Z"),
         signature="signature-placeholder",  # admit() does NOT verify; caller does
     )
-
 
 class AdmissionPolicyConstructionTests(unittest.TestCase):
     def test_requires_frozenset_workloads(self):
@@ -59,7 +53,6 @@ class AdmissionPolicyConstructionTests(unittest.TestCase):
     def test_default_compatibility_matrix(self):
         p = AdmissionPolicy(allowed_workloads=frozenset({_WORKLOAD_A}))
         self.assertIn("v0", p.accepted_discovery_versions)
-
 
 class AdmitTests(unittest.TestCase):
     def setUp(self):
@@ -101,7 +94,6 @@ class AdmitTests(unittest.TestCase):
         self.assertFalse(d.admitted)
         self.assertIn("not in admission allowlist", d.reason)
 
-
 class RequireAdmissionTests(unittest.TestCase):
     def test_allows_silently_on_admission(self):
         policy = AdmissionPolicy(allowed_workloads=frozenset({_WORKLOAD_A}))
@@ -117,12 +109,11 @@ class RequireAdmissionTests(unittest.TestCase):
         self.assertIn("not in admission allowlist", str(ctx.exception))
         self.assertEqual(ctx.exception.decision.workload_iss, _WORKLOAD_UNAPPROVED)
 
-
 class AuditEmissionTests(unittest.TestCase):
     """Admission decisions emit one ``admission.evaluate`` event per call."""
 
     def _new_sink(self):
-        from audit import InMemoryAuditSink
+        from envelope.audit import InMemoryAuditSink
         return InMemoryAuditSink()
 
     def test_allow_event_on_admission(self):
@@ -158,7 +149,6 @@ class AuditEmissionTests(unittest.TestCase):
         # Deny event was still recorded.
         self.assertEqual(len(sink.events), 1)
         self.assertEqual(sink.events[0].outcome, "deny")
-
 
 if __name__ == "__main__":
     unittest.main()

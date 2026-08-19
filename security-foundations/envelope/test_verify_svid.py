@@ -1,14 +1,11 @@
 """Tests for SVID verification (Phase 5 Track A A2)."""
 
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime, timedelta
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from workload_ca import (
+
+from envelope.workload_ca import (
     SvidVerificationError,
     WorkloadCA,
     verify_svid,
@@ -18,17 +15,14 @@ _NOW = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
 _TRUST_DOMAIN = "mesh.example"
 _SPIFFE = "spiffe://mesh.example/ns-a/agent-1"
 
-
 def _ca() -> WorkloadCA:
     return WorkloadCA(trust_domain=_TRUST_DOMAIN, root_key=Ed25519PrivateKey.generate())
-
 
 def _issue(ca: WorkloadCA, *, spiffe=_SPIFFE, now=_NOW, ttl=timedelta(hours=1)):
     leaf = Ed25519PrivateKey.generate()
     return ca.issue_svid(
         spiffe_id=spiffe, public_key=leaf.public_key(), now=now, ttl=ttl
     )
-
 
 class HappyPathTests(unittest.TestCase):
     def test_valid_svid_verifies_and_returns_id(self):
@@ -53,7 +47,6 @@ class HappyPathTests(unittest.TestCase):
         cert = _issue(ca, ttl=timedelta(hours=2))
         # 30 min in — still valid.
         verify_svid(cert, root_cert=ca.root_cert, current=_NOW + timedelta(minutes=30))
-
 
 class SignatureTests(unittest.TestCase):
     def test_wrong_root_distinct_name_rejected_as_untrusted(self):
@@ -91,7 +84,6 @@ class SignatureTests(unittest.TestCase):
             verify_svid(cert, root_cert=ca_b.root_cert, current=_NOW)
         self.assertEqual(ctx.exception.reason_code, "svid_signature_invalid")
 
-
 class TimeWindowTests(unittest.TestCase):
     def test_expired_rejected(self):
         ca = _ca()
@@ -109,7 +101,6 @@ class TimeWindowTests(unittest.TestCase):
             verify_svid(cert, root_cert=ca.root_cert, current=_NOW)
         self.assertEqual(ctx.exception.reason_code, "svid_not_yet_valid")
 
-
 class BindingTests(unittest.TestCase):
     def test_expected_mismatch_rejected(self):
         ca = _ca()
@@ -123,7 +114,6 @@ class BindingTests(unittest.TestCase):
             )
         self.assertEqual(ctx.exception.reason_code, "svid_spiffe_mismatch")
 
-
 class KeyUsageTests(unittest.TestCase):
     def test_root_cert_as_leaf_rejected_on_key_usage(self):
         # The root has key_cert_sign set and no SAN — feeding it as a
@@ -133,7 +123,6 @@ class KeyUsageTests(unittest.TestCase):
         with self.assertRaises(SvidVerificationError):
             verify_svid(ca.root_cert, root_cert=ca.root_cert, current=_NOW)
 
-
 class InputValidationTests(unittest.TestCase):
     def test_naive_current_rejected(self):
         ca = _ca()
@@ -141,7 +130,6 @@ class InputValidationTests(unittest.TestCase):
         with self.assertRaises(SvidVerificationError) as ctx:
             verify_svid(cert, root_cert=ca.root_cert, current=datetime(2026, 4, 14, 12))
         self.assertEqual(ctx.exception.reason_code, "svid_malformed")
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -24,15 +24,11 @@ non-base64 ``payload_b64`` were silently *accepted*.
 """
 
 import json
-import pathlib
-import sys
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from membership import MAX_NODE_ID_LEN, MemberState, SwimMembership
-from routing import RoutedMessage
-from transport import Frame, Transport, TransportError
+from mesh.membership import MAX_NODE_ID_LEN, MemberState, SwimMembership
+from mesh.routing import RoutedMessage
+from mesh.transport import Frame, Transport, TransportError
 
 
 class _ReplayTransport(Transport):
@@ -56,10 +52,8 @@ class _ReplayTransport(Transport):
     def close(self):
         pass
 
-
 def _encode(obj) -> bytes:
     return obj if isinstance(obj, bytes) else json.dumps(obj).encode("utf-8")
-
 
 class GossipFrameTests(unittest.TestCase):
     """A malformed gossip frame is skipped; the tick survives."""
@@ -132,7 +126,6 @@ class GossipFrameTests(unittest.TestCase):
         self.assertEqual(node.members["peer-2"].incarnation, 3)
         # A ping is acked back to the sender.
         self.assertTrue(any(dest == "peer-1" for dest, _ in transport.sent))
-
 
 class RoutedMessageDecodeTests(unittest.TestCase):
     """A malformed routed frame denies as TransportError, never a raw error."""
@@ -218,7 +211,6 @@ class RoutedMessageDecodeTests(unittest.TestCase):
             with self.subTest(**kwargs):
                 with self.assertRaises(TransportError):
                     RoutedMessage(**kwargs)
-
 
 if __name__ == "__main__":
     unittest.main()

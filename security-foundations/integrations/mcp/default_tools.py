@@ -1,9 +1,12 @@
-"""Demo tool handlers for the example MCP host (Phase 4).
+"""Default tool handlers for the example MCP host (Phase 4).
 
 These are placeholder stand-ins so the example host has something to
 dispatch. Operators replace ``DEMO_TOOLS`` with their real MCP tool
 handlers. Keeping them out of ``host.py`` keeps the host module
 focused on the substrate pipeline (and under its 500-line ceiling).
+
+This module ships in the wheel: ``integrations.mcp.host`` imports it
+unconditionally. Standalone ``demo_*.py`` scripts stay excluded.
 
 Each handler is a pure function ``dict -> dict`` with no I/O.
 """
@@ -34,6 +37,5 @@ DEMO_TOOLS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "read_file": tool_read_file,
     "exec_sql": tool_exec_sql,
 }
-
 
 __all__ = ["DEMO_TOOLS", "tool_exec_sql", "tool_read_file"]

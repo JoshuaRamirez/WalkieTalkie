@@ -23,31 +23,25 @@ identical either way).
 """
 
 import hashlib
-import pathlib
-import sys
 import time
 import unittest
 from datetime import UTC, datetime, timedelta
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-sys.path.insert(
-    0, str(pathlib.Path(__file__).resolve().parent.parent / "envelope")
-)
-sys.path.insert(
-    0,
-    str(
-        pathlib.Path(__file__).resolve().parent.parent / "integrations" / "mcp"
-    ),
-)
-
 import jcs
-from audit import InMemoryAuditSink, verify_chain
-from capability_issuer import CapabilityIssuer
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from discovery_record import DiscoveryRecord, sign_record
-from eclipse_resistance import DiversityRule
-from envelope_adapter import (
+
+from envelope.audit import InMemoryAuditSink, verify_chain
+from envelope.capability_issuer import CapabilityIssuer
+from envelope.discovery_record import DiscoveryRecord, sign_record
+from envelope.eclipse_resistance import DiversityRule
+from envelope.peer_admission import AdmissionRule, PeerAdmissionPolicy
+from envelope.verify_envelope import (
+    EnvelopeVerificationError,
+    InMemoryReplayCache,
+    verify_envelope,
+)
+from integrations.mcp.envelope_adapter import (
     EnvelopeFields,
     MCPRequest,
     MCPResponse,
@@ -58,15 +52,9 @@ from envelope_adapter import (
     mcp_response_to_payload,
     sign_envelope,
 )
-from node import MeshNode, MeshNodeError
-from peer_admission import AdmissionRule, PeerAdmissionPolicy
-from socket_transport import LocalSocketTransport
-from transport import InMemoryTransport, Switchboard
-from verify_envelope import (
-    EnvelopeVerificationError,
-    InMemoryReplayCache,
-    verify_envelope,
-)
+from mesh.node import MeshNode, MeshNodeError
+from mesh.socket_transport import LocalSocketTransport
+from mesh.transport import InMemoryTransport, Switchboard
 
 _NOW = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
 _A = "spiffe://mesh.example/ns-a/agent-a"
@@ -76,13 +64,11 @@ _B_KID = "kid-b"
 _ISSUER = "spiffe://mesh.example/ns-iss/issuer-1"
 _ISSUER_KID = "issuer-kid-1"
 
-
 def _pem(priv):
     return priv.public_key().public_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
-
 
 class _Fabric:
     """Wires two full mesh nodes over a shared in-memory switchboard."""
@@ -187,7 +173,6 @@ class _Fabric:
             ttl=timedelta(minutes=5),
         )
         return sign_envelope(build_envelope(payload=payload, fields=fields), signing_key)
-
 
 class RoundTripTests(unittest.TestCase):
     def test_two_node_signed_round_trip(self):
@@ -301,7 +286,6 @@ class RoundTripTests(unittest.TestCase):
                 replay_cache=fab.b_replay, now=_NOW, audit_sink=fab.b_audit,
             )
 
-
 class LocalSocketTransportTests(unittest.TestCase):
     def _await_frame(self, transport, timeout=2.0):
         deadline = time.monotonic() + timeout
@@ -355,7 +339,6 @@ class LocalSocketTransportTests(unittest.TestCase):
         finally:
             a.close()
             b.close()
-
 
 if __name__ == "__main__":
     unittest.main()

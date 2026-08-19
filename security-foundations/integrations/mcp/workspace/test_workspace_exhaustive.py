@@ -20,19 +20,13 @@ Guarantees under test:
 import json
 import pathlib
 import subprocess
-import sys
 import tempfile
 import threading
 import unittest
 from datetime import UTC, datetime
 
-_HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE))
-sys.path.insert(0, str(_HERE.parents[2] / "mesh"))
-sys.path.insert(0, str(_HERE.parents[2] / "envelope"))
-
-from watch import WorkspaceWatcher  # noqa: E402
-from workspace_server import (  # noqa: E402
+from integrations.mcp.workspace.watch import WorkspaceWatcher
+from integrations.mcp.workspace.workspace_server import (
     Visibility,
     WorkspaceServer,
     WorkspaceServerNode,
@@ -41,7 +35,6 @@ from workspace_server import (  # noqa: E402
 
 def _run(cwd, *args):
     subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True)
-
 
 def _repo(tmp: pathlib.Path, name="repo", *, commit=True) -> pathlib.Path:
     repo = tmp / name
@@ -55,13 +48,11 @@ def _repo(tmp: pathlib.Path, name="repo", *, commit=True) -> pathlib.Path:
         _run(repo, "commit", "-q", "-m", "initial")
     return repo
 
-
 def _server(repo, **kw):
     kw.setdefault("name", "feat")
     kw.setdefault("allow", {"alice"})
     kw.setdefault("note", "note")
     return WorkspaceServer(workspace=repo, **kw)
-
 
 # --- 1. Bounded surface ----------------------------------------------------
 class BoundedSurfaceTests(unittest.TestCase):
@@ -100,7 +91,6 @@ class BoundedSurfaceTests(unittest.TestCase):
             self.assertNotIn("leak_marker_42", json.dumps(status))
             self.assertIn("app.py", status["changed_files"])
 
-
 # --- 2. Workspace boundary -------------------------------------------------
 class WorkspaceBoundaryTests(unittest.TestCase):
     def test_only_configured_repo_is_read(self):
@@ -133,7 +123,6 @@ class WorkspaceBoundaryTests(unittest.TestCase):
             files = srv.build_status()["changed_files"]
             self.assertIn("new_secret.txt", files)
             self.assertNotIn("PLAINTEXT SECRET", json.dumps(files))
-
 
 # --- 3. Visibility gating --------------------------------------------------
 class VisibilityGatingTests(unittest.TestCase):
@@ -174,7 +163,6 @@ class VisibilityGatingTests(unittest.TestCase):
                 "summary",
             )
 
-
 # --- 4. Deny-by-default ----------------------------------------------------
 class DenyByDefaultTests(unittest.TestCase):
     def _s(self, repo, allow):
@@ -210,7 +198,6 @@ class DenyByDefaultTests(unittest.TestCase):
             self.assertIn("result", srv.handle_request("alice", "get_status"))
             srv.allow.discard("alice")  # revoke
             self.assertTrue(srv.handle_request("alice", "get_status").get("denied"))
-
 
 # --- 5. Transparency (reciprocal access log) -------------------------------
 class TransparencyTests(unittest.TestCase):
@@ -249,7 +236,6 @@ class TransparencyTests(unittest.TestCase):
                 srv.handle_request("alice", "get_status")
             self.assertEqual(len(srv.who_is_watching()), 5)
 
-
 # --- 6. Identity binding (spoof resistance) --------------------------------
 class IdentityBindingTests(unittest.TestCase):
     def test_verified_identity_overrides_spoofed_claim(self):
@@ -273,8 +259,9 @@ class IdentityBindingTests(unittest.TestCase):
         # Capstone: over real mTLS, the server authorizes on the SVID from the
         # handshake — a watcher CANNOT spoof another's id by lying in the body.
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-        from tls_transport import TlsSocketTransport, mint_identity
-        from workload_ca import WorkloadCA
+
+        from envelope.workload_ca import WorkloadCA
+        from mesh.tls_transport import TlsSocketTransport, mint_identity
 
         with tempfile.TemporaryDirectory() as td:
             tmp = pathlib.Path(td)
@@ -315,7 +302,6 @@ class IdentityBindingTests(unittest.TestCase):
                 mallory.close()
                 node.close()
 
-
 # --- 7. Off means invisible ------------------------------------------------
 class OffMeansInvisibleTests(unittest.TestCase):
     def test_unpublished_workspace_errors(self):
@@ -343,7 +329,6 @@ class OffMeansInvisibleTests(unittest.TestCase):
                 self.assertIn("error", resp)
             finally:
                 w.close()
-
 
 # --- 8. Change detection ---------------------------------------------------
 class ChangeDetectionTests(unittest.TestCase):
@@ -393,7 +378,6 @@ class ChangeDetectionTests(unittest.TestCase):
                 self.assertFalse(w.check("feat")[0])   # error, not news
             finally:
                 w.close()
-
 
 # --- 9. Delivery robustness ------------------------------------------------
 class DeliveryRobustnessTests(unittest.TestCase):
@@ -461,7 +445,6 @@ class DeliveryRobustnessTests(unittest.TestCase):
             finally:
                 w.close()
 
-
 # --- 10. Git edge cases ----------------------------------------------------
 class GitEdgeTests(unittest.TestCase):
     def test_empty_repo_no_commits(self):
@@ -484,7 +467,6 @@ class GitEdgeTests(unittest.TestCase):
             status = _server(repo, visibility=Visibility.DETAILED).build_status()
             self.assertIn("notes.md", status["changed_files"])
             self.assertNotIn("PRIVATE BRAINSTORM", json.dumps(status))
-
 
 if __name__ == "__main__":
     unittest.main()

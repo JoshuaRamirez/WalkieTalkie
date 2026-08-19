@@ -1,17 +1,13 @@
 import json
 import pathlib
-import sys
 import tempfile
 import unittest
 from datetime import UTC, datetime
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from revocation_list import FileBackedRevocationList, InMemoryRevocationList
+from envelope.revocation_list import FileBackedRevocationList, InMemoryRevocationList
 
 _VALID_JTI_1 = "0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c1"
 _VALID_JTI_2 = "0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c2"
-
 
 class InMemoryRevocationListTests(unittest.TestCase):
     def test_unknown_jti_not_revoked(self):
@@ -41,7 +37,6 @@ class InMemoryRevocationListTests(unittest.TestCase):
         rl.revoke(_VALID_JTI_1)
         rl.revoke(_VALID_JTI_1)
         self.assertTrue(rl.is_revoked(_VALID_JTI_1))
-
 
 class FileBackedRevocationListTests(unittest.TestCase):
     def test_round_trip(self):
@@ -119,7 +114,6 @@ class FileBackedRevocationListTests(unittest.TestCase):
             rl_b.revoke(_VALID_JTI_1)  # duplicate
 
             self.assertEqual(rl_a.integrity_hash(), rl_b.integrity_hash())
-
 
 if __name__ == "__main__":
     unittest.main()

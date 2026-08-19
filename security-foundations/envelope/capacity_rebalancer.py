@@ -56,12 +56,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from capacity_budgets import BudgetController, CapacityBudgetError
+from .capacity_budgets import BudgetController, CapacityBudgetError
 
 
 class RebalancerError(ValueError):
     """Raised when rebalancer inputs violate v0 invariants."""
-
 
 @dataclass(frozen=True)
 class PoolUtilization:
@@ -90,13 +89,11 @@ class PoolUtilization:
         pools."""
         return max(0, self.in_flight - self.ceiling)
 
-
 @dataclass(frozen=True)
 class RebalanceSignals:
     stressed: tuple[PoolUtilization, ...]
     slack: tuple[PoolUtilization, ...]
     cascading: bool
-
 
 @dataclass(frozen=True)
 class CeilingChange:
@@ -108,7 +105,6 @@ class CeilingChange:
     def delta(self) -> int:
         return self.new_ceiling - self.old_ceiling
 
-
 @dataclass(frozen=True)
 class RebalanceDecision:
     signals: RebalanceSignals
@@ -118,7 +114,6 @@ class RebalanceDecision:
     @property
     def is_noop(self) -> bool:
         return not self.changes
-
 
 @dataclass
 class CapacityRebalancer:
@@ -318,7 +313,6 @@ class CapacityRebalancer:
         if not decision.is_noop:
             self.apply(controller, decision)
         return decision
-
 
 def _pool_by_name(controller: BudgetController, name: str):
     for p in controller.pools:

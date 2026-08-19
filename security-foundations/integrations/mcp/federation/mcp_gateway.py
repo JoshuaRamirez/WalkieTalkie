@@ -27,19 +27,14 @@ import pathlib
 import sys
 import time
 
-_HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE.parents[2] / "mesh"))
-
-from socket_transport import LocalSocketTransport  # noqa: E402
+from mesh.socket_transport import LocalSocketTransport
 
 _PROTOCOL_FALLBACK = "2025-06-18"
 _CALL_TIMEOUT = 5.0
 _NS = "__"  # namespace separator: <server>__<tool>
 
-
 def _log(msg: str) -> None:
     print(f"[gateway] {msg}", file=sys.stderr, flush=True)
-
 
 class Gateway:
     """Discovers backends and routes calls. Not MCP-aware itself — the stdio
@@ -115,21 +110,16 @@ class Gateway:
     def close(self) -> None:
         self.transport.close()
 
-
 # --- MCP stdio adapter -----------------------------------------------------
-
 
 def _result(id_, result):
     return {"jsonrpc": "2.0", "id": id_, "result": result}
 
-
 def _error(id_, code, message):
     return {"jsonrpc": "2.0", "id": id_, "error": {"code": code, "message": message}}
 
-
 def _text(text: str, is_error: bool = False):
     return {"content": [{"type": "text", "text": text}], "isError": is_error}
-
 
 def _dispatch(gw: Gateway, params: dict) -> dict:
     name = params.get("name", "")
@@ -138,7 +128,6 @@ def _dispatch(gw: Gateway, params: dict) -> dict:
     if "error" in resp:
         return _text(f"error: {resp['error']}", True)
     return _text(json.dumps(resp.get("result"), indent=2))
-
 
 def serve_stdio(gw: Gateway) -> None:
     _log(f"federation gateway ready; registry={gw.registry}")
@@ -178,7 +167,6 @@ def serve_stdio(gw: Gateway) -> None:
         sys.stdout.write(json.dumps(reply) + "\n")
         sys.stdout.flush()
 
-
 def main() -> None:
     ap = argparse.ArgumentParser(description="MCP federation gateway")
     ap.add_argument("--registry", required=True, type=pathlib.Path)
@@ -188,7 +176,6 @@ def main() -> None:
         serve_stdio(gw)
     finally:
         gw.close()
-
 
 if __name__ == "__main__":
     main()

@@ -12,18 +12,15 @@ asserts they stay coherent with the verifier.
 """
 
 import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from discovery_record import (
+from envelope.discovery_record import (
     DiscoveryRecordError,
     from_json,
     verify_record,
 )
-from verify_envelope import EnvelopeVerificationError
+from envelope.verify_envelope import EnvelopeVerificationError
 
 _VECTOR_DIR = pathlib.Path(__file__).resolve().parent / "test-vectors"
 _ISSUER_PEM = (_VECTOR_DIR / "dev-issuer-1.pub.pem").read_bytes()
@@ -34,14 +31,12 @@ _ISSUER_KID = "dev-issuer-kid-1"
 # Verify at 2026-04-14T12:05:00Z so the window is comfortably open.
 _VERIFY_AT = datetime(2026, 4, 14, 12, 5, 0, tzinfo=UTC)
 
-
 def _issuer_lookup(iss: str, kid: str) -> bytes:
     if (iss, kid) != (_ISSUER_IDENTITY, _ISSUER_KID):
         raise EnvelopeVerificationError(
             f"unknown issuer: iss={iss!r}, kid={kid!r}"
         )
     return _ISSUER_PEM
-
 
 class ValidVectorTests(unittest.TestCase):
     def test_valid_vector_verifies_clean(self):
@@ -53,7 +48,6 @@ class ValidVectorTests(unittest.TestCase):
             issuer_lookup=_issuer_lookup,
             now=_VERIFY_AT,
         )
-
 
 class TamperedVectorTests(unittest.TestCase):
     def test_tampered_vector_fails_signature_check(self):
@@ -75,7 +69,6 @@ class TamperedVectorTests(unittest.TestCase):
         # valid one) — but the endpoints set differs.
         self.assertEqual(valid.signature, tampered.signature)
         self.assertNotEqual(valid.endpoints, tampered.endpoints)
-
 
 if __name__ == "__main__":
     unittest.main()

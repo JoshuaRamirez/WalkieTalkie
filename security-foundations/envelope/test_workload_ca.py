@@ -1,15 +1,12 @@
 """Tests for the workload CA (Phase 5 Track A A1)."""
 
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime, timedelta
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
 from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from workload_ca import (
+
+from envelope.workload_ca import (
     WorkloadCA,
     WorkloadCAError,
     svid_spiffe_id,
@@ -19,10 +16,8 @@ _NOW = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
 _TRUST_DOMAIN = "mesh.example"
 _SPIFFE = "spiffe://mesh.example/ns-a/agent-1"
 
-
 def _ca() -> WorkloadCA:
     return WorkloadCA(trust_domain=_TRUST_DOMAIN, root_key=Ed25519PrivateKey.generate())
-
 
 class CAConstructionTests(unittest.TestCase):
     def test_empty_trust_domain_rejected(self):
@@ -50,7 +45,6 @@ class CAConstructionTests(unittest.TestCase):
     def test_root_cert_is_cached(self):
         ca = _ca()
         self.assertIs(ca.root_cert, ca.root_cert)
-
 
 class IssuanceTests(unittest.TestCase):
     def test_issue_binds_spiffe_id_in_san(self):
@@ -157,7 +151,6 @@ class IssuanceTests(unittest.TestCase):
                 ttl=timedelta(0),
             )
 
-
 class SvidSpiffeIdTests(unittest.TestCase):
     def test_extracts_id(self):
         ca = _ca()
@@ -172,7 +165,6 @@ class SvidSpiffeIdTests(unittest.TestCase):
         ca = _ca()
         with self.assertRaisesRegex(WorkloadCAError, "SubjectAlternativeName"):
             svid_spiffe_id(ca.root_cert)
-
 
 if __name__ == "__main__":
     unittest.main()

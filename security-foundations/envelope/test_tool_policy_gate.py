@@ -2,16 +2,13 @@
 
 import dataclasses
 import hashlib
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from tool_policy_gate import (
+
+from envelope.tool_policy_gate import (
     RiskTier,
     StepUpAttestation,
     StepUpError,
@@ -26,7 +23,7 @@ from tool_policy_gate import (
     sign_step_up,
     to_json,
 )
-from verify_envelope import EnvelopeVerificationError
+from envelope.verify_envelope import EnvelopeVerificationError
 
 _NOW = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
 _NOW_TS = int(_NOW.timestamp())
@@ -38,7 +35,6 @@ _ARGS_DIGEST = hashlib.sha256(b"args").hexdigest()
 _OTHER_DIGEST = hashlib.sha256(b"other-args").hexdigest()
 _JTI = "01900000-0000-7000-8000-000000000001"
 
-
 def _make_keypair():
     priv = Ed25519PrivateKey.generate()
     pem = priv.public_key().public_bytes(
@@ -46,7 +42,6 @@ def _make_keypair():
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
     return priv, pem
-
 
 def _lookup(expected_iss: str, expected_kid: str, pem: bytes):
     def _f(iss: str, kid: str) -> bytes:
@@ -57,14 +52,11 @@ def _lookup(expected_iss: str, expected_kid: str, pem: bytes):
         return pem
     return _f
 
-
 def _empty_lookup(iss: str, kid: str) -> bytes:
     raise EnvelopeVerificationError("not found")
 
-
 def _call(tool: str = "read_file", *, caller: str = _CALLER, digest: str = _ARGS_DIGEST) -> ToolCall:
     return ToolCall(tool_name=tool, caller_iss=caller, arguments_digest=digest)
-
 
 def _unsigned_attestation(call: ToolCall, **overrides) -> StepUpAttestation:
     kwargs = dict(
@@ -80,7 +72,6 @@ def _unsigned_attestation(call: ToolCall, **overrides) -> StepUpAttestation:
     )
     kwargs.update(overrides)
     return StepUpAttestation(**kwargs)
-
 
 class ToolRuleTests(unittest.TestCase):
     def test_invalid_spiffe_in_allowlist_rejected(self):
@@ -113,13 +104,11 @@ class ToolRuleTests(unittest.TestCase):
         )
         self.assertFalse(rule2.effective_step_up_required)
 
-
 class ToolPolicyTests(unittest.TestCase):
     def test_duplicate_tool_name_rejected(self):
         a = ToolRule(tool_name="t", risk_tier=RiskTier.LOW)
         with self.assertRaisesRegex(ToolPolicyError, "duplicate"):
             ToolPolicy(rules=(a, a))
-
 
 class UnknownToolTests(unittest.TestCase):
     def test_unknown_tool_denied(self):
@@ -129,7 +118,6 @@ class UnknownToolTests(unittest.TestCase):
         )
         self.assertFalse(decision.allowed)
         self.assertEqual(decision.reason_code, "tool_unknown")
-
 
 class CallerAllowlistTests(unittest.TestCase):
     def test_empty_allowlist_means_any_caller(self):
@@ -172,7 +160,6 @@ class CallerAllowlistTests(unittest.TestCase):
         )
         self.assertTrue(decision.allowed)
 
-
 class StepUpHappyPathTests(unittest.TestCase):
     def setUp(self):
         self.priv, self.pem = _make_keypair()
@@ -200,7 +187,6 @@ class StepUpHappyPathTests(unittest.TestCase):
         )
         self.assertFalse(decision.allowed)
         self.assertEqual(decision.reason_code, "tool_step_up_required")
-
 
 class StepUpBindingTests(unittest.TestCase):
     def setUp(self):
@@ -255,7 +241,6 @@ class StepUpBindingTests(unittest.TestCase):
         )
         self.assertEqual(decision.reason_code, "tool_step_up_mismatch")
 
-
 class StepUpFreshnessTests(unittest.TestCase):
     def setUp(self):
         self.priv, self.pem = _make_keypair()
@@ -304,7 +289,6 @@ class StepUpFreshnessTests(unittest.TestCase):
         )
         self.assertEqual(decision.reason_code, "tool_step_up_expired")
 
-
 class StepUpSignatureTests(unittest.TestCase):
     def setUp(self):
         self.priv, self.pem = _make_keypair()
@@ -349,7 +333,6 @@ class StepUpSignatureTests(unittest.TestCase):
         )
         self.assertEqual(decision.reason_code, "tool_step_up_signature_invalid")
 
-
 class StepUpExplicitOverrideTests(unittest.TestCase):
     def test_low_risk_tool_with_step_up_required_demands_step_up(self):
         policy = ToolPolicy(
@@ -381,7 +364,6 @@ class StepUpExplicitOverrideTests(unittest.TestCase):
         )
         self.assertTrue(decision.allowed)
 
-
 class RequireToolCallTests(unittest.TestCase):
     def test_allow_returns_decision(self):
         policy = ToolPolicy(
@@ -396,7 +378,6 @@ class RequireToolCallTests(unittest.TestCase):
             require_tool_call(call=_call(), policy=policy, current=_NOW)
         self.assertEqual(ctx.exception.reason.value, "tool_unknown")
 
-
 class JsonRoundTripTests(unittest.TestCase):
     def test_round_trip(self):
         priv, _ = _make_keypair()
@@ -410,7 +391,6 @@ class JsonRoundTripTests(unittest.TestCase):
         with self.assertRaises(StepUpError) as ctx:
             from_json(b'{"tool_name": "x"}')
         self.assertEqual(ctx.exception.reason.value, "tool_step_up_malformed")
-
 
 if __name__ == "__main__":
     unittest.main()

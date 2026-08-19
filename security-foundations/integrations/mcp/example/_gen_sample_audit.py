@@ -17,36 +17,32 @@ from __future__ import annotations
 
 import hashlib
 import pathlib
-import sys
 from datetime import UTC, datetime, timedelta
 
 import jcs
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-_HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE.parent))
-sys.path.insert(0, str(_HERE.parent.parent.parent / "envelope"))
-
-from audit import AuditEvent, JsonlAuditSink  # noqa: E402
-from capability_issuer import CapabilityIssuer  # noqa: E402
-from data_classification import DataClass  # noqa: E402
-from egress_policy import EgressAction, EgressMatrixCell, MatrixEgressPolicy  # noqa: E402
-from envelope_adapter import (  # noqa: E402
+from envelope.audit import AuditEvent, JsonlAuditSink
+from envelope.capability_issuer import CapabilityIssuer
+from envelope.data_classification import DataClass
+from envelope.egress_policy import EgressAction, EgressMatrixCell, MatrixEgressPolicy
+from envelope.issuance_policy import AllowlistPolicy
+from envelope.issuer_trust_store import IssuerTrustStore
+from envelope.output_scanning import PatternRegistry, RiskLevel
+from envelope.tool_policy_gate import RiskTier, ToolPolicy, ToolRule
+from envelope.trust_store import FileSystemTrustStore
+from envelope.verify_envelope import InMemoryReplayCache
+from integrations.mcp.envelope_adapter import (
     EnvelopeFields,
     MCPRequest,
     build_envelope,
     mcp_request_to_payload,
     sign_envelope,
 )
-from host import ExampleMCPHost, HandleOptions, HostConfig  # noqa: E402
-from issuance_policy import AllowlistPolicy  # noqa: E402
-from issuer_trust_store import IssuerTrustStore  # noqa: E402
-from output_scanning import PatternRegistry, RiskLevel  # noqa: E402
-from tool_policy_gate import RiskTier, ToolPolicy, ToolRule  # noqa: E402
-from trust_store import FileSystemTrustStore  # noqa: E402
-from verify_envelope import InMemoryReplayCache  # noqa: E402
+from integrations.mcp.host import ExampleMCPHost, HandleOptions, HostConfig
 
+_HERE = pathlib.Path(__file__).resolve().parent
 _NOW = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
 _CLIENT_ISS = "spiffe://mesh.example/ns-client/agent-1"
 _CLIENT_KID = "client-kid-1"
@@ -55,13 +51,11 @@ _HOST_KID = "host-kid-1"
 _ISSUER_ISS = "spiffe://mesh.example/ns-iss/cap-issuer-1"
 _ISSUER_KID = "issuer-kid-1"
 
-
 def _load_priv(name: str) -> Ed25519PrivateKey:
     pem = (_HERE / f"{name}-priv.pem").read_bytes()
     key = serialization.load_pem_private_key(pem, password=None)
     assert isinstance(key, Ed25519PrivateKey)
     return key
-
 
 def main() -> None:
     client_priv = _load_priv("client")
@@ -177,7 +171,6 @@ def main() -> None:
     )
     host.handle(envelope, options=HandleOptions(now=_NOW))
     print(f"wrote {audit_path}")
-
 
 if __name__ == "__main__":
     main()

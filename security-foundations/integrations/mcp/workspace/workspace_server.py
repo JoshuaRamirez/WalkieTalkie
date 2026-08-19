@@ -46,10 +46,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 
-_HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE.parents[2] / "mesh"))
-
-from socket_transport import LocalSocketTransport  # noqa: E402
+from mesh.socket_transport import LocalSocketTransport
 
 
 class Visibility(StrEnum):
@@ -57,13 +54,11 @@ class Visibility(StrEnum):
     STANDARD = "standard"    # + recent commit subjects
     DETAILED = "detailed"    # + changed file names (never contents)
 
-
 @dataclass
 class AccessEvent:
     watcher: str
     when: str
     granted: bool
-
 
 @dataclass
 class WorkspaceServer:
@@ -153,7 +148,6 @@ class WorkspaceServer:
             for e in self.access_log
         ]
 
-
 class WorkspaceServerNode:
     """Wraps a WorkspaceServer with a mesh transport + serve loop.
 
@@ -216,12 +210,10 @@ class WorkspaceServerNode:
         with __import__("contextlib").suppress(OSError):
             (self.registry / f"workspace-{self.server.name}.json").unlink()
 
-
 def _load_note(note_path: pathlib.Path | None) -> str:
     if note_path and note_path.exists():
         return note_path.read_text().strip()
     return ""
-
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Read-only workspace status server")
@@ -252,7 +244,6 @@ def main() -> None:
         pass
     finally:
         node.close()
-
 
 if __name__ == "__main__":
     main()

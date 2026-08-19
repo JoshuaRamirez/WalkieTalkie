@@ -35,25 +35,28 @@ pointing at the smoke test").
 from __future__ import annotations
 
 import hashlib
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime, timedelta
 
 import jcs
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-sys.path.insert(
-    0, str(pathlib.Path(__file__).resolve().parent.parent.parent / "envelope")
+from envelope.audit import InMemoryAuditSink, verify_chain
+from envelope.capability_issuer import CapabilityIssuer
+from envelope.data_classification import DataClass
+from envelope.egress_policy import EgressAction, EgressMatrixCell, MatrixEgressPolicy
+from envelope.issuance_policy import AllowlistPolicy
+from envelope.output_scanning import PatternRegistry, RiskLevel
+from envelope.rate_limiter import IdentityRateLimiter
+from envelope.revocation_list import InMemoryRevocationList
+from envelope.tool_policy_gate import RiskTier, ToolPolicy, ToolRule
+from envelope.verify_envelope import (
+    EnvelopeVerificationError,
+    InMemoryReplayCache,
+    verify_envelope,
 )
-
-from audit import InMemoryAuditSink, verify_chain
-from capability_issuer import CapabilityIssuer
-from cryptography.hazmat.primitives import serialization
-from data_classification import DataClass
-from egress_policy import EgressAction, EgressMatrixCell, MatrixEgressPolicy
-from envelope_adapter import (
+from integrations.mcp.envelope_adapter import (
     EnvelopeFields,
     MCPRequest,
     build_envelope,
@@ -61,17 +64,7 @@ from envelope_adapter import (
     sign_envelope,
     unwrap_response,
 )
-from host import ExampleMCPHost, HandleOptions, HostConfig
-from issuance_policy import AllowlistPolicy
-from output_scanning import PatternRegistry, RiskLevel
-from rate_limiter import IdentityRateLimiter
-from revocation_list import InMemoryRevocationList
-from tool_policy_gate import RiskTier, ToolPolicy, ToolRule
-from verify_envelope import (
-    EnvelopeVerificationError,
-    InMemoryReplayCache,
-    verify_envelope,
-)
+from integrations.mcp.host import ExampleMCPHost, HandleOptions, HostConfig
 
 _NOW = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
 _CLIENT_ISS = "spiffe://mesh.example/ns-client/agent-1"
@@ -81,11 +74,9 @@ _HOST_KID = "host-kid-1"
 _ISSUER_ISS = "spiffe://mesh.example/ns-iss/cap-issuer-1"
 _ISSUER_KID = "issuer-kid-1"
 
-
 # ---------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------
-
 
 def _make_keypair():
     priv = Ed25519PrivateKey.generate()
@@ -94,7 +85,6 @@ def _make_keypair():
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
     return priv, pem
-
 
 class _Stage:
     """Bundles everything one smoke-test scenario needs: keypairs,
@@ -265,11 +255,9 @@ class _Stage:
         env = build_envelope(payload=payload, fields=fields)
         return sign_envelope(env, self.client_priv)
 
-
 # ---------------------------------------------------------------------
 # Happy path
 # ---------------------------------------------------------------------
-
 
 class HappyPathTests(unittest.TestCase):
     """The substrate-works-as-a-system test."""
@@ -323,11 +311,9 @@ class HappyPathTests(unittest.TestCase):
                     f"{event.event_type} expected allow, got {event.outcome}",
                 )
 
-
 # ---------------------------------------------------------------------
 # Sad path 1: missing capability token
 # ---------------------------------------------------------------------
-
 
 class MissingCapabilityTests(unittest.TestCase):
     def test_empty_capability_token_rejected_no_nonce_burned(self):
@@ -355,11 +341,9 @@ class MissingCapabilityTests(unittest.TestCase):
         # send was rejected before nonce reservation).
         self.assertFalse(stage.replay_cache.seen(_CLIENT_ISS, "client-nonce-sad00001"))
 
-
 # ---------------------------------------------------------------------
 # Sad path 2: tampered payload
 # ---------------------------------------------------------------------
-
 
 class TamperedPayloadTests(unittest.TestCase):
     def test_post_signing_payload_mutation_rejected(self):
@@ -384,11 +368,9 @@ class TamperedPayloadTests(unittest.TestCase):
         # The audit chain still validates even though we failed.
         verify_chain(stage.audit_sink.events)
 
-
 # ---------------------------------------------------------------------
 # Sad path 3: critical tool without step-up
 # ---------------------------------------------------------------------
-
 
 class CriticalToolWithoutStepUpTests(unittest.TestCase):
     def test_critical_tool_without_stepup_denied_at_tool_gate(self):
@@ -415,11 +397,9 @@ class CriticalToolWithoutStepUpTests(unittest.TestCase):
             tool_gate_events[-1].reason_code, "tool_step_up_required"
         )
 
-
 # ---------------------------------------------------------------------
 # Marquee: revoke-then-reject capability lifecycle
 # ---------------------------------------------------------------------
-
 
 class RevocationLifecycleTests(unittest.TestCase):
     """The substrate's headline claim, end-to-end: a capability that
@@ -495,11 +475,9 @@ class RevocationLifecycleTests(unittest.TestCase):
         reply = stage.host.handle(request, options=HandleOptions(now=_NOW))
         self.assertIsNone(unwrap_response(reply).error)
 
-
 # ---------------------------------------------------------------------
 # Rate-limit lifecycle (post-auth)
 # ---------------------------------------------------------------------
-
 
 class RateLimitLifecycleTests(unittest.TestCase):
     def _valid_request(self, stage, *, n: int) -> dict:
@@ -572,7 +550,6 @@ class RateLimitLifecycleTests(unittest.TestCase):
                 unwrap_response(reply).error,
                 f"victim request {i} should pass; allowance was not burned",
             )
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
-from verify_envelope import EnvelopeVerificationError
+from envelope.verify_envelope import EnvelopeVerificationError
 
 
 def request_id_from_envelope(envelope: dict[str, Any]) -> int | str | None:
@@ -22,11 +22,9 @@ def request_id_from_envelope(envelope: dict[str, Any]) -> int | str | None:
         return None
     return payload.get("id")
 
-
 def exc_reason_code(exc: EnvelopeVerificationError) -> str:
     """Return the machine-readable DenyReason value, or '' if absent."""
     return exc.reason.value if getattr(exc, "reason", None) is not None else ""
-
 
 def derive_reply_id(envelope: dict[str, Any]) -> str:
     """Derive a UUIDv7-shaped reply id deterministically from the inbound
@@ -40,12 +38,10 @@ def derive_reply_id(envelope: dict[str, Any]) -> str:
     head = base[:-12]
     return head + base[-12:][::-1]
 
-
 def derive_reply_nonce(envelope: dict[str, Any]) -> str:
     msg = envelope.get("message_id", "") if isinstance(envelope, dict) else ""
     digest = hashlib.sha256(f"reply::{msg}".encode()).hexdigest()
     return f"replynonce-{digest[:20]}"
-
 
 __all__ = [
     "derive_reply_id",

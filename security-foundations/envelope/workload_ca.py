@@ -49,13 +49,13 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 from cryptography.x509.oid import NameOID
-from deny_reason import DenyReason
-from verify_envelope import SPIFFE_ID_RE
+
+from .deny_reason import DenyReason
+from .verify_envelope import SPIFFE_ID_RE
 
 
 class WorkloadCAError(ValueError):
     """Raised when CA issuance inputs violate v0 invariants."""
-
 
 class SvidVerificationError(ValueError):
     """Raised when an SVID fails verification.
@@ -72,18 +72,15 @@ class SvidVerificationError(ValueError):
     def reason_code(self) -> str:
         return self.reason.value
 
-
 # A short default so an operator who forgets to set a lifetime still
 # gets the vision's "hours, not weeks" behavior rather than a stale
 # long-lived cert.
 _DEFAULT_SVID_TTL = timedelta(hours=1)
 
-
 def _spiffe_trust_domain(spiffe_id: str) -> str:
     # spiffe://<trust-domain>/<path...> — the authority component.
     without_scheme = spiffe_id[len("spiffe://") :]
     return without_scheme.split("/", 1)[0]
-
 
 @dataclass
 class WorkloadCA:
@@ -232,7 +229,6 @@ class WorkloadCA:
         )
         return builder.sign(self.root_key, None)
 
-
 def svid_spiffe_id(cert: x509.Certificate) -> str:
     """Extract the SPIFFE id from an SVID's URI SAN.
 
@@ -252,7 +248,6 @@ def svid_spiffe_id(cert: x509.Certificate) -> str:
             f"{len(spiffe_uris)}"
         )
     return spiffe_uris[0]
-
 
 def verify_svid(
     cert: x509.Certificate,

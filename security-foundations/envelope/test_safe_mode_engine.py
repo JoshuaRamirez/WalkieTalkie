@@ -1,13 +1,9 @@
 """Tests for the safe-mode engine (Phase 3 Track C C1+C2+C3)."""
 
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime, timedelta
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from safe_mode_engine import (
+from envelope.safe_mode_engine import (
     DowngradeApproval,
     SafeModeEngine,
     SafeModeEngineError,
@@ -23,7 +19,6 @@ from safe_mode_engine import (
 )
 
 _NOW = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
-
 
 class StateOrderingTests(unittest.TestCase):
     def test_severity_chain(self):
@@ -45,7 +40,6 @@ class StateOrderingTests(unittest.TestCase):
             SafeModeState.S4_LOCKDOWN,
         )
         self.assertEqual(max_state([]), SafeModeState.S0_NORMAL)
-
 
 class AuthorityHierarchyTests(unittest.TestCase):
     def test_crypto_trust_outranks_authorization(self):
@@ -69,7 +63,6 @@ class AuthorityHierarchyTests(unittest.TestCase):
             )
         )
 
-
 class TriggerValidationTests(unittest.TestCase):
     def test_normal_state_rejected(self):
         with self.assertRaisesRegex(SafeModeEngineError, "S0_NORMAL"):
@@ -90,7 +83,6 @@ class TriggerValidationTests(unittest.TestCase):
                 observed_at=datetime(2026, 4, 14, 12),
                 detail="x",
             )
-
 
 class ObserveTests(unittest.TestCase):
     def test_starts_at_s0(self):
@@ -154,7 +146,6 @@ class ObserveTests(unittest.TestCase):
         self.assertIsNotNone(elevated)
         self.assertEqual(engine.current, SafeModeState.S3_QUARANTINE)
 
-
 class ClearTests(unittest.TestCase):
     def test_clearing_last_trigger_returns_to_s0(self):
         engine = SafeModeEngine()
@@ -180,7 +171,6 @@ class ClearTests(unittest.TestCase):
         result = engine.clear(TriggerKind.POLICY_ROLLBACK, at=_NOW)
         self.assertIsNone(result)
         self.assertEqual(engine.current, SafeModeState.S0_NORMAL)
-
 
 class DowngradeTests(unittest.TestCase):
     def _approval(self, authority: TriggerCategory) -> DowngradeApproval:
@@ -250,7 +240,6 @@ class DowngradeTests(unittest.TestCase):
                 approval=self._approval(TriggerCategory.AUTHORIZATION),
             )
 
-
 class DeterminismTests(unittest.TestCase):
     """Track C acceptance: 'Compound failures always result in
     predictable state and logs.'"""
@@ -305,7 +294,6 @@ class DeterminismTests(unittest.TestCase):
             ],
         )
 
-
 class TransitionRecordTests(unittest.TestCase):
     def test_transition_captures_active_kinds_after_change(self):
         engine = SafeModeEngine()
@@ -325,7 +313,6 @@ class TransitionRecordTests(unittest.TestCase):
         self.assertEqual(transition.cause, "clear")
         self.assertEqual(transition.to_state, SafeModeState.S0_NORMAL)
         self.assertEqual(transition.active_kinds, ())
-
 
 if __name__ == "__main__":
     unittest.main()

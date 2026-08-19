@@ -44,11 +44,9 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 class MCPAdapterError(ValueError):
     """Raised when adapter inputs violate v0 invariants."""
 
-
 # JSON-RPC 2.0 carries either {jsonrpc, method, params?, id?} for a
 # request / notification, or {jsonrpc, id, result|error} for a
 # response. The adapter normalizes both shapes into dataclasses.
-
 
 @dataclass(frozen=True)
 class MCPRequest:
@@ -69,7 +67,6 @@ class MCPRequest:
             )
         if self.id is not None and not isinstance(self.id, (int, str)):
             raise MCPAdapterError(f"id must be int, str, or None: {self.id!r}")
-
 
 @dataclass(frozen=True)
 class MCPResponse:
@@ -99,11 +96,9 @@ class MCPResponse:
                     "error object must include 'code' and 'message'"
                 )
 
-
 # ---------------------------------------------------------------------
 # Payload <-> MCP message translation
 # ---------------------------------------------------------------------
-
 
 def mcp_request_to_payload(req: MCPRequest) -> dict[str, Any]:
     """Render a request into the dict that goes inside envelope.payload."""
@@ -116,7 +111,6 @@ def mcp_request_to_payload(req: MCPRequest) -> dict[str, Any]:
     if req.id is not None:
         payload["id"] = req.id
     return payload
-
 
 def payload_to_mcp_request(payload: dict[str, Any]) -> MCPRequest:
     """Parse an envelope.payload into an :class:`MCPRequest`.
@@ -138,7 +132,6 @@ def payload_to_mcp_request(payload: dict[str, Any]) -> MCPRequest:
         id=payload.get("id"),
     )
 
-
 def mcp_response_to_payload(resp: MCPResponse) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "jsonrpc": "2.0",
@@ -149,7 +142,6 @@ def mcp_response_to_payload(resp: MCPResponse) -> dict[str, Any]:
     else:
         payload["error"] = resp.error
     return payload
-
 
 def payload_to_mcp_response(payload: dict[str, Any]) -> MCPResponse:
     if not isinstance(payload, dict):
@@ -168,23 +160,18 @@ def payload_to_mcp_response(payload: dict[str, Any]) -> MCPResponse:
         error=payload.get("error"),
     )
 
-
 # ---------------------------------------------------------------------
 # Envelope build / sign
 # ---------------------------------------------------------------------
 
-
 def _rfc3339(when: datetime) -> str:
     return when.astimezone(UTC).isoformat().replace("+00:00", "Z")
-
 
 def _sha256_jcs(obj: Any) -> str:
     return hashlib.sha256(jcs.canonicalize(obj)).hexdigest()
 
-
 def _b64u(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
 
 @dataclass(frozen=True)
 class EnvelopeFields:
@@ -219,7 +206,6 @@ class EnvelopeFields:
         if not isinstance(self.ttl, timedelta) or self.ttl <= timedelta(0):
             raise MCPAdapterError("ttl must be a positive timedelta")
 
-
 def build_envelope(
     *,
     payload: dict[str, Any],
@@ -250,7 +236,6 @@ def build_envelope(
     }
     return envelope
 
-
 def sign_envelope(
     envelope: dict[str, Any], signing_key: Ed25519PrivateKey
 ) -> dict[str, Any]:
@@ -267,31 +252,25 @@ def sign_envelope(
     sig = _b64u(signing_key.sign(signing_input))
     return {**envelope, "signature": sig}
 
-
 # ---------------------------------------------------------------------
 # Unwrap path (after verify_envelope.verify_envelope succeeds)
 # ---------------------------------------------------------------------
-
 
 def unwrap_request(envelope: dict[str, Any]) -> MCPRequest:
     """Pull an :class:`MCPRequest` out of a verified envelope."""
     return payload_to_mcp_request(envelope["payload"])
 
-
 def unwrap_response(envelope: dict[str, Any]) -> MCPResponse:
     return payload_to_mcp_response(envelope["payload"])
-
 
 # ---------------------------------------------------------------------
 # JSON helpers (operators send/receive envelopes as bytes)
 # ---------------------------------------------------------------------
 
-
 def envelope_to_json(envelope: dict[str, Any]) -> bytes:
     return json.dumps(envelope, separators=(",", ":"), sort_keys=True).encode(
         "utf-8"
     )
-
 
 def envelope_from_json(data: bytes) -> dict[str, Any]:
     try:
@@ -301,7 +280,6 @@ def envelope_from_json(data: bytes) -> dict[str, Any]:
     if not isinstance(obj, dict):
         raise MCPAdapterError("envelope JSON must be an object")
     return obj
-
 
 __all__ = [
     "EnvelopeFields",

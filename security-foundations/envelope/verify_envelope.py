@@ -14,12 +14,13 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import jcs
-from audit import AuditSink
-from deny_reason import DenyReason
+
+from .audit import AuditSink
+from .deny_reason import DenyReason
 
 if TYPE_CHECKING:
-    from capability_token import CapabilityClaims
-    from revocation_list import RevocationList
+    from .capability_token import CapabilityClaims
+    from .revocation_list import RevocationList
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -34,7 +35,6 @@ KID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 HEX_SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 
 ALLOWED_ALGORITHMS = {"Ed25519"}
-
 
 class EnvelopeVerificationError(ValueError):
     """Raised when envelope verification fails.
@@ -53,7 +53,6 @@ class EnvelopeVerificationError(ValueError):
     def reason_code(self) -> str:
         return self.reason.value if self.reason is not None else ""
 
-
 @dataclass(frozen=True)
 class VerificationConfig:
     max_clock_skew: timedelta = timedelta(seconds=60)
@@ -67,9 +66,7 @@ class VerificationConfig:
     # payload and far below the interpreter's limit.
     max_json_depth: int = 64
 
-
 DEFAULT_CONFIG = VerificationConfig()
-
 
 class ReplayCache(ABC):
     """Minimal replay cache interface.
@@ -135,7 +132,6 @@ class ReplayCache(ABC):
         """
         ...
 
-
 class InMemoryReplayCache(ReplayCache):
     def __init__(self) -> None:
         self._entries: dict[tuple[str, str], datetime] = {}
@@ -166,7 +162,6 @@ class InMemoryReplayCache(ReplayCache):
                 return False
             self._entries[key] = now + ttl
             return True
-
 
 class SQLiteReplayCache(ReplayCache):
     """SQLite-backed replay cache for cross-process nonce replay protection."""
@@ -228,7 +223,6 @@ class SQLiteReplayCache(ReplayCache):
             )
             return cur.rowcount == 1
 
-
 def parse_rfc3339(value: str) -> datetime:
     if not isinstance(value, str):
         raise EnvelopeVerificationError(
@@ -247,9 +241,7 @@ def parse_rfc3339(value: str) -> datetime:
         )
     return dt.astimezone(UTC)
 
-
 AUDIT_FIELD_MAX_LEN = 256
-
 
 def audit_safe(value: Any, *, max_len: int = AUDIT_FIELD_MAX_LEN) -> str:
     """Coerce an unvalidated envelope field into something safe to audit.
@@ -277,7 +269,6 @@ def audit_safe(value: Any, *, max_len: int = AUDIT_FIELD_MAX_LEN) -> str:
     if len(value) > max_len:
         return value[:max_len] + "…<truncated>"
     return value
-
 
 def check_json_depth(value: Any, max_depth: int) -> None:
     """Reject structures nested deeper than ``max_depth``.
@@ -311,7 +302,6 @@ def check_json_depth(value: Any, max_depth: int) -> None:
             if isinstance(child, (dict, list))
         )
 
-
 def _canonical_json(value: Any) -> bytes:
     """Canonicalize to JCS bytes, converting encoder failures into denials.
 
@@ -337,10 +327,8 @@ def _canonical_json(value: Any) -> bytes:
             reason=DenyReason.ENVELOPE_NOT_CANONICALIZABLE,
         ) from exc
 
-
 def _digest_payload(payload: Any) -> str:
     return hashlib.sha256(_canonical_json(payload)).hexdigest()
-
 
 def canonicalize_envelope_for_signing(envelope: dict[str, Any]) -> bytes:
     if "signature" not in envelope:
@@ -349,7 +337,6 @@ def canonicalize_envelope_for_signing(envelope: dict[str, Any]) -> bytes:
         )
     unsigned = {k: v for k, v in envelope.items() if k != "signature"}
     return _canonical_json(unsigned)
-
 
 def decode_base64url(value: str) -> bytes:
     if not isinstance(value, str) or not value:
@@ -365,7 +352,6 @@ def decode_base64url(value: str) -> bytes:
             "invalid signature encoding", reason=DenyReason.SIGNATURE_ENCODING_INVALID
         ) from exc
 
-
 def load_ed25519_public_key(public_key_pem: bytes) -> Ed25519PublicKey:
     try:
         key = serialization.load_pem_public_key(public_key_pem)
@@ -379,7 +365,6 @@ def load_ed25519_public_key(public_key_pem: bytes) -> Ed25519PublicKey:
         )
     return key
 
-
 def _verify_ed25519_signature(signing_input: bytes, signature: str, public_key_pem: bytes) -> bool:
     sig_bytes = decode_base64url(signature)
     key = load_ed25519_public_key(public_key_pem)
@@ -388,7 +373,6 @@ def _verify_ed25519_signature(signing_input: bytes, signature: str, public_key_p
     except InvalidSignature:
         return False
     return True
-
 
 def _validate_static_fields(envelope: dict[str, Any]) -> None:
     # Every field below is matched against a regex or a membership test,
@@ -447,7 +431,6 @@ def _validate_static_fields(envelope: dict[str, Any]) -> None:
             "algorithm not allowed", reason=DenyReason.DISALLOWED_ALGORITHM
         )
 
-
 def verify_envelope(
     envelope: dict[str, Any],
     *,
@@ -460,7 +443,7 @@ def verify_envelope(
     revocation_list: RevocationList | None = None,
 ) -> CapabilityClaims:
     # Deferred to avoid circular import (capability_token imports from this module).
-    from capability_token import verify_capability_token
+    from .capability_token import verify_capability_token
 
     _raw = envelope if isinstance(envelope, dict) else {}
     audit_ctx = {

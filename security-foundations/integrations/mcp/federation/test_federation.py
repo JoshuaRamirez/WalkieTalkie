@@ -14,15 +14,11 @@ import sys
 import tempfile
 import unittest
 
+from integrations.mcp.federation.mcp_gateway import Gateway
+from integrations.mcp.federation.tool_server import DEPLOY_TOOLS, REPO_TOOLS, ToolServer
+
 _HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE))
-sys.path.insert(0, str(_HERE.parents[2] / "mesh"))
-
-from mcp_gateway import Gateway  # noqa: E402
-from tool_server import DEPLOY_TOOLS, REPO_TOOLS, ToolServer  # noqa: E402
-
 _GATEWAY = _HERE / "mcp_gateway.py"
-
 
 class FederationLogicTests(unittest.TestCase):
     def test_gateway_federates_and_routes(self):
@@ -79,7 +75,6 @@ class FederationLogicTests(unittest.TestCase):
             finally:
                 gw.close()
 
-
 class McpProtocolTests(unittest.TestCase):
     def test_client_drives_gateway_over_stdio(self):
         with tempfile.TemporaryDirectory() as td:
@@ -134,7 +129,6 @@ class McpProtocolTests(unittest.TestCase):
                 proc.wait(timeout=5)
                 repo.close()
                 deploy.close()
-
 
 if __name__ == "__main__":
     unittest.main()

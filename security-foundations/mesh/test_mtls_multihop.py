@@ -13,28 +13,20 @@ without being able to make C accept them *as if from B* — and if B
 tampers with the opaque payload, C's envelope verification fails.
 """
 
-import pathlib
-import sys
 import time
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "envelope"))
-sys.path.insert(
-    0, str(pathlib.Path(__file__).resolve().parent.parent / "integrations" / "mcp")
-)
-
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from envelope_adapter import envelope_from_json, envelope_to_json
-from routing import RoutedMessage, Router
-from test_mesh_round_trip import _A, _A_KID, _B, _B_KID, _NOW, _Fabric
-from tls_transport import TlsSocketTransport, mint_identity
-from verify_envelope import EnvelopeVerificationError, verify_envelope
-from workload_ca import WorkloadCA
+
+from envelope.verify_envelope import EnvelopeVerificationError, verify_envelope
+from envelope.workload_ca import WorkloadCA
+from integrations.mcp.envelope_adapter import envelope_from_json, envelope_to_json
+from mesh.routing import RoutedMessage, Router
+from mesh.test_mesh_round_trip import _A, _A_KID, _B, _B_KID, _NOW, _Fabric
+from mesh.tls_transport import TlsSocketTransport, mint_identity
 
 _RELAY = "spiffe://mesh.example/ns-relay/relay"
 _DOMAIN = "mesh.example"
-
 
 class _RelayNode:
     """Ties a TLS transport to a Router: drains inbound frames, and either
@@ -64,7 +56,6 @@ class _RelayNode:
             elif dec.action == "forward":
                 self.transport.send(self.addr_of[dec.next_hop], dec.forwarded.to_json())
 
-
 def _pump_until(nodes, node, count, tries=100):
     for _ in range(tries):
         for n in nodes:
@@ -72,7 +63,6 @@ def _pump_until(nodes, node, count, tries=100):
         if len(node.delivered) >= count:
             return
         time.sleep(0.02)
-
 
 class MultiHopRoundTripTests(unittest.TestCase):
     def _wire(self):
@@ -163,7 +153,6 @@ class MultiHopRoundTripTests(unittest.TestCase):
         finally:
             for n in (a, b, c):
                 n.transport.close()
-
 
 if __name__ == "__main__":
     unittest.main()

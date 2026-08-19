@@ -33,7 +33,6 @@ from dataclasses import dataclass, field
 class TransportError(ValueError):
     """Raised when transport inputs violate v0 invariants."""
 
-
 @dataclass(frozen=True)
 class Frame:
     """One unit crossing the transport: raw bytes plus the sender's
@@ -54,7 +53,6 @@ class Frame:
             # Snapshot it, same as RoutedMessage.
             object.__setattr__(self, "payload", bytes(self.payload))
 
-
 class Transport(ABC):
     """A single endpoint bound to a transport address."""
 
@@ -71,7 +69,6 @@ class Transport(ABC):
     def receive(self) -> Frame | None:
         """Return the next inbound :class:`Frame`, or None if the inbox
         is empty. Non-blocking."""
-
 
 @dataclass
 class Switchboard:
@@ -103,7 +100,6 @@ class Switchboard:
         if not mailbox:
             return None
         return mailbox.popleft()
-
 
 @dataclass
 class InMemoryTransport(Transport):

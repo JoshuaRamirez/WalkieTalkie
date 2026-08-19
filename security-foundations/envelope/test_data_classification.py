@@ -1,15 +1,11 @@
 """Tests for data classification + lineage (Phase 2 Track B B1)."""
 
 import hashlib
-import pathlib
-import sys
 import unittest
 from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from data_classification import (
+from envelope.data_classification import (
     ClassifiedData,
     DataClass,
     DataClassificationError,
@@ -27,7 +23,6 @@ _NOW = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
 _DIGEST_A = hashlib.sha256(b"a").hexdigest()
 _DIGEST_B = hashlib.sha256(b"b").hexdigest()
 _DIGEST_C = hashlib.sha256(b"c").hexdigest()
-
 
 class DataClassOrderingTests(unittest.TestCase):
     def test_more_restrictive_chain(self):
@@ -47,7 +42,6 @@ class DataClassOrderingTests(unittest.TestCase):
     def test_max_class_empty_rejected(self):
         with self.assertRaisesRegex(DataClassificationError, "at least one"):
             max_class([])
-
 
 class LineageTagValidationTests(unittest.TestCase):
     def _valid_kwargs(self, **overrides) -> dict:
@@ -79,7 +73,6 @@ class LineageTagValidationTests(unittest.TestCase):
     def test_non_hex_parent_digest(self):
         with self.assertRaisesRegex(DataClassificationError, "parent_digest"):
             LineageTag(**self._valid_kwargs(parent_digest="not-hex"))
-
 
 class ClassifyTests(unittest.TestCase):
     def test_classify_produces_single_link_lineage(self):
@@ -129,7 +122,6 @@ class ClassifyTests(unittest.TestCase):
                 metadata=(("source", "a"), ("source", "b")),
                 now=_NOW,
             )
-
 
 class DeriveTests(unittest.TestCase):
     def setUp(self):
@@ -222,7 +214,6 @@ class DeriveTests(unittest.TestCase):
         )
         self.assertNotEqual(cd1.chain_hash, cd2.chain_hash)
 
-
 class CombineTests(unittest.TestCase):
     def setUp(self):
         self.pub = classify(
@@ -304,7 +295,6 @@ class CombineTests(unittest.TestCase):
             merged_ba.lineage[-1].parent_digest,
         )
 
-
 class ClassifiedDataValidationTests(unittest.TestCase):
     def _tag(self) -> LineageTag:
         return LineageTag(
@@ -339,7 +329,6 @@ class ClassifiedDataValidationTests(unittest.TestCase):
                 lineage=(self._tag(),),
                 metadata=(("only-one-element",),),  # type: ignore[arg-type]
             )
-
 
 if __name__ == "__main__":
     unittest.main()
