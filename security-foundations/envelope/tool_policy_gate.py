@@ -58,6 +58,7 @@ import jcs
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from .audit import AuditSink
 from .deny_reason import DenyReason
 from .verify_envelope import (
     HEX_SHA256_RE,
@@ -70,6 +71,8 @@ from .verify_envelope import (
 )
 
 STEP_UP_TYP = "wt-stepup/v0"
+TOOL_GATE_EVENT_TYPE = "tool.verify"
+TOOL_GATE_ARTIFACT_VERSION = "wt-tool-gate/v0"
 
 class RiskTier(StrEnum):
     LOW = "low"
@@ -376,6 +379,7 @@ def evaluate_tool_call(
     current: datetime,
     max_clock_skew: timedelta = timedelta(seconds=60),
     max_step_up_ttl: timedelta = timedelta(minutes=10),
+    audit_sink: AuditSink | None = None,
 ) -> ToolCallDecision:
     """Decide whether a proposed :class:`ToolCall` may proceed.
 
@@ -384,7 +388,33 @@ def evaluate_tool_call(
     verifies the attestation in-line (call-bound, current, signed by a
     trusted issuer); on any failure the corresponding step-up
     :class:`DenyReason` is propagated.
+
+    ``audit_sink``, if supplied, receives one ``tool.verify`` event per
+    call. Sink failure fails closed (returns a deny with
+    :class:`~deny_reason.DenyReason.AUDIT_SINK_FAILURE`).
     """
+    decision = _evaluate_tool_call_inner(
+        call=call,
+        policy=policy,
+        step_up=step_up,
+        issuer_lookup=issuer_lookup,
+        current=current,
+        max_clock_skew=max_clock_skew,
+        max_step_up_ttl=max_step_up_ttl,
+    )
+    return _emit_tool_gate(audit_sink, call=call, decision=decision)
+
+
+def _evaluate_tool_call_inner(
+    *,
+    call: ToolCall,
+    policy: ToolPolicy,
+    step_up: StepUpAttestation | None,
+    issuer_lookup: Callable[[str, str], bytes] | None,
+    current: datetime,
+    max_clock_skew: timedelta,
+    max_step_up_ttl: timedelta,
+) -> ToolCallDecision:
     rule = policy.rule_for(call.tool_name)
     if rule is None:
         return ToolCallDecision(
@@ -442,6 +472,33 @@ def evaluate_tool_call(
 class ToolPolicyDenied(EnvelopeVerificationError):
     """Raised by :func:`require_tool_call` on denial."""
 
+def _emit_tool_gate(
+    sink: AuditSink | None,
+    *,
+    call: ToolCall,
+    decision: ToolCallDecision,
+) -> ToolCallDecision:
+    if sink is None:
+        return decision
+    try:
+        sink.record(
+            event_type=TOOL_GATE_EVENT_TYPE,
+            outcome="allow" if decision.allowed else "deny",
+            reason=decision.reason,
+            reason_code=decision.reason_code,
+            artifact_version=TOOL_GATE_ARTIFACT_VERSION,
+            sender=call.caller_iss,
+            message_id=call.arguments_digest,
+        )
+    except Exception as exc:
+        return ToolCallDecision(
+            allowed=False,
+            reason=f"audit sink failed: {type(exc).__name__}",
+            reason_code=DenyReason.AUDIT_SINK_FAILURE.value,
+        )
+    return decision
+
+
 def require_tool_call(
     *,
     call: ToolCall,
@@ -451,6 +508,7 @@ def require_tool_call(
     current: datetime,
     max_clock_skew: timedelta = timedelta(seconds=60),
     max_step_up_ttl: timedelta = timedelta(minutes=10),
+    audit_sink: AuditSink | None = None,
 ) -> ToolCallDecision:
     """Evaluate the policy and raise :class:`ToolPolicyDenied` on denial."""
     decision = evaluate_tool_call(
@@ -461,6 +519,7 @@ def require_tool_call(
         current=current,
         max_clock_skew=max_clock_skew,
         max_step_up_ttl=max_step_up_ttl,
+        audit_sink=audit_sink,
     )
     if not decision.allowed:
         try:

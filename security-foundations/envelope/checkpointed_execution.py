@@ -43,9 +43,6 @@ Out of scope for v0
   :class:`CapabilityClaims` per checkpoint; tasks spanning multiple
   capabilities (e.g. delegation chains) check each capability
   independently.
-- Audit checkpoint emission. The validator's outcome is returnable;
-  wiring a ``checkpoint.evaluate`` event is a follow-up that pairs
-  with the rest of the Phase 2 checkpoint suite.
 """
 
 from __future__ import annotations
@@ -55,9 +52,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
+from .audit import AuditSink
 from .capability_token import CapabilityClaims
 from .deny_reason import DenyReason
 from .verify_envelope import UUID_V7_RE
+
+CHECKPOINT_EVENT_TYPE = "checkpoint.evaluate"
+CHECKPOINT_ARTIFACT_VERSION = "wt-checkpoint/v0"
 
 
 class CheckpointError(ValueError):
@@ -188,6 +189,7 @@ def validate_checkpoint(
     ledger: RevocationLedger,
     current: datetime,
     max_clock_skew: timedelta = timedelta(seconds=60),
+    audit_sink: AuditSink | None = None,
 ) -> CheckpointDecision:
     """Decide whether ``checkpoint`` may commit.
 
@@ -201,7 +203,35 @@ def validate_checkpoint(
        ``policy.on_epoch_mismatch``.
 
     A success returns :class:`CheckpointAction.COMMIT`.
+
+    ``audit_sink``, if supplied, receives one ``checkpoint.evaluate``
+    event per call. Sink failure fails closed (ABORT +
+    :class:`~deny_reason.DenyReason.AUDIT_SINK_FAILURE`).
     """
+    decision = _validate_checkpoint_inner(
+        checkpoint=checkpoint,
+        capability=capability,
+        active_epoch=active_epoch,
+        policy=policy,
+        ledger=ledger,
+        current=current,
+        max_clock_skew=max_clock_skew,
+    )
+    return _emit_checkpoint(
+        audit_sink, checkpoint=checkpoint, capability=capability, decision=decision
+    )
+
+
+def _validate_checkpoint_inner(
+    *,
+    checkpoint: Checkpoint,
+    capability: CapabilityClaims,
+    active_epoch: str,
+    policy: CheckpointPolicy,
+    ledger: RevocationLedger,
+    current: datetime,
+    max_clock_skew: timedelta,
+) -> CheckpointDecision:
     if not isinstance(checkpoint, Checkpoint):
         raise CheckpointError("checkpoint must be a Checkpoint")
     if not isinstance(capability, CapabilityClaims):
@@ -243,3 +273,34 @@ def validate_checkpoint(
         reason="ok",
         reason_code="ok",
     )
+
+
+def _emit_checkpoint(
+    sink: AuditSink | None,
+    *,
+    checkpoint: Checkpoint,
+    capability: CapabilityClaims,
+    decision: CheckpointDecision,
+) -> CheckpointDecision:
+    if sink is None:
+        return decision
+    try:
+        sink.record(
+            event_type=CHECKPOINT_EVENT_TYPE,
+            outcome="allow" if decision.action is CheckpointAction.COMMIT else "deny",
+            reason=decision.reason,
+            reason_code=decision.reason_code,
+            artifact_version=CHECKPOINT_ARTIFACT_VERSION,
+            message_id=checkpoint.checkpoint_id,
+            sender=capability.sub,
+            recipient=capability.aud,
+            issuer_iss=capability.iss,
+            issuer_kid=capability.issuer_kid,
+        )
+    except Exception as exc:
+        return CheckpointDecision(
+            action=CheckpointAction.ABORT,
+            reason=f"audit sink failed: {type(exc).__name__}",
+            reason_code=DenyReason.AUDIT_SINK_FAILURE.value,
+        )
+    return decision

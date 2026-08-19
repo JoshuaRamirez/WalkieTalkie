@@ -53,9 +53,13 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
 
+from .audit import AuditSink
 from .data_classification import DataClass
 from .deny_reason import DenyReason
 from .output_scanning import RiskLevel
+
+EGRESS_EVENT_TYPE = "egress.verify"
+EGRESS_ARTIFACT_VERSION = "wt-egress/v0"
 
 
 class EgressAction(StrEnum):
@@ -90,6 +94,7 @@ class EgressPolicy(ABC):
         *,
         risk: RiskLevel,
         data_class: DataClass,
+        audit_sink: AuditSink | None = None,
     ) -> EgressDecision:
         ...
 
@@ -128,6 +133,16 @@ class MatrixEgressPolicy(EgressPolicy):
             )
 
     def evaluate(
+        self,
+        *,
+        risk: RiskLevel,
+        data_class: DataClass,
+        audit_sink: AuditSink | None = None,
+    ) -> EgressDecision:
+        decision = self._decide(risk=risk, data_class=data_class)
+        return _emit_egress(audit_sink, decision=decision)
+
+    def _decide(
         self,
         *,
         risk: RiskLevel,
@@ -187,18 +202,45 @@ class EgressError(ValueError):
         super().__init__(decision.reason)
         self.decision = decision
 
+def _emit_egress(
+    sink: AuditSink | None,
+    *,
+    decision: EgressDecision,
+) -> EgressDecision:
+    if sink is None:
+        return decision
+    try:
+        sink.record(
+            event_type=EGRESS_EVENT_TYPE,
+            outcome="allow" if decision.action is EgressAction.ALLOW else "deny",
+            reason=decision.reason,
+            reason_code=decision.reason_code,
+            artifact_version=EGRESS_ARTIFACT_VERSION,
+        )
+    except Exception as exc:
+        return EgressDecision(
+            action=EgressAction.DENY,
+            reason=f"audit sink failed: {type(exc).__name__}",
+            reason_code=DenyReason.AUDIT_SINK_FAILURE.value,
+        )
+    return decision
+
+
 def require_egress(
     *,
     risk: RiskLevel,
     data_class: DataClass,
     policy: EgressPolicy,
+    audit_sink: AuditSink | None = None,
 ) -> EgressDecision:
     """Evaluate ``policy`` and raise :class:`EgressError` unless ALLOW.
 
     Quarantine and deny both raise — callers that need to distinguish
     them should call :meth:`EgressPolicy.evaluate` directly.
     """
-    decision = policy.evaluate(risk=risk, data_class=data_class)
+    decision = policy.evaluate(
+        risk=risk, data_class=data_class, audit_sink=audit_sink
+    )
     if decision.action is not EgressAction.ALLOW:
         raise EgressError(decision)
     return decision

@@ -86,7 +86,8 @@ class AuditEvent:
     reason_code: str = ""
     # ``artifact_version`` records which contract/wire format produced the
     # decision. v0 emits ``"envelope/v0"`` for envelope.verify events and
-    # ``"wt-cap+jwt"`` for capability.verify events. Phase 1 Track D D1.
+    # ``"wt-cap+jwt"`` for capability.verify events. Phase 2 verifiers emit
+    # their ``typ`` / ``wt-<kind>/v0`` binding (e.g. ``"wt-delegation/v0"``).
     artifact_version: str = ""
 
     def to_dict(self) -> dict:

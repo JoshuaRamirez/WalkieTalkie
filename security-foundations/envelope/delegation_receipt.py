@@ -34,9 +34,6 @@ Out of scope for v0
 - Scope narrowing / partial-order semantics. v0 requires identical scope.
 - Multiple parents per hop (DAG-shaped chains).
 - Receipt revocation lists (use TTL).
-- Audit checkpoint emission. The validator's outcome is returnable; wiring
-  a ``delegation.verify`` event is a follow-up that pairs with the rest of
-  the Phase 2 checkpoint suite.
 """
 
 from __future__ import annotations
@@ -52,6 +49,7 @@ import jcs
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from .audit import AuditSink
 from .deny_reason import DenyReason
 from .verify_envelope import (
     KID_RE,
@@ -63,6 +61,8 @@ from .verify_envelope import (
 )
 
 DELEGATION_TYP = "wt-delegation/v0"
+DELEGATION_EVENT_TYPE = "delegation.verify"
+DELEGATION_ARTIFACT_VERSION = DELEGATION_TYP
 
 class DelegationError(EnvelopeVerificationError):
     """Raised when a delegation receipt fails verification.
@@ -224,6 +224,37 @@ class DelegationVerificationConfig:
 
 DEFAULT_DELEGATION_CONFIG = DelegationVerificationConfig()
 
+
+def _emit_verify(
+    sink: AuditSink | None,
+    receipt: DelegationReceipt,
+    outcome: str,
+    reason: str,
+    reason_code: str,
+) -> None:
+    if sink is None:
+        return
+    try:
+        sink.record(
+            event_type=DELEGATION_EVENT_TYPE,
+            outcome=outcome,
+            reason=reason,
+            reason_code=reason_code,
+            artifact_version=DELEGATION_ARTIFACT_VERSION,
+            message_id=receipt.jti,
+            sender=receipt.delegator_iss,
+            recipient=receipt.delegate_iss,
+            envelope_kid=receipt.delegator_kid,
+            issuer_iss=receipt.delegator_iss,
+            issuer_kid=receipt.delegator_kid,
+        )
+    except Exception as exc:
+        raise DelegationError(
+            f"audit sink failed: {type(exc).__name__}",
+            reason=DenyReason.AUDIT_SINK_FAILURE,
+        ) from exc
+
+
 def verify_receipt(
     receipt: DelegationReceipt,
     *,
@@ -231,6 +262,7 @@ def verify_receipt(
     issuer_lookup: Callable[[str, str], bytes],
     current: datetime,
     config: DelegationVerificationConfig = DEFAULT_DELEGATION_CONFIG,
+    audit_sink: AuditSink | None = None,
 ) -> DelegationReceipt:
     """Verify shape + non-escalation + time window + signature.
 
@@ -238,7 +270,34 @@ def verify_receipt(
     subsequent hops it MUST carry the previous hop's audience-relevant
     claims (build via :func:`parent_from_capability_claims` or
     :func:`parent_from_receipt`).
+
+    ``audit_sink``, if supplied, receives one ``delegation.verify`` event
+    per call. Sink failure fails closed
+    (:class:`~deny_reason.DenyReason.AUDIT_SINK_FAILURE`).
     """
+    try:
+        verified = _verify_receipt_inner(
+            receipt,
+            parent=parent,
+            issuer_lookup=issuer_lookup,
+            current=current,
+            config=config,
+        )
+    except DelegationError as exc:
+        _emit_verify(audit_sink, receipt, "deny", str(exc), exc.reason_code)
+        raise
+    _emit_verify(audit_sink, verified, "allow", "ok", "ok")
+    return verified
+
+
+def _verify_receipt_inner(
+    receipt: DelegationReceipt,
+    *,
+    parent: ParentClaims | None,
+    issuer_lookup: Callable[[str, str], bytes],
+    current: datetime,
+    config: DelegationVerificationConfig,
+) -> DelegationReceipt:
     _validate_shape(receipt)
 
     if receipt.hop_index >= config.max_chain_depth:

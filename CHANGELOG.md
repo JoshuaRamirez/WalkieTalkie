@@ -54,7 +54,13 @@ deliverables carry `**Landed (v0):**` annotations in
   `(peer_iss, peer_kid)` set. Combined-pool callers and the existing
   per-domain / min-distinct invariants are unchanged. No gossip
   layer is invented. See leftover #98 / `DEFERRED.md`.
-- **Proof-obligation registry** (`envelope/proof_obligations.py`): 59 invariants,
+- **Phase 2 leftover #100 — signed audit checkpoint emission.** Optional
+  `audit_sink` on the Phase 2 verifiers (delegation, retrieval, egress,
+  reviewer, tool gate, checkpointed execution, session tokens). Each
+  emits one hash-chained `XXX.verify` / `checkpoint.evaluate` event on
+  allow and on deny; sink failure fails closed. Existing callers that
+  omit the sink are unchanged. See `DEFERRED.md`.
+- **Proof-obligation registry** (`envelope/proof_obligations.py`): 60 invariants,
   each pinned by a canonical test and gated by `test_every_obligation_resolves`.
 - Root `README.md`, `SECURITY.md` disclosure policy, `CHANGELOG.md`,
   `CONTRIBUTING.md`, and a `.github/pull_request_template.md`.

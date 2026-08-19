@@ -483,6 +483,27 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             ".test_sequence_replay_rejected"
         ),
     ),
+    ProofObligation(
+        name="phase2_verifiers_emit_audit_checkpoints",
+        phase=Phase.PHASE_2,
+        track="A",
+        statement=(
+            "Each Phase 2 verifier named in the leftover (delegation, "
+            "retrieval, egress, reviewer, tool gate, checkpointed "
+            "execution, session tokens) emits one hash-chained audit "
+            "checkpoint on allow and on deny when an audit_sink is "
+            "attached. Event types are delegation.verify, "
+            "retrieval.verify, egress.verify, review.verify, "
+            "tool.verify, checkpoint.evaluate, and session.verify. "
+            "Callers that omit the sink are unchanged. A sink that "
+            "raises fails closed (AUDIT_SINK_FAILURE) so an unaudited "
+            "allow is not an allow."
+        ),
+        canonical_test=(
+            "envelope.test_phase2_audit_emission.CoverageTests"
+            ".test_every_named_phase2_verifier_has_allow_and_deny_pins"
+        ),
+    ),
     # ----- Phase 3 Track A topology -----
     ProofObligation(
         name="sybil_cluster_cannot_dominate_peer_view",

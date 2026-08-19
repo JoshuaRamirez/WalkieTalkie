@@ -307,8 +307,9 @@ Phase 6 closes when:
 
 Phase 6 deliberately does NOT deliver: real multi-host/WAN deployment,
 NAT traversal, production CA custody, or planet-scale operation. Those,
-plus the still-open Phase 3 §§6–8 + §11 operational-evidence gaps and
-the Phase 2 audit-emission wiring, are the Phase 7 candidate pool.
+plus the still-open Phase 3 §§6–8 + §11 operational-evidence gaps, are
+the Phase 7 candidate pool. Phase 2 audit-emission wiring shipped as
+leftover #100.
 
 ---
 

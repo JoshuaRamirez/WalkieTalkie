@@ -24,17 +24,17 @@ types.
 | Field | Type | Notes |
 |---|---|---|
 | `timestamp` | RFC 3339 string in UTC, ending in `Z` | Wall-clock time at event emission. |
-| `event_type` | string | v0 emits `"envelope.verify"`, `"capability.verify"`, `"capability.issue"`, `"discovery.verify"`, and `"admission.evaluate"`. Future checkpoints (`policy.evaluate`, `execution.dispatch`) MUST use additional values; existing values are immutable. |
+| `event_type` | string | v0 emits `"envelope.verify"`, `"capability.verify"`, `"capability.issue"`, `"discovery.verify"`, `"admission.evaluate"`, and the Phase 2 checkpoints (`"delegation.verify"`, `"retrieval.verify"`, `"egress.verify"`, `"review.verify"`, `"tool.verify"`, `"checkpoint.evaluate"`, `"session.verify"`). Future checkpoints MUST use additional values; existing values are immutable. |
 | `outcome` | `"allow"` or `"deny"` | Closed enum. |
 | `reason` | string | Human-readable. May contain a colon-prefixed namespace (e.g., `"capability token: revoked"`). |
 | `reason_code` | string | Machine-readable. Either `"ok"`, `""` (legacy), or a `DenyReason` value (e.g., `"replay_detected"`). See deny-reason contract below. |
 | `artifact_version` | string | Wire format / contract version that produced the decision. v0: `"envelope/v0"` for `envelope.verify`, `"wt-cap+jwt"` for `capability.verify`. Empty string for legacy events. |
-| `message_id` | string | Envelope `message_id` if available; `""` if the failure occurred before the envelope was parsed. |
-| `sender` | string | Envelope `sender_spiffe_id` or `""`. |
-| `recipient` | string | Envelope `recipient_spiffe_id` or `""`. |
-| `envelope_kid` | string | Envelope-signing kid, or `""`. |
-| `issuer_iss` | string | Capability token `iss` if validated, else `""`. |
-| `issuer_kid` | string | Capability token's issuer kid (JWT header `kid`) if validated, else `""`. |
+| `message_id` | string | Envelope `message_id` if available; `""` if the failure occurred before the envelope was parsed. Phase 2 events reuse this column — see the Phase 2 field mapping below. |
+| `sender` | string | Envelope `sender_spiffe_id` or `""`. Phase 2 events reuse this column — see the Phase 2 field mapping below. |
+| `recipient` | string | Envelope `recipient_spiffe_id` or `""`. Phase 2 events reuse this column — see the Phase 2 field mapping below. |
+| `envelope_kid` | string | Envelope-signing kid, or `""`. Phase 2 events reuse this column — see the Phase 2 field mapping below. |
+| `issuer_iss` | string | Capability token `iss` if validated, else `""`. Phase 2 events reuse this column — see the Phase 2 field mapping below. |
+| `issuer_kid` | string | Capability token's issuer kid (JWT header `kid`) if validated, else `""`. Phase 2 events reuse this column — see the Phase 2 field mapping below. |
 | `prev_hash` | hex sha256 | Previous event's `this_hash`, or 64 zeros for the genesis event. |
 | `this_hash` | hex sha256 | sha256(prev_hash ‖ JCS(body)), where `body` is every field above except `prev_hash` and `this_hash`. |
 
@@ -74,6 +74,65 @@ exactly one `admission.evaluate` event when an `audit_sink` is attached:
 | Admitted | `"ok"` |
 | Denied — wrong discovery format | `"admission_version_incompatible"` |
 | Denied — workload not in allowlist | `"admission_workload_not_allowed"` |
+
+A single Phase 2 verifier call emits exactly one event when an
+`audit_sink` is attached (callers that omit the sink emit nothing):
+
+| Function | `event_type` | `artifact_version` |
+|---|---|---|
+| `delegation_receipt.verify_receipt` | `delegation.verify` | `wt-delegation/v0` |
+| `AllowlistRetrievalPolicy.evaluate` / `require_retrieval` | `retrieval.verify` | `wt-retrieval/v0` |
+| `MatrixEgressPolicy.evaluate` / `require_egress` | `egress.verify` | `wt-egress/v0` |
+| `reviewer_workflow.verify_decision` / `verify_release_authorization` | `review.verify` | `wt-review/v0` |
+| `tool_policy_gate.evaluate_tool_call` / `require_tool_call` | `tool.verify` | `wt-tool-gate/v0` |
+| `checkpointed_execution.validate_checkpoint` | `checkpoint.evaluate` | `wt-checkpoint/v0` |
+| `session_token.verify_session_token` / `verify_resume` | `session.verify` | `wt-session/v0` |
+
+`verify_release_authorization` and `verify_resume` emit one event for
+the outer check; they do not also emit from the inner
+`verify_decision` / `verify_session_token` call. Quarantine and
+checkpoint ABORT/DOWNGRADE map to `outcome="deny"` (the audit
+alphabet is allow/deny only). The MCP host's `tool.gate` /
+`egress.evaluate` events are host-level and distinct; the host does
+not pass `audit_sink` into the primitives.
+
+#### Phase 2 field mapping
+
+The required-field names are shared with `envelope.verify`. Downstream
+consumers MUST apply this mapping per `event_type` and MUST NOT treat
+`message_id` as an envelope id or `issuer_*` as a capability-token
+issuer unless the event is an envelope/capability checkpoint. Empty
+string means the verifier does not populate that column (there is no
+corresponding value). On deny, identity fields are the *claimed*
+values from the artifact or call, matching the attribution rule
+below.
+
+| `event_type` | `message_id` | `sender` | `recipient` | `envelope_kid` | `issuer_iss` | `issuer_kid` |
+|---|---|---|---|---|---|---|
+| `delegation.verify` | receipt `jti` | `delegator_iss` | `delegate_iss` | `delegator_kid` | `delegator_iss` (signer) | `delegator_kid` (signer) |
+| `retrieval.verify` | `""` | `caller_iss` | origin lineage `actor_iss` | `""` | origin lineage `actor_iss` (data origin, not a signer) | `""` |
+| `egress.verify` | `""` | `""` | `""` | `""` | `""` | `""` |
+| `review.verify` | decision `jti` | `reviewer_iss` | quarantine `requester_iss` | `reviewer_kid` | `reviewer_iss` (signer) | `reviewer_kid` (signer) |
+| `tool.verify` | call `arguments_digest` | `caller_iss` | `""` | `""` | `""` | `""` |
+| `checkpoint.evaluate` | `checkpoint_id` | capability `sub` | capability `aud` | `""` | capability `iss` (token issuer, not a checkpoint signature) | capability `issuer_kid` |
+| `session.verify` | token `jti` | token `sub` | token `aud` | token `iss_kid` | token `iss` (signer) | token `iss_kid` (signer) |
+
+`envelope_kid` is unused (`""`) for retrieval, egress, tool, and
+checkpoint — those events have no envelope. Signed artifacts that
+already record a signing kid (delegation, review, session) reuse
+`envelope_kid` for that kid so the column is queryable. Egress
+populates none of the identity columns: the verdict is keyed on
+`(risk, data_class)` and those values already live in `reason` /
+`reason_code`. Tool has no artifact signer, so `issuer_iss` /
+`issuer_kid` stay empty. Retrieval has no signer either;
+`issuer_iss` is the data-origin SPIFFE id and `issuer_kid` is
+empty. Checkpoint copies the authorizing capability's `iss` /
+`issuer_kid` (not a checkpoint signature).
+
+Sink failure fails closed: raise-based verifiers raise with
+`reason_code="audit_sink_failure"`; decision-returning evaluators
+return a deny / ABORT decision with the same code. An unaudited
+allow is not an allow.
 
 ### Hash chain
 
