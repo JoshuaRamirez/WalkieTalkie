@@ -22,7 +22,7 @@ from envelope.egress_policy import EgressAction, EgressMatrixCell, MatrixEgressP
 from envelope.output_scanning import PatternRegistry, RiskLevel
 from envelope.tool_policy_gate import RiskTier, ToolPolicy, ToolRule
 from envelope.verify_envelope import EnvelopeVerificationError, InMemoryReplayCache
-from integrations.mcp.demo_tools import DEMO_TOOLS, tool_exec_sql, tool_read_file
+from integrations.mcp.default_tools import DEMO_TOOLS, tool_exec_sql, tool_read_file
 from integrations.mcp.host import (
     ExampleMCPHost,
     ExampleMCPHostError,

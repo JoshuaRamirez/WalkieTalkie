@@ -64,7 +64,7 @@ from envelope.verify_envelope import (
     verify_envelope,
 )
 
-from .demo_tools import DEMO_TOOLS
+from .default_tools import DEMO_TOOLS
 from .envelope_adapter import (
     EnvelopeFields,
     MCPRequest,

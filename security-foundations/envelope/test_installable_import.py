@@ -116,6 +116,18 @@ class InstallableImportTests(unittest.TestCase):
                 (target / "envelope" / "test_verify_envelope.py").exists(),
                 "wheel must not ship test modules",
             )
+            self.assertTrue(
+                (target / "integrations" / "mcp" / "host.py").is_file(),
+                "wheel did not install integrations.mcp.host",
+            )
+            self.assertTrue(
+                (target / "integrations" / "mcp" / "default_tools.py").is_file(),
+                "wheel must ship the host's default tool handlers",
+            )
+            self.assertFalse(
+                (target / "integrations" / "mcp" / "demo_tools.py").exists(),
+                "demo_*.py must stay excluded from the wheel",
+            )
             code = (
                 "import sys\n"
                 "from pathlib import Path\n"
@@ -136,10 +148,12 @@ class InstallableImportTests(unittest.TestCase):
                 "import envelope.verify_envelope as ev\n"
                 "import mesh.tls_transport as tt\n"
                 "import integrations.mcp.envelope_adapter as ea\n"
+                "import integrations.mcp.host as host\n"
                 f"installed = Path({str(target)!r}).resolve()\n"
                 "assert Path(ev.__file__).resolve().is_relative_to(installed), ev.__file__\n"
                 "assert Path(tt.__file__).resolve().is_relative_to(installed), tt.__file__\n"
                 "assert Path(ea.__file__).resolve().is_relative_to(installed), ea.__file__\n"
+                "assert Path(host.__file__).resolve().is_relative_to(installed), host.__file__\n"
                 "try:\n"
                 "    import audit  # noqa: F401\n"
                 "except ImportError:\n"

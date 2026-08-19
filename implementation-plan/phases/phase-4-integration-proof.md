@@ -175,7 +175,7 @@ will then have real failure modes to chase instead of imagined ones.
     `invoke_tool` grants), so issuance is least-privilege rather than
     `AllowAllPolicy`.
   - To fit under the 500-line host ceiling, the demo tools and pure
-    helpers were extracted to `demo_tools.py` / `host_support.py`.
+    helpers were extracted to `default_tools.py` / `host_support.py`.
     Two new proof obligations (`host_revocation_lifecycle_enforced`,
     `host_rate_limit_enforced_post_auth`) pin the lifecycle
     invariants as CI gates. Enabled-feature count in the running

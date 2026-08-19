@@ -358,8 +358,8 @@ each entry names the module that implements it.
   including the **revoke-then-reject capability lifecycle** and the
   **post-auth rate-limit** invariant (a spoofed sender burns none of
   the victim's allowance). The host stays under a 500-line ceiling
-  pinned by `test_host.HostLineCountTests`; demo tools and pure
-  helpers live in `demo_tools.py` / `host_support.py`. Runbook +
+  pinned by `test_host.HostLineCountTests`; default tools and pure
+  helpers live in `default_tools.py` / `host_support.py`. Runbook +
   deterministic key/manifest/sample-audit generators under
   `integrations/mcp/example/`.
 - **Mesh MCP bridge (runnable example)** (`integrations/mcp/bridge/`):

@@ -63,6 +63,11 @@ deliverables carry `**Landed (v0):**` annotations in
 
 ### Fixed
 
+- Example MCP host is importable from a non-editable wheel: the host's
+  default tool handlers live in `default_tools.py` (not `demo_*.py`), so
+  the wheel exclude no longer drops a module `host.py` imports at load
+  time. `test_wheel_install_imports_as_a_library` now imports
+  `integrations.mcp.host`.
 - Resolved a stranded, disjoint-history branch against `main` so the two no
   longer conflict.
 - Raised the `cryptography` dependency floor from `>=41` to `>=42`: the X.509
