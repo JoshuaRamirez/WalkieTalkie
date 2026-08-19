@@ -171,6 +171,7 @@ class SelectionShapeTests(unittest.TestCase):
         )
         result = select_neighbors([_cand("spiffe://a.mesh/x/y")], rule=rule)
         self.assertIsInstance(result, NeighborSelection)
+        self.assertIsNone(result.samplers_identical)
 
     def test_non_candidate_input_rejected(self):
         rule = DiversityRule(
@@ -226,6 +227,142 @@ class SurgeDetectionTests(unittest.TestCase):
                 window_end=_NOW,
                 surge_threshold=0,
             )
+
+
+class IndependentSamplingTests(unittest.TestCase):
+    """Phase 3 Track A A2 leftover: per-sampler independence diagnostic."""
+
+    def _rule(self) -> DiversityRule:
+        return DiversityRule(
+            target_count=8,
+            max_per_trust_domain=2,
+            min_distinct_trust_domains=3,
+        )
+
+    def test_identical_sampler_outputs_reported(self):
+        # The leftover: both samplers returned the same peer set.
+        pool = [
+            _cand("spiffe://a.mesh/ns/x"),
+            _cand("spiffe://b.mesh/ns/y"),
+            _cand("spiffe://c.mesh/ns/z"),
+        ]
+        # Same identities, different order and last_seen — still identical.
+        copy = [
+            _cand("spiffe://c.mesh/ns/z", at_offset_min=5),
+            _cand("spiffe://a.mesh/ns/x", at_offset_min=1),
+            _cand("spiffe://b.mesh/ns/y", at_offset_min=2),
+        ]
+        result = select_neighbors(
+            [*pool],
+            rule=self._rule(),
+            sampler_pools={"gossip-a": pool, "gossip-b": copy},
+        )
+        self.assertTrue(result.samplers_identical)
+
+    def test_distinct_sampler_outputs_not_false_flagged(self):
+        layer_a = [
+            _cand("spiffe://a.mesh/ns/x"),
+            _cand("spiffe://b.mesh/ns/y"),
+        ]
+        layer_b = [
+            _cand("spiffe://a.mesh/ns/x"),
+            _cand("spiffe://c.mesh/ns/z"),
+        ]
+        result = select_neighbors(
+            [*layer_a, *layer_b],
+            rule=self._rule(),
+            sampler_pools={"gossip-a": layer_a, "gossip-b": layer_b},
+        )
+        self.assertFalse(result.samplers_identical)
+
+    def test_three_identical_samplers_reported(self):
+        pool = [
+            _cand("spiffe://a.mesh/ns/x"),
+            _cand("spiffe://b.mesh/ns/y"),
+        ]
+        result = select_neighbors(
+            pool,
+            rule=self._rule(),
+            sampler_pools={
+                "layer-1": pool,
+                "layer-2": list(pool),
+                "layer-3": list(reversed(pool)),
+            },
+        )
+        self.assertTrue(result.samplers_identical)
+
+    def test_combined_pool_only_leaves_diagnostic_unset(self):
+        result = select_neighbors(
+            [
+                _cand("spiffe://a.mesh/x/y"),
+                _cand("spiffe://b.mesh/x/y"),
+            ],
+            rule=self._rule(),
+        )
+        self.assertIsNone(result.samplers_identical)
+
+    def test_single_sampler_leaves_diagnostic_unset(self):
+        pool = [_cand("spiffe://a.mesh/x/y")]
+        result = select_neighbors(
+            pool,
+            rule=self._rule(),
+            sampler_pools={"only": pool},
+        )
+        self.assertIsNone(result.samplers_identical)
+
+    def test_diversity_cap_still_holds_when_combining_pools(self):
+        # Two distinct samplers; one is a Sybil flood. Combining them
+        # must not let the attacker domain overflow the per-domain cap.
+        sybil = _cluster("spiffe://attacker.mesh/ns-x", count=50)
+        honest = [
+            _cand("spiffe://honest-a.mesh/ns-1/svc"),
+            _cand("spiffe://honest-b.mesh/ns-2/svc"),
+            _cand("spiffe://honest-c.mesh/ns-3/svc"),
+        ]
+        result = select_neighbors(
+            [*sybil, *honest],
+            rule=self._rule(),
+            sampler_pools={"sybil-layer": sybil, "honest-layer": honest},
+        )
+        self.assertFalse(result.samplers_identical)
+        per_td = result.per_trust_domain
+        self.assertLessEqual(per_td.get("attacker.mesh", 0), 2)
+        selected_iss = {c.peer_iss for c in result.selected}
+        self.assertIn("spiffe://honest-a.mesh/ns-1/svc", selected_iss)
+
+    def test_empty_sampler_id_rejected(self):
+        pool = [_cand("spiffe://a.mesh/x/y")]
+        with self.assertRaisesRegex(EclipseResistanceError, "sampler id"):
+            select_neighbors(
+                pool,
+                rule=self._rule(),
+                sampler_pools={"": pool},
+            )
+
+    def test_non_candidate_in_sampler_pool_rejected(self):
+        pool = [_cand("spiffe://a.mesh/x/y")]
+        with self.assertRaisesRegex(EclipseResistanceError, "sampler_pools"):
+            select_neighbors(
+                pool,
+                rule=self._rule(),
+                sampler_pools={"a": pool, "b": ["not-a-candidate"]},  # type: ignore[list-item]
+            )
+
+    def test_non_iterable_sampler_pool_rejected(self):
+        pool = [_cand("spiffe://a.mesh/x/y")]
+        rule = self._rule()
+        for bad in (None, 1):
+            with self.subTest(pool=bad):
+                with self.assertRaisesRegex(
+                    EclipseResistanceError,
+                    r"sampler_pools\['b'\] must be an iterable of NeighborCandidate",
+                ):
+                    select_neighbors(
+                        pool,
+                        rule=rule,
+                        sampler_pools={"a": pool, "b": bad},  # type: ignore[dict-item]
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()

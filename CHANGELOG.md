@@ -47,7 +47,14 @@ deliverables carry `**Landed (v0):**` annotations in
   non-escalation invariants (scope identity, audience continuity, TTL
   containment, hop/issuer bindings, depth, signature). `hypothesis` is
   a `[dev]` extra only. See leftover #96 / `DEFERRED.md`.
-- **Proof-obligation registry** (`envelope/proof_obligations.py`): 58 invariants,
+- **Phase 3 Track A A2 — independent peer sampling paths.** Optional
+  `sampler_pools` on `select_neighbors` plus
+  `NeighborSelection.samplers_identical`, so the diversity gate can
+  detect that two (or more) samplers returned the same
+  `(peer_iss, peer_kid)` set. Combined-pool callers and the existing
+  per-domain / min-distinct invariants are unchanged. No gossip
+  layer is invented. See leftover #98 / `DEFERRED.md`.
+- **Proof-obligation registry** (`envelope/proof_obligations.py`): 59 invariants,
   each pinned by a canonical test and gated by `test_every_obligation_resolves`.
 - Root `README.md`, `SECURITY.md` disclosure policy, `CHANGELOG.md`,
   `CONTRIBUTING.md`, and a `.github/pull_request_template.md`.

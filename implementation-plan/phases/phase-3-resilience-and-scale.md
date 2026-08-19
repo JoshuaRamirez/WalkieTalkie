@@ -133,9 +133,14 @@ Transitions must follow deterministic workflow:
   carry distinct reason codes (`diversity_per_domain_cap`,
   `diversity_target_reached`).
 - Independent peer sampling paths.
-  **Deferred:** multi-process / network-topology concern. Operators
-  pull peers from separate gossip layers and feed the combined pool
-  into `select_neighbors`. The selector takes the union as input.
+  **Landed (v0):** optional `sampler_pools` on `select_neighbors()`
+  in `security-foundations/envelope/eclipse_resistance.py`.
+  `NeighborSelection.samplers_identical` is True when two or more
+  labeled sampler outputs are the same `(peer_iss, peer_kid)` set
+  — the leftover diagnostic that the operator's sampling paths are
+  not independent. Combined-pool-only callers are unchanged
+  (`samplers_identical is None`); per-domain cap and min-distinct-
+  domain invariants are untouched. No gossip layer is shipped.
 - Routing anomaly detection.
   **Landed (v0, surge half):** `detect_trust_domain_surges()` returns
   any trust domain that posted ≥ `surge_threshold` candidates with

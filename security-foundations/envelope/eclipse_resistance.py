@@ -1,7 +1,6 @@
 """Eclipse resistance v0 (Phase 3 Track A A2).
 
-Closes the "neighbor diversity rules" half of A2 ("Eclipse
-Resistance"):
+Closes both named halves of A2 ("Eclipse Resistance"):
 
 - "Neighbor diversity rules." — :func:`select_neighbors` is a
   greedy diversity-aware selector. Given a pool of
@@ -17,21 +16,32 @@ Resistance"):
   trust domain cannot occupy more than the configured per-domain
   cap, no matter how many candidates that domain submits.
 
+- "Independent peer sampling paths." — optional ``sampler_pools``
+  lets a caller tag two (or N) sampler outputs. Selection still
+  runs on the combined ``candidates`` pool, so the per-domain cap
+  and min-distinct-domain invariants are unchanged. The result's
+  ``samplers_identical`` flag is True when every supplied sampler
+  returned the same set of ``(peer_iss, peer_kid)`` identities —
+  a signal that the operator's gossip layers aren't actually
+  independent. ``None`` when fewer than two sampler pools are
+  supplied (diagnostic not applicable). This module does not
+  invent a gossip layer; callers pull peers from their own
+  sampling paths and tag the outputs.
+
 Out of scope for v0
 -------------------
-- "Independent peer sampling paths." That's a multi-process / network
-  topology concern — pull peers from two separate gossip layers, then
-  ask :func:`select_neighbors` to combine them. v0 takes the combined
-  candidate pool as input.
-- "Routing anomaly detection." Detecting impossible-neighbor sets and
-  trust-domain surges is its own slice; this module returns selection
-  diagnostics so a downstream detector can read them.
+- Inventing a gossip protocol or network topology. The leftover
+  was the diagnostic, not a second gossip implementation.
+- "Routing anomaly detection" beyond the surge half already
+  shipped as :func:`detect_trust_domain_surges`. This module
+  returns selection diagnostics so a downstream detector can
+  read them.
 """
 
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -107,6 +117,7 @@ class NeighborSelection:
     rejected: tuple[RejectedCandidate, ...] = field(default_factory=tuple)
     diversity_shortfall: bool = False
     target_shortfall: bool = False
+    samplers_identical: bool | None = None
 
     @property
     def trust_domain_count(self) -> int:
@@ -120,10 +131,55 @@ class NeighborSelection:
                 c[cand.trust_domain] += 1
         return dict(c)
 
+
+def _normalize_sampler_pools(
+    sampler_pools: Mapping[str, Iterable[NeighborCandidate]],
+) -> dict[str, list[NeighborCandidate]]:
+    if not isinstance(sampler_pools, Mapping):
+        raise EclipseResistanceError("sampler_pools must be a mapping")
+    normalized: dict[str, list[NeighborCandidate]] = {}
+    for sampler_id, pool in sampler_pools.items():
+        if not isinstance(sampler_id, str) or not sampler_id:
+            raise EclipseResistanceError(
+                f"sampler id must be a non-empty string: {sampler_id!r}"
+            )
+        try:
+            cands = list(pool)
+        except TypeError as exc:
+            raise EclipseResistanceError(
+                f"sampler_pools[{sampler_id!r}] must be an iterable "
+                "of NeighborCandidate"
+            ) from exc
+        for index, cand in enumerate(cands):
+            if not isinstance(cand, NeighborCandidate):
+                raise EclipseResistanceError(
+                    f"sampler_pools[{sampler_id!r}][{index}] "
+                    "must be a NeighborCandidate"
+                )
+        normalized[sampler_id] = cands
+    return normalized
+
+
+def _peer_identity_set(
+    cands: Iterable[NeighborCandidate],
+) -> frozenset[tuple[str, str]]:
+    return frozenset((c.peer_iss, c.peer_kid) for c in cands)
+
+
+def _samplers_identical_flag(
+    pools: Mapping[str, list[NeighborCandidate]],
+) -> bool | None:
+    if len(pools) < 2:
+        return None
+    sets = [_peer_identity_set(cands) for cands in pools.values()]
+    return all(s == sets[0] for s in sets[1:])
+
+
 def select_neighbors(
     candidates: Iterable[NeighborCandidate],
     *,
     rule: DiversityRule,
+    sampler_pools: Mapping[str, Iterable[NeighborCandidate]] | None = None,
 ) -> NeighborSelection:
     """Pick up to ``rule.target_count`` neighbors with bounded TD share.
 
@@ -141,6 +197,12 @@ def select_neighbors(
        were admitted; ``diversity_shortfall=True`` if fewer than
        ``rule.min_distinct_trust_domains`` distinct trust domains
        appear in the final set.
+    5. If ``sampler_pools`` names two or more sampler outputs, set
+       ``samplers_identical=True`` iff every pool contains the same
+       ``(peer_iss, peer_kid)`` set (order and ``last_seen`` do not
+       count). Fewer than two pools leaves the flag ``None``.
+       ``sampler_pools`` is diagnostic only — it does not change
+       which candidates are selected.
 
     A candidate with an empty trust domain (a SPIFFE id with no
     parseable authority host) is treated as a distinct singleton
@@ -152,6 +214,12 @@ def select_neighbors(
             raise EclipseResistanceError(
                 f"candidates[{index}] must be a NeighborCandidate"
             )
+
+    identical: bool | None = None
+    if sampler_pools is not None:
+        identical = _samplers_identical_flag(
+            _normalize_sampler_pools(sampler_pools)
+        )
 
     ordered = sorted(
         cands_list,
@@ -191,6 +259,7 @@ def select_neighbors(
         rejected=tuple(rejected),
         diversity_shortfall=distinct < rule.min_distinct_trust_domains,
         target_shortfall=len(selected) < rule.target_count,
+        samplers_identical=identical,
     )
 
 # ---------------------------------------------------------------------
