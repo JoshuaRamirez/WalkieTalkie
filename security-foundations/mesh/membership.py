@@ -26,10 +26,19 @@ answers *"who is in the cluster and reachable"*. An optional
 gates *learning*: a gossiped id enters :attr:`members` only when it
 passes deny-by-default admission. That bounds the table by the admitted
 set rather than a magic cap — ``_digest()`` is not truncated, and nothing
-is evicted. Operator-supplied seeds are already an admitted set and are
-never dropped. Callers that omit the pair keep the original
-reachability-only table (loopback/LAN tests). Routing-table deny-by-default
-stays on :class:`gossip_discovery.GossipDiscovery`.
+is evicted. Operator-supplied seeds are retained as bootstrap even if
+they would fail the optional admission gate. Callers that omit the pair
+keep the original reachability-only table (loopback/LAN tests).
+Routing-table deny-by-default stays on
+:class:`gossip_discovery.GossipDiscovery`.
+
+The gate keys on ``node_id``, and ``node_id`` is also the
+``transport.send`` destination — the existing Transport contract, older
+than this leftover. So the membership gate applies when node ids are
+already valid dests *and* SPIFFE ids (the D6.4 ``InMemoryTransport``
+path). ``TlsSocketTransport`` callers use ``host:port`` dests and omit
+the membership gate; admission stays on routing / TLS. A dest-mapping
+callable would be an address book and is out of scope here.
 
 Loopback / small-N is real protocol, bounded scale. v0 probes every
 non-dead peer each tick (simple, O(N²) messages); production SWIM probes
@@ -49,11 +58,9 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 
-from envelope.peer_admission import (
-    PeerAdmissionError,
-    PeerAdmissionPolicy,
-    admit_peer,
-)
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+from envelope.peer_admission import PeerAdmissionPolicy, admit_peer
 
 from .transport import Transport, TransportError
 
@@ -106,8 +113,12 @@ class SwimMembership:
     inbound gossip, age peers toward SUSPECT/DEAD, and probe peers.
 
     ``admission`` + ``peer_tier`` are optional and must be supplied
-    together. When set, new gossiped ids enter :attr:`members` only if
-    they pass deny-by-default :func:`~envelope.peer_admission.admit_peer`.
+    together. ``peer_key`` is an optional sibling that returns a
+    verified SVID public key (or ``None``) so pinned admission rules
+    can evaluate. When the pair is set, new gossiped ids enter
+    :attr:`members` only if they pass deny-by-default
+    :func:`~envelope.peer_admission.admit_peer`. Resolver exceptions
+    fail closed — drop that candidate; ``tick`` continues.
     """
 
     def __init__(
@@ -120,6 +131,7 @@ class SwimMembership:
         dead_after: int = 3,
         admission: PeerAdmissionPolicy | None = None,
         peer_tier: Callable[[str], str | None] | None = None,
+        peer_key: Callable[[str], Ed25519PublicKey | None] | None = None,
     ) -> None:
         if not isinstance(node_id, str) or not node_id:
             raise TransportError("node_id must be a non-empty string")
@@ -129,6 +141,8 @@ class SwimMembership:
             raise TransportError("suspect_after/dead_after must be >= 1")
         if (admission is None) ^ (peer_tier is None):
             raise TransportError("admission and peer_tier must be provided together")
+        if peer_key is not None and admission is None:
+            raise TransportError("peer_key requires admission and peer_tier")
         self.node_id = node_id
         self.transport = transport
         self.incarnation = 0
@@ -136,9 +150,10 @@ class SwimMembership:
         self.dead_after = dead_after
         self.admission = admission
         self.peer_tier = peer_tier
+        self.peer_key = peer_key
         self.members: dict[str, Member] = {}
         self._seq = 0
-        # Seeds are operator-supplied — already an admitted set. Do not
+        # Seeds are retained as operator-supplied bootstrap. Do not
         # evict them even if they would fail the optional gossip gate.
         for s in seeds:
             if s and s != node_id:
@@ -173,20 +188,26 @@ class SwimMembership:
 
         No gate → yes (existing callers unchanged). When the D6.4 pair
         is attached, only ids that pass deny-by-default admission are
-        learned. ``peer_tier`` returning ``None``, a mismatched tier, or
-        an id ``admit_peer`` rejects (invalid SPIFFE, etc.) all deny —
-        fail closed, never raise into ``tick``.
+        learned. ``peer_tier`` returning ``None``, a mismatched tier, a
+        pinned rule without a matching ``peer_key``, or an id
+        ``admit_peer`` rejects (invalid SPIFFE, etc.) all deny. Resolver
+        exceptions (``peer_tier`` / ``peer_key``) fail closed too —
+        drop that candidate, never raise into ``tick``.
         """
         if self.admission is None or self.peer_tier is None:
             return True
-        tier = self.peer_tier(nid)
-        if tier is None:
-            return False
         try:
+            tier = self.peer_tier(nid)
+            if not isinstance(tier, str) or not tier:
+                return False
+            presented = self.peer_key(nid) if self.peer_key is not None else None
             return admit_peer(
-                spiffe_id=nid, env_tier=tier, policy=self.admission
+                spiffe_id=nid,
+                env_tier=tier,
+                policy=self.admission,
+                presented_key=presented,
             ).allowed
-        except PeerAdmissionError:
+        except Exception:  # noqa: BLE001 — resolver/admit_peer must not halt tick
             return False
 
     def _next_seq(self) -> int:

@@ -72,11 +72,12 @@ deliverables carry `**Landed (v0):**` annotations in
 - **Phase 6 leftover #104 — admission-gated membership table.**
   Optional `admission` + `peer_tier` on `SwimMembership` so
   `_merge` / new `_mark_heard` entries only learn ids that pass
-  the existing D6.4 deny-by-default `PeerAdmissionPolicy`. The
-  table is bounded by the admitted set; no digest truncation, no
-  magic cap, no eviction. Operator seeds are retained. Callers
-  that omit the gate are unchanged. See leftover #104 /
-  `DEFERRED.md`.
+  the existing D6.4 deny-by-default `PeerAdmissionPolicy`. Optional
+  `peer_key` supplies a verified SVID public key for pinned rules.
+  Resolver exceptions fail closed. The table is bounded by the
+  admitted set; no digest truncation, no magic cap, no eviction.
+  Operator seeds are retained as bootstrap. Callers that omit the
+  gate are unchanged. See leftover #104 / `DEFERRED.md`.
 - **Proof-obligation registry** (`envelope/proof_obligations.py`): 62 invariants,
   each pinned by a canonical test and gated by `test_every_obligation_resolves`.
 - Root `README.md`, `SECURITY.md` disclosure policy, `CHANGELOG.md`,

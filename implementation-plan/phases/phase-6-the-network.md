@@ -205,10 +205,12 @@ this plan doc and the task list updated after every iteration.
   registry now 45. 3 tests.
   **Landed (v0, leftover #104):** optional `admission` + `peer_tier`
   on `SwimMembership` so `_merge` / new `_mark_heard` entries only
-  accept ids that pass the same deny-by-default policy. The members
-  table is bounded by the admitted set; unadmitted ids are not
-  re-gossiped. Operator seeds are retained. No digest truncation,
-  no magic cap. Proof obligation
+  accept ids that pass the same deny-by-default policy. Optional
+  `peer_key` supplies a verified SVID public key for pinned rules;
+  resolver exceptions fail closed. The members table is bounded by
+  the admitted set; unadmitted ids are not re-gossiped. Operator
+  seeds are retained as bootstrap. No digest truncation, no magic
+  cap. Proof obligation
   `unadmitted_gossip_does_not_enter_membership`.
 - **C1 (D6.5)** `routing.py` — routing table + multi-hop forwarding. [RUNNABLE]
   **Landed (v0):** `Router.handle` returns a pure `RoutingDecision`

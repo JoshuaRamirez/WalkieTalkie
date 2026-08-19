@@ -509,7 +509,13 @@ each entry names the module that implements it.
   pair (the D6.4 `PeerAdmissionPolicy` seam, leftover #104) gates
   *learning*: a gossiped id enters `members` only when it passes
   deny-by-default admission, so the table is bounded by the admitted
-  set. Operator seeds are retained. Callers that omit the pair keep
+  set. Optional `peer_key` supplies a verified SVID public key for
+  pinned rules; resolver exceptions fail closed. Operator seeds are
+  retained as bootstrap. The gate keys on `node_id`, which is also
+  the `transport.send` dest (existing Transport contract): it applies
+  when node ids are valid dests *and* SPIFFE ids (the D6.4 in-memory
+  path). `TlsSocketTransport` callers omit the membership gate;
+  admission stays on routing / TLS. Callers that omit the pair keep
   the original reachability-only table. Routing-table deny-by-default
   stays on `GossipDiscovery`. **Malformed frames are skipped, never raised** —
   the digest is parsed in the clear before anything authenticates its

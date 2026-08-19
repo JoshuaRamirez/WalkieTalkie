@@ -3,7 +3,13 @@
 import json
 import unittest
 
-from envelope.peer_admission import AdmissionRule, PeerAdmissionPolicy
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+from envelope.peer_admission import (
+    AdmissionRule,
+    PeerAdmissionPolicy,
+    public_key_fingerprint,
+)
 from mesh.membership import Member, MemberState, SwimMembership, _supersedes
 from mesh.transport import (
     Frame,
@@ -252,6 +258,71 @@ class AdmissionGateTests(unittest.TestCase):
             SwimMembership("n0", transport, admission=_POLICY_AB)
         with self.assertRaises(TransportError):
             SwimMembership("n0", transport, peer_tier=lambda _p: _TIER)
+        with self.assertRaises(TransportError):
+            SwimMembership("n0", transport, peer_key=lambda _p: None)
+
+    def test_raising_peer_tier_drops_candidate_and_tick_continues(self):
+        def boom_on_rogue(nid):
+            if nid == _ROGUE:
+                raise RuntimeError("tier backend down")
+            return _TIER
+
+        msg = {
+            "from": _B,
+            "type": "ping",
+            "gossip": [[_B, 0, "alive"], [_ROGUE, 0, "alive"]],
+        }
+        transport = _QueueTransport([b"123", msg])
+        node = SwimMembership(
+            _A, transport,
+            admission=_POLICY_AB, peer_tier=boom_on_rogue,
+        )
+        node.tick()  # must not raise
+        self.assertIn(_B, node.members)
+        self.assertNotIn(_ROGUE, node.members)
+
+    def test_pinned_rule_without_key_is_denied(self):
+        key = Ed25519PrivateKey.generate()
+        policy = PeerAdmissionPolicy(
+            rules=(
+                AdmissionRule(
+                    spiffe_id=_B, env_tier=_TIER,
+                    pinned_fingerprint=public_key_fingerprint(key.public_key()),
+                ),
+            )
+        )
+        node = SwimMembership(
+            _A, InMemoryTransport(_A, Switchboard()),
+            admission=policy, peer_tier=lambda _p: _TIER,
+        )
+        node._merge([[_B, 0, "alive"]])
+        self.assertNotIn(_B, node.members)
+
+    def test_pinned_rule_with_matching_key_may_learn(self):
+        key = Ed25519PrivateKey.generate()
+        policy = PeerAdmissionPolicy(
+            rules=(
+                AdmissionRule(
+                    spiffe_id=_B, env_tier=_TIER,
+                    pinned_fingerprint=public_key_fingerprint(key.public_key()),
+                ),
+            )
+        )
+        node = SwimMembership(
+            _A, InMemoryTransport(_A, Switchboard()),
+            admission=policy, peer_tier=lambda _p: _TIER,
+            peer_key=lambda nid: key.public_key() if nid == _B else None,
+        )
+        node._merge([[_B, 0, "alive"]])
+        self.assertIn(_B, node.members)
+
+    def test_unpinned_rule_unchanged_without_peer_key(self):
+        node = SwimMembership(
+            _A, InMemoryTransport(_A, Switchboard()),
+            admission=_POLICY_AB, peer_tier=lambda _p: _TIER,
+        )
+        node._merge([[_B, 0, "alive"]])
+        self.assertIn(_B, node.members)
 
     def test_malformed_frames_still_skipped_with_gate(self):
         transport = _QueueTransport([b"123", b"{{{", {"from": ["p"], "gossip": []}])

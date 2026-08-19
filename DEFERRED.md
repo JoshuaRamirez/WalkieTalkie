@@ -119,12 +119,14 @@ vocabulary first.
 reuses the D6.4 `PeerAdmissionPolicy` seam. `_merge` and new
 `_mark_heard` entries insert an id only when it passes deny-by-default
 admission, so the members table is bounded by the admitted set
-rather than a magic number. Operator-supplied seeds are retained
-(already an admitted set). `_digest()` is not truncated — unadmitted
-ids never enter, so they are never re-gossiped. Callers that omit
-the gate are unchanged. Proof obligation
-`unadmitted_gossip_does_not_enter_membership` pins the leftover.
-See leftover #104.
+rather than a magic number. Optional `peer_key` supplies a verified
+SVID public key so pinned rules can evaluate; resolver exceptions
+fail closed. Operator-supplied seeds are retained as bootstrap
+(the gate does not evict them, even if they would fail admission).
+`_digest()` is not truncated — unadmitted ids never enter, so they
+are never re-gossiped. Callers that omit the gate are unchanged.
+Proof obligation `unadmitted_gossip_does_not_enter_membership`
+pins the leftover. See leftover #104.
 
 ---
 
