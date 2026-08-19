@@ -203,6 +203,13 @@ this plan doc and the task list updated after every iteration.
   self-asserted). Discovery ≠ authorization at network scope — vision
   §8.1. Proof obligation `gossiped_peer_still_gated_by_admission`;
   registry now 45. 3 tests.
+  **Landed (v0, leftover #104):** optional `admission` + `peer_tier`
+  on `SwimMembership` so `_merge` / new `_mark_heard` entries only
+  accept ids that pass the same deny-by-default policy. The members
+  table is bounded by the admitted set; unadmitted ids are not
+  re-gossiped. Operator seeds are retained. No digest truncation,
+  no magic cap. Proof obligation
+  `unadmitted_gossip_does_not_enter_membership`.
 - **C1 (D6.5)** `routing.py` — routing table + multi-hop forwarding. [RUNNABLE]
   **Landed (v0):** `Router.handle` returns a pure `RoutingDecision`
   (deliver / forward / drop). Security-shaped forwarding: **deny by

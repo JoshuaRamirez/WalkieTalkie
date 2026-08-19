@@ -69,7 +69,15 @@ deliverables carry `**Landed (v0):**` annotations in
   Pool-ceiling rebalancing stays global. Callers that omit
   `tenant_budgets` are a no-op on the tenant half. See leftover
   #102 / `DEFERRED.md`.
-- **Proof-obligation registry** (`envelope/proof_obligations.py`): 61 invariants,
+- **Phase 6 leftover #104 — admission-gated membership table.**
+  Optional `admission` + `peer_tier` on `SwimMembership` so
+  `_merge` / new `_mark_heard` entries only learn ids that pass
+  the existing D6.4 deny-by-default `PeerAdmissionPolicy`. The
+  table is bounded by the admitted set; no digest truncation, no
+  magic cap, no eviction. Operator seeds are retained. Callers
+  that omit the gate are unchanged. See leftover #104 /
+  `DEFERRED.md`.
+- **Proof-obligation registry** (`envelope/proof_obligations.py`): 62 invariants,
   each pinned by a canonical test and gated by `test_every_obligation_resolves`.
 - Root `README.md`, `SECURITY.md` disclosure policy, `CHANGELOG.md`,
   `CONTRIBUTING.md`, and a `.github/pull_request_template.md`.

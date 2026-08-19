@@ -20,8 +20,16 @@ config file. This is a SWIM-style membership protocol
 Transport-agnostic: it runs over any :class:`transport.Transport`, so the
 same protocol works over `InMemoryTransport` (deterministic tests) or
 `TlsSocketTransport` (encrypted, mutually-authenticated wire). Membership
-here answers *"who is in the cluster and reachable"*; it does **not**
-decide *"who is allowed"* — that is `peer_admission` (wired in D6.4).
+answers *"who is in the cluster and reachable"*. An optional
+`admission` + `peer_tier` pair (the D6.4
+:class:`~envelope.peer_admission.PeerAdmissionPolicy` seam) additionally
+gates *learning*: a gossiped id enters :attr:`members` only when it
+passes deny-by-default admission. That bounds the table by the admitted
+set rather than a magic cap — ``_digest()`` is not truncated, and nothing
+is evicted. Operator-supplied seeds are already an admitted set and are
+never dropped. Callers that omit the pair keep the original
+reachability-only table (loopback/LAN tests). Routing-table deny-by-default
+stays on :class:`gossip_discovery.GossipDiscovery`.
 
 Loopback / small-N is real protocol, bounded scale. v0 probes every
 non-dead peer each tick (simple, O(N²) messages); production SWIM probes
@@ -37,9 +45,15 @@ Out of scope for v0 (deferred, see DEFERRED.md):
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import StrEnum
+
+from envelope.peer_admission import (
+    PeerAdmissionError,
+    PeerAdmissionPolicy,
+    admit_peer,
+)
 
 from .transport import Transport, TransportError
 
@@ -90,6 +104,10 @@ class SwimMembership:
     Drive it by calling :meth:`tick` on a period (a real deployment runs a
     timer thread; tests step it deterministically). Each tick: process
     inbound gossip, age peers toward SUSPECT/DEAD, and probe peers.
+
+    ``admission`` + ``peer_tier`` are optional and must be supplied
+    together. When set, new gossiped ids enter :attr:`members` only if
+    they pass deny-by-default :func:`~envelope.peer_admission.admit_peer`.
     """
 
     def __init__(
@@ -100,6 +118,8 @@ class SwimMembership:
         seeds: Iterable[str] = (),
         suspect_after: int = 3,
         dead_after: int = 3,
+        admission: PeerAdmissionPolicy | None = None,
+        peer_tier: Callable[[str], str | None] | None = None,
     ) -> None:
         if not isinstance(node_id, str) or not node_id:
             raise TransportError("node_id must be a non-empty string")
@@ -107,13 +127,19 @@ class SwimMembership:
             raise TransportError("transport must be a Transport")
         if suspect_after < 1 or dead_after < 1:
             raise TransportError("suspect_after/dead_after must be >= 1")
+        if (admission is None) ^ (peer_tier is None):
+            raise TransportError("admission and peer_tier must be provided together")
         self.node_id = node_id
         self.transport = transport
         self.incarnation = 0
         self.suspect_after = suspect_after
         self.dead_after = dead_after
+        self.admission = admission
+        self.peer_tier = peer_tier
         self.members: dict[str, Member] = {}
         self._seq = 0
+        # Seeds are operator-supplied — already an admitted set. Do not
+        # evict them even if they would fail the optional gossip gate.
         for s in seeds:
             if s and s != node_id:
                 self.members[s] = Member(s, 0, MemberState.ALIVE)
@@ -142,6 +168,27 @@ class SwimMembership:
         self._probe()
 
     # ---- internals ----------------------------------------------------
+    def _may_learn(self, nid: str) -> bool:
+        """Whether a *new* id may enter :attr:`members`.
+
+        No gate → yes (existing callers unchanged). When the D6.4 pair
+        is attached, only ids that pass deny-by-default admission are
+        learned. ``peer_tier`` returning ``None``, a mismatched tier, or
+        an id ``admit_peer`` rejects (invalid SPIFFE, etc.) all deny —
+        fail closed, never raise into ``tick``.
+        """
+        if self.admission is None or self.peer_tier is None:
+            return True
+        tier = self.peer_tier(nid)
+        if tier is None:
+            return False
+        try:
+            return admit_peer(
+                spiffe_id=nid, env_tier=tier, policy=self.admission
+            ).allowed
+        except PeerAdmissionError:
+            return False
+
     def _next_seq(self) -> int:
         self._seq += 1
         return self._seq
@@ -182,6 +229,8 @@ class SwimMembership:
                 continue
             cur = self.members.get(nid)
             if cur is None:
+                if not self._may_learn(nid):
+                    continue
                 self.members[nid] = Member(nid, inc, raw_state, 0)
                 continue
             if _supersedes(raw_state, inc, cur.state, cur.incarnation):
@@ -195,6 +244,8 @@ class SwimMembership:
             return
         m = self.members.get(sender)
         if m is None:
+            if not self._may_learn(sender):
+                return
             self.members[sender] = Member(sender, 0, MemberState.ALIVE, 0)
         elif m.state is not MemberState.DEAD:
             m.state = MemberState.ALIVE
