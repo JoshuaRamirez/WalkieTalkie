@@ -60,7 +60,15 @@ deliverables carry `**Landed (v0):**` annotations in
   emits one hash-chained `XXX.verify` / `checkpoint.evaluate` event on
   allow and on deny; sink failure fails closed. Existing callers that
   omit the sink are unchanged. See `DEFERRED.md`.
-- **Proof-obligation registry** (`envelope/proof_obligations.py`): 60 invariants,
+- **Phase 3 leftover #102 — tenant-level capacity rebalancing.**
+  `CapacityRebalancer` applies the same stress/slack/cascade
+  heuristic to per-tenant `TenantBudget.burst`, using
+  `BudgetController.tenant_snapshot()` for live consumption.
+  Burst never falls below that tenant's reserve or in-flight;
+  reserved stays put. Pool-ceiling rebalancing is unchanged.
+  Callers that omit `tenant_budgets` are a no-op on the tenant
+  half. See leftover #102 / `DEFERRED.md`.
+- **Proof-obligation registry** (`envelope/proof_obligations.py`): 61 invariants,
   each pinned by a canonical test and gated by `test_every_obligation_resolves`.
 - Root `README.md`, `SECURITY.md` disclosure policy, `CHANGELOG.md`,
   `CONTRIBUTING.md`, and a `.github/pull_request_template.md`.

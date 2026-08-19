@@ -253,9 +253,10 @@ each entry names the module that implements it.
   a noisy tenant hits their own `burst` cap
   (`BUDGET_TENANT_BURST_EXCEEDED`) before draining the pool's burst
   headroom. `snapshot()` and `tenant_snapshot()` expose live
-  consumption for a future rebalancer.
+  consumption for the capacity rebalancer. `adjust_tenant_burst`
+  is the mutation sibling of `adjust_ceiling`.
 - **Capacity rebalancer v0** (`envelope/capacity_rebalancer.py`,
-  Phase 3 B3 deferred half, circle-back): `CapacityRebalancer`
+  Phase 3 B3, leftover #102 tenant half): `CapacityRebalancer`
   reads a `BudgetController` snapshot, classifies pools as stressed
   (utilization ≥ `stress_threshold`) or slack (utilization ≤
   `slack_threshold`), and declares the system *cascading* when
@@ -263,12 +264,18 @@ each entry names the module that implements it.
   least one slack pool is available. `evaluate()` drafts a
   `RebalanceDecision` that moves `transfer_fraction` of each slack
   pool's donor-side headroom to the stressed pools proportional to
-  their `stress_excess`. `apply()` mutates the controller via
-  `BudgetController.adjust_ceiling`, which preserves the
+  their `stress_excess`. The same heuristic applies to per-tenant
+  `TenantBudget.burst` (from `tenant_snapshot()`): slack tenants
+  donate burst headroom to stressed tenants; a tenant's burst never
+  falls below that tenant's `reserve` or current in-flight.
+  Callers that omit `tenant_budgets` see a no-op tenant half.
+  `apply()` mutates the controller via
+  `BudgetController.adjust_ceiling` and
+  `adjust_tenant_burst`, which preserve the
   **non-preemptible floor**, the **cross-pool oversubscription
-  cap**, and the no-retroactive-overcommit rule end-to-end. Shrinks
-  apply before grows so intermediate states never violate the
-  oversubscription cap.
+  cap**, the tenant burst floors, and the no-retroactive-overcommit
+  rule end-to-end. Shrinks apply before grows so intermediate
+  states never violate the oversubscription cap.
 - **Safe-mode engine v0** (`envelope/safe_mode_engine.py`, Phase 3
   Track C C1/C2/C3): implements the §4.2 S0/S1/S2/S3/S4 global state
   semantics plus the §4.1 authority hierarchy (`CRYPTO_TRUST` >

@@ -227,6 +227,12 @@ Transitions must follow deterministic workflow:
   **cross-pool oversubscription cap**, and the no-retroactive-
   overcommit rule end to end. Shrinks apply before grows so
   intermediate states never violate the oversubscription cap.
+  **Landed (v0, leftover #102):** the same heuristic now also
+  adjusts per-tenant `TenantBudget.burst` from
+  `tenant_snapshot()`. Burst never falls below that tenant's
+  `reserve` or current in-flight; reserved stays put. Callers
+  that omit `tenant_budgets` are unchanged. Mutation path:
+  `BudgetController.adjust_tenant_burst`.
 
 **Acceptance Criteria**
 - Data-plane flood cannot starve revocation/authZ/policy services.
