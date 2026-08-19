@@ -214,7 +214,7 @@ loopback:
 reachability, not security*. mTLS over `127.0.0.1` is real TLS; an
 in-process gossip cluster is a real protocol. What stays [REFERENCE] (the
 deployment-networking doc) is exactly the part that *is* infrastructure.
-The proof-obligations registry now holds **57** obligations, all
+The proof-obligations registry now holds **58** obligations, all
 resolving.
 
 When integrating a real WAN deployment, **start from

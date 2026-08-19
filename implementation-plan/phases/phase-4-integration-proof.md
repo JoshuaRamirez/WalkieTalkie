@@ -358,6 +358,8 @@ Phase 4 deliberately does NOT cover:
 - Audit emission wiring for the Phase 2 primitives that lack it
   (delegation, retrieval, egress, etc.).
 - Property-based delegation chain tests (Phase 2 A3).
+  **Since shipped:** `envelope/test_delegation_receipt_properties.py`
+  and `DEFERRED.md` (item marked shipped).
 - ML classifiers for output scanning (Phase 2 C1).
 - Multi-host / networked deployment.
 - Distributed backends for any in-memory store.

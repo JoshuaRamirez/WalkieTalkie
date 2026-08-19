@@ -41,7 +41,13 @@ deliverables carry `**Landed (v0):**` annotations in
   default is unchanged (loopback), and the security logic (mTLS peer
   verification, admission) is untouched; only the bind interface is
   configurable. New tests pin identity binding over a wildcard (`0.0.0.0`) bind.
-- **Proof-obligation registry** (`envelope/proof_obligations.py`): 57 invariants,
+- **Phase 2 Track A A3 — property/fuzz tests for delegation chains.**
+  Hypothesis suite over random valid and mutated graphs in
+  `envelope/test_delegation_receipt_properties.py`. Pins the existing
+  non-escalation invariants (scope identity, audience continuity, TTL
+  containment, hop/issuer bindings, depth, signature). `hypothesis` is
+  a `[dev]` extra only. See leftover #96 / `DEFERRED.md`.
+- **Proof-obligation registry** (`envelope/proof_obligations.py`): 58 invariants,
   each pinned by a canonical test and gated by `test_every_obligation_resolves`.
 - Root `README.md`, `SECURITY.md` disclosure policy, `CHANGELOG.md`,
   `CONTRIBUTING.md`, and a `.github/pull_request_template.md`.
