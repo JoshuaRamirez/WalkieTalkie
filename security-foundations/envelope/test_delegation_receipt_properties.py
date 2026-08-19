@@ -81,10 +81,9 @@ class GeneratedChain:
     now: datetime = _NOW
 
     def lookup(self, iss: str, kid: str) -> bytes:
-        try:
-            return self.keys[(iss, kid)][1]
-        except KeyError as exc:
-            raise Exception(f"unknown delegation issuer key: {iss}/{kid}") from exc
+        # Let KeyError propagate. verify_receipt wraps lookup failures as
+        # "unknown delegation issuer key: {exc}" — do not prefix here.
+        return self.keys[(iss, kid)][1]
 
     def private(self, iss: str, kid: str) -> Ed25519PrivateKey:
         return self.keys[(iss, kid)][0]
