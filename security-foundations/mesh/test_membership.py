@@ -222,16 +222,15 @@ class AdmissionGateTests(unittest.TestCase):
         self.assertEqual(node.state_of(_ROGUE), MemberState.ALIVE)
 
     def test_unknown_tier_and_wrong_tier_deny_new_entries(self):
-        sb = Switchboard()
         unknown = SwimMembership(
-            _A, InMemoryTransport(_A, sb),
+            _A, InMemoryTransport(_A, Switchboard()),
             admission=_POLICY_AB, peer_tier=lambda _p: None,
         )
         unknown._merge([[_B, 0, "alive"]])
         self.assertNotIn(_B, unknown.members)
 
         wrong = SwimMembership(
-            _A, InMemoryTransport(_A, sb),
+            _A, InMemoryTransport(_A, Switchboard()),
             admission=_POLICY_AB, peer_tier=lambda _p: "root",
         )
         wrong._merge([[_B, 0, "alive"]])
