@@ -57,12 +57,12 @@ from envelope.session_token import (
 )
 from envelope.tool_policy_gate import (
     RiskTier,
+    StepUpAttestation,
     ToolCall,
     ToolPolicy,
     ToolRule,
     evaluate_tool_call,
     sign_step_up,
-    StepUpAttestation,
 )
 from envelope.verify_envelope import EnvelopeVerificationError
 
