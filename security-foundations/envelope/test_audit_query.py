@@ -1,14 +1,11 @@
 """Tests for the canned audit search views (Phase 1 Track D D2)."""
 
 import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime, timedelta
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from audit import InMemoryAuditSink, JsonlAuditSink
-from audit_query import (
+from envelope.audit import InMemoryAuditSink, JsonlAuditSink
+from envelope.audit_query import (
     allows,
     break_glass_attempts,
     cross_tenant_attempts,
@@ -26,7 +23,6 @@ _TD_A = "spiffe://mesh.example/ns-a/svc"
 _TD_B = "spiffe://mesh.example/ns-b/svc"
 _TD_OTHER = "spiffe://other-mesh.example/ns-z/svc"
 
-
 def _record(sink, **overrides):
     defaults = dict(
         event_type="envelope.verify",
@@ -41,7 +37,6 @@ def _record(sink, **overrides):
     defaults.update(overrides)
     return sink.record(**defaults)
 
-
 class TrustDomainOfTests(unittest.TestCase):
     def test_extracts_host(self):
         self.assertEqual(trust_domain_of(_TD_A), "mesh.example")
@@ -51,7 +46,6 @@ class TrustDomainOfTests(unittest.TestCase):
         for bad in ("", "https://mesh.example/x", "not-a-uri", None):
             with self.subTest(value=bad):
                 self.assertIsNone(trust_domain_of(bad))
-
 
 class OutcomeFiltersTests(unittest.TestCase):
     def setUp(self):
@@ -67,7 +61,6 @@ class OutcomeFiltersTests(unittest.TestCase):
 
     def test_denies(self):
         self.assertEqual(len(list(denies(self.sink.events))), 1)
-
 
 class AttributeFiltersTests(unittest.TestCase):
     def setUp(self):
@@ -108,7 +101,6 @@ class AttributeFiltersTests(unittest.TestCase):
             len(list(with_reason_code(self.sink.events, "replay_detected"))), 1
         )
 
-
 class ReplayQueryTests(unittest.TestCase):
     def test_replays_filters_by_reason_code(self):
         sink = InMemoryAuditSink()
@@ -121,7 +113,6 @@ class ReplayQueryTests(unittest.TestCase):
         self.assertEqual(
             [e.reason_code for e in replays(sink.events)], ["replay_detected"]
         )
-
 
 class CrossTenantQueryTests(unittest.TestCase):
     def test_same_trust_domain_not_flagged(self):
@@ -143,7 +134,6 @@ class CrossTenantQueryTests(unittest.TestCase):
         _record(sink, sender=_TD_A, recipient="",
                 timestamp=ts + timedelta(seconds=1))
         self.assertEqual(list(cross_tenant_attempts(sink.events)), [])
-
 
 class BreakGlassQueryTests(unittest.TestCase):
     def test_nothing_today(self):
@@ -186,7 +176,6 @@ class BreakGlassQueryTests(unittest.TestCase):
         )
         self.assertEqual(len(list(break_glass_attempts(sink.events))), 1)
 
-
 class VectorIntegrationTests(unittest.TestCase):
     """Sanity-check against the checked-in test vector."""
 
@@ -208,7 +197,6 @@ class VectorIntegrationTests(unittest.TestCase):
         self.assertEqual(list(cross_tenant_attempts(events)), [])
         self.assertEqual(list(replays(events)), [])
         self.assertEqual(list(break_glass_attempts(events)), [])
-
 
 if __name__ == "__main__":
     unittest.main()

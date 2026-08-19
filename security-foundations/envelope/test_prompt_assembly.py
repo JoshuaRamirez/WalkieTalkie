@@ -1,15 +1,11 @@
 """Tests for prompt assembly minimization (Phase 2 Track B B3)."""
 
 import hashlib
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from data_classification import DataClass, classify
-from prompt_assembly import (
+from envelope.data_classification import DataClass, classify
+from envelope.prompt_assembly import (
     ActionBudget,
     PromptAssemblyError,
     PromptCandidate,
@@ -22,7 +18,6 @@ _ACTOR_HOME = "spiffe://mesh.example/ns-a/svc"
 _ACTOR_FOREIGN = "spiffe://other-mesh.example/ns-z/svc"
 _KID = "kid-a"
 
-
 def _data(*, data_class: DataClass, actor: str = _ACTOR_HOME, salt: str = "x"):
     return classify(
         data_digest=hashlib.sha256(salt.encode()).hexdigest(),
@@ -32,14 +27,12 @@ def _data(*, data_class: DataClass, actor: str = _ACTOR_HOME, salt: str = "x"):
         now=_NOW,
     )
 
-
 def _candidate(label: str, data_class: DataClass, *, actor: str = _ACTOR_HOME):
     return PromptCandidate(
         source_label=label,
         data=_data(data_class=data_class, actor=actor, salt=label),
         text=f"[{label}]",
     )
-
 
 class ActionBudgetValidationTests(unittest.TestCase):
     def test_empty_action_rejected(self):
@@ -60,7 +53,6 @@ class ActionBudgetValidationTests(unittest.TestCase):
                 action="summarize", max_class=DataClass.PUBLIC, max_items=0
             )
 
-
 class PromptCandidateValidationTests(unittest.TestCase):
     def test_empty_source_label_rejected(self):
         with self.assertRaisesRegex(PromptAssemblyError, "source_label"):
@@ -77,7 +69,6 @@ class PromptCandidateValidationTests(unittest.TestCase):
                 data="not-classified",  # type: ignore[arg-type]
                 text="x",
             )
-
 
 class ClassCeilingTests(unittest.TestCase):
     def test_drops_items_above_budget(self):
@@ -119,7 +110,6 @@ class ClassCeilingTests(unittest.TestCase):
         self.assertEqual(len(ctx.items), 1)
         self.assertEqual(ctx.dropped, ())
 
-
 class LeastSensitiveFirstTests(unittest.TestCase):
     def test_orders_by_rank_then_label(self):
         budget = ActionBudget(
@@ -156,7 +146,6 @@ class LeastSensitiveFirstTests(unittest.TestCase):
             [i.source_label for i in c1.items],
             [i.source_label for i in c2.items],
         )
-
 
 class MaxItemsTests(unittest.TestCase):
     def test_overflow_dropped_with_distinct_reason(self):
@@ -201,7 +190,6 @@ class MaxItemsTests(unittest.TestCase):
         self.assertIn(("c", "class_exceeds_budget"), reasons)
         self.assertIn(("d", "items_over_budget"), reasons)
 
-
 class LoggingMetadataTests(unittest.TestCase):
     def test_items_carry_trust_label(self):
         budget = ActionBudget(
@@ -242,7 +230,6 @@ class LoggingMetadataTests(unittest.TestCase):
         self.assertEqual(by_label["a"], DataClass.PUBLIC)
         self.assertEqual(by_label["b"], DataClass.CONFIDENTIAL)
 
-
 class RealizedMaxClassTests(unittest.TestCase):
     def test_empty_returns_public(self):
         budget = ActionBudget(
@@ -270,7 +257,6 @@ class RealizedMaxClassTests(unittest.TestCase):
         # Budget allows RESTRICTED, but realized max is INTERNAL.
         self.assertEqual(ctx.realized_max_class, DataClass.INTERNAL)
 
-
 class ResultShapeTests(unittest.TestCase):
     def test_returns_prompt_context(self):
         budget = ActionBudget(
@@ -289,7 +275,6 @@ class ResultShapeTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(PromptAssemblyError, "PromptCandidate"):
             compose(["not-a-candidate"], budget=budget)  # type: ignore[list-item]
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -28,8 +28,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from membership import SwimMembership
-from peer_admission import PeerAdmissionPolicy, admit_peer
+from envelope.peer_admission import PeerAdmissionPolicy, admit_peer
+
+from .membership import SwimMembership
 
 
 @dataclass

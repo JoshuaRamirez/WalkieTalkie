@@ -1,18 +1,14 @@
 import base64
 import json
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime, timedelta
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from audit import InMemoryAuditSink
-from verifier import VerificationResult, Verifier
-from verify_envelope import (
+from envelope.audit import InMemoryAuditSink
+from envelope.verifier import VerificationResult, Verifier
+from envelope.verify_envelope import (
     EnvelopeVerificationError,
     InMemoryReplayCache,
     _digest_payload,
@@ -22,7 +18,6 @@ from verify_envelope import (
 
 def _b64u(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
 
 def _ed25519_keypair():
     priv = Ed25519PrivateKey.generate()
@@ -37,13 +32,11 @@ def _ed25519_keypair():
     )
     return priv_pem, pub_pem
 
-
 _ISSUER = "spiffe://mesh/cap-issuer-1"
 _ISSUER_KID = "issuer-kid-1"
 _SENDER = "spiffe://mesh/ns-a/service-a"
 _RECIPIENT = "spiffe://mesh/ns-b/service-b"
 _PURPOSE = "invoke_tool"
-
 
 def _mint_token(issuer_priv_pem: bytes, payload_digest: str, now: datetime) -> str:
     issuer = serialization.load_pem_private_key(issuer_priv_pem, password=None)
@@ -66,7 +59,6 @@ def _mint_token(issuer_priv_pem: bytes, payload_digest: str, now: datetime) -> s
     sig = _b64u(issuer.sign((h + "." + p).encode("ascii")))
     return f"{h}.{p}.{sig}"
 
-
 def _sign_envelope(envelope: dict, signer_priv_pem: bytes) -> dict:
     signer = serialization.load_pem_private_key(signer_priv_pem, password=None)
     assert isinstance(signer, Ed25519PrivateKey)
@@ -74,7 +66,6 @@ def _sign_envelope(envelope: dict, signer_priv_pem: bytes) -> dict:
     signing_input = canonicalize_envelope_for_signing(envelope)
     envelope["signature"] = _b64u(signer.sign(signing_input))
     return envelope
-
 
 class VerifierTests(unittest.TestCase):
     @classmethod
@@ -171,7 +162,7 @@ class VerifierTests(unittest.TestCase):
             verifier.verify(envelope, now=now)
 
     def test_verifier_rejects_revoked_token(self):
-        from revocation_list import InMemoryRevocationList
+        from envelope.revocation_list import InMemoryRevocationList
 
         envelope, now = self._valid_envelope()
         rl = InMemoryRevocationList(["0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c2"])
@@ -184,7 +175,6 @@ class VerifierTests(unittest.TestCase):
         result = verifier.try_verify(envelope, now=now)
         self.assertFalse(result.ok)
         self.assertIn("revoked", result.reason)
-
 
 if __name__ == "__main__":
     unittest.main()

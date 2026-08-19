@@ -1,25 +1,19 @@
 """Tests for the mTLS transport (Phase 6 Track A D6.1)."""
 
-import pathlib
-import sys
 import time
 import unittest
 from datetime import UTC, datetime, timedelta
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "envelope"))
-
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from tls_transport import TlsSocketTransport, mint_identity
-from transport import TransportError
-from workload_ca import WorkloadCA
+
+from envelope.workload_ca import WorkloadCA
+from mesh.tls_transport import TlsSocketTransport, mint_identity
+from mesh.transport import TransportError
 
 _NOW = datetime.now(UTC)
 
-
 def _ca(trust_domain="mesh.local"):
     return WorkloadCA(trust_domain=trust_domain, root_key=Ed25519PrivateKey.generate())
-
 
 def _await_frame(t, tries=60):
     for _ in range(tries):
@@ -28,7 +22,6 @@ def _await_frame(t, tries=60):
             return f
         time.sleep(0.02)
     return None
-
 
 class MutualTlsTests(unittest.TestCase):
     def test_valid_peers_exchange_frame_over_mtls(self):
@@ -88,7 +81,6 @@ class MutualTlsTests(unittest.TestCase):
             self.assertTrue(t.address.startswith("127.0.0.1:"))
             self.assertEqual(t.spiffe_id, "spiffe://mesh.local/x")
 
-
 class ConfigurableBindTests(unittest.TestCase):
     """The bind interface is configurable so peers on other machines can
     connect. The default is unchanged, and widening the bind interface does
@@ -130,7 +122,6 @@ class ConfigurableBindTests(unittest.TestCase):
         ca = _ca()
         with self.assertRaises(TransportError):
             TlsSocketTransport(mint_identity(ca, "spiffe://mesh.local/x"), bind_host="")
-
 
 if __name__ == "__main__":
     unittest.main()

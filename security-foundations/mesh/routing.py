@@ -37,7 +37,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 
-from transport import TransportError
+from .transport import TransportError
 
 _DEFAULT_TTL = 8
 
@@ -46,7 +46,6 @@ _DEFAULT_TTL = 8
 # unbounded memory per frame. Both are far above real SPIFFE-style ids.
 MAX_NODE_ID_LEN = 256
 MAX_MSG_ID_LEN = 256
-
 
 @dataclass(frozen=True)
 class RoutedMessage:
@@ -140,7 +139,6 @@ class RoutedMessage:
             payload=payload,
         )
 
-
 @dataclass(frozen=True)
 class RoutingDecision:
     action: str  # "deliver" | "forward" | "drop"
@@ -148,7 +146,6 @@ class RoutingDecision:
     next_hop: str | None = None        # set for "forward"
     forwarded: RoutedMessage | None = None  # set for "forward" (ttl-1)
     reason: str = ""                   # set for "drop"
-
 
 class Router:
     """Per-node forwarding engine.

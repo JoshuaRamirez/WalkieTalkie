@@ -74,18 +74,15 @@ from enum import StrEnum
 class InstructionIsolationError(ValueError):
     """Raised when isolation invariants are violated."""
 
-
 class ContentChannel(StrEnum):
     SYSTEM = "system"
     USER = "user"
     TOOL = "tool"
     RETRIEVED = "retrieved"
 
-
 class Trust(StrEnum):
     TRUSTED = "trusted"
     UNTRUSTED = "untrusted"
-
 
 _HTML_ESCAPES = (
     ("&", "&amp;"),
@@ -93,12 +90,10 @@ _HTML_ESCAPES = (
     (">", "&gt;"),
 )
 
-
 def _escape(text: str) -> str:
     for raw, esc in _HTML_ESCAPES:
         text = text.replace(raw, esc)
     return text
-
 
 @dataclass(frozen=True)
 class ContentSegment:
@@ -156,7 +151,6 @@ class ContentSegment:
                 "non-empty — tool outputs are untrusted unless signed"
             )
 
-
 @dataclass(frozen=True)
 class AuditEntry:
     """One row of the audit-side counterpart to the rendered prompt."""
@@ -166,16 +160,13 @@ class AuditEntry:
     trust: Trust
     signature_ref: str
 
-
 @dataclass(frozen=True)
 class IsolatedPrompt:
     text: str
     nonce: str
     audit_log: tuple[AuditEntry, ...] = field(default_factory=tuple)
 
-
 _FENCE_PREFIX = "wt-iso"
-
 
 def _fresh_nonce(*, segments: Iterable[ContentSegment], rng: secrets.SystemRandom | None = None) -> str:
     """Pick a fresh 96-bit nonce.
@@ -188,7 +179,6 @@ def _fresh_nonce(*, segments: Iterable[ContentSegment], rng: secrets.SystemRando
     """
     rng = rng or secrets.SystemRandom()
     return f"{rng.getrandbits(96):024x}"
-
 
 def assemble_isolated_prompt(
     segments: Iterable[ContentSegment],

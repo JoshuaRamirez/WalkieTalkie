@@ -2,7 +2,6 @@
 
 import json
 import pathlib
-import sys
 import tempfile
 import unittest
 from datetime import timedelta
@@ -10,9 +9,7 @@ from datetime import timedelta
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from policy_bundle import (
+from envelope.policy_bundle import (
     FileBackedRollbackGuard,
     InMemoryRollbackGuard,
     PolicyBundle,
@@ -29,7 +26,6 @@ _SUB = "spiffe://mesh.example/ns-a/svc"
 _AUD = "spiffe://mesh.example/ns-b/svc"
 _SCOPE = "invoke_tool"
 
-
 def _keypair():
     priv = Ed25519PrivateKey.generate()
     pub_pem = priv.public_key().public_bytes(
@@ -37,7 +33,6 @@ def _keypair():
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
     return priv, pub_pem
-
 
 def _bundle(version: int = 1, grants=None, max_ttl_seconds: int = 300) -> PolicyBundle:
     if grants is None:
@@ -49,7 +44,6 @@ def _bundle(version: int = 1, grants=None, max_ttl_seconds: int = 300) -> Policy
         allowlist_grants=grants,
         max_ttl_seconds=max_ttl_seconds,
     )
-
 
 class SignAndVerifyTests(unittest.TestCase):
     def setUp(self):
@@ -109,7 +103,6 @@ class SignAndVerifyTests(unittest.TestCase):
         with self.assertRaisesRegex(PolicyBundleError, "signature invalid"):
             verify_bundle(signed, issuer_lookup=lambda iss, kid: other_pem)
 
-
 class BundleShapeTests(unittest.TestCase):
     def setUp(self):
         self.priv, self.pem = _keypair()
@@ -142,7 +135,6 @@ class BundleShapeTests(unittest.TestCase):
         with self.assertRaisesRegex(PolicyBundleError, r"grants\[0\]\.sub invalid"):
             verify_bundle(signed, issuer_lookup=lambda iss, kid: self.pem)
 
-
 class JsonRoundTripTests(unittest.TestCase):
     def setUp(self):
         self.priv, self.pem = _keypair()
@@ -168,7 +160,6 @@ class JsonRoundTripTests(unittest.TestCase):
         obj["allowlist_grants"] = [["only", "two"]]
         with self.assertRaisesRegex(PolicyBundleError, "3-tuple of strings"):
             from_json(json.dumps(obj).encode())
-
 
 class RollbackGuardTests(unittest.TestCase):
     def setUp(self):
@@ -223,7 +214,6 @@ class RollbackGuardTests(unittest.TestCase):
             guard = FileBackedRollbackGuard(path)
             with self.assertRaisesRegex(PolicyBundleError, "corrupt"):
                 guard.accept(_bundle(version=1))
-
 
 if __name__ == "__main__":
     unittest.main()

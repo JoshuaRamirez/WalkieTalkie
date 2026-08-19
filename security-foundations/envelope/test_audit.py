@@ -1,13 +1,10 @@
 import json
 import pathlib
-import sys
 import tempfile
 import unittest
 from datetime import UTC, datetime
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from audit import (
+from envelope.audit import (
     GENESIS_PREV_HASH,
     AuditChainError,
     AuditEvent,
@@ -32,7 +29,6 @@ def _record(sink, **overrides):
     )
     base.update(overrides)
     return sink.record(**base)
-
 
 class InMemorySinkTests(unittest.TestCase):
     def test_first_event_uses_genesis_prev_hash(self):
@@ -81,7 +77,6 @@ class InMemorySinkTests(unittest.TestCase):
         with self.assertRaises(AuditChainError):
             verify_chain(events)
 
-
 class JsonlSinkTests(unittest.TestCase):
     def test_round_trip(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -122,7 +117,6 @@ class JsonlSinkTests(unittest.TestCase):
 
             with self.assertRaises(AuditChainError):
                 verify_chain(JsonlAuditSink(path).read_all())
-
 
 if __name__ == "__main__":
     unittest.main()

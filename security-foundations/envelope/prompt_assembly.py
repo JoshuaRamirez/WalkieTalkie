@@ -57,8 +57,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
-from audit_query import trust_domain_of
-from data_classification import (
+from .audit_query import trust_domain_of
+from .data_classification import (
     ClassifiedData,
     DataClass,
     is_more_restrictive,
@@ -68,14 +68,12 @@ from data_classification import (
 class PromptAssemblyError(ValueError):
     """Raised when assembly inputs violate v0 invariants."""
 
-
 _DATA_CLASS_RANK = {
     DataClass.PUBLIC: 0,
     DataClass.INTERNAL: 1,
     DataClass.CONFIDENTIAL: 2,
     DataClass.RESTRICTED: 3,
 }
-
 
 @dataclass(frozen=True)
 class ActionBudget:
@@ -104,7 +102,6 @@ class ActionBudget:
                 f"max_items must be a positive int: {self.max_items!r}"
             )
 
-
 @dataclass(frozen=True)
 class PromptCandidate:
     """One candidate context chunk submitted to the assembler.
@@ -127,7 +124,6 @@ class PromptCandidate:
         if not isinstance(self.text, str):
             raise PromptAssemblyError("text must be a string")
 
-
 @dataclass(frozen=True)
 class IncludedItem:
     """One chunk that made it into the assembled prompt."""
@@ -137,7 +133,6 @@ class IncludedItem:
     trust_label: str
     text: str
 
-
 @dataclass(frozen=True)
 class DroppedItem:
     """One chunk dropped before composition, with the reason recorded."""
@@ -145,7 +140,6 @@ class DroppedItem:
     source_label: str
     data_class: DataClass
     reason_code: str  # "class_exceeds_budget" | "items_over_budget"
-
 
 @dataclass(frozen=True)
 class PromptContext:
@@ -170,7 +164,6 @@ class PromptContext:
             (item.data_class for item in self.items),
             key=_DATA_CLASS_RANK.__getitem__,
         )
-
 
 def compose(
     candidates: Iterable[PromptCandidate],

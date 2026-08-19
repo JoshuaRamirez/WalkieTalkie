@@ -57,8 +57,9 @@ from enum import StrEnum
 import jcs
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from deny_reason import DenyReason
-from verify_envelope import (
+
+from .deny_reason import DenyReason
+from .verify_envelope import (
     HEX_SHA256_RE,
     KID_RE,
     SPIFFE_ID_RE,
@@ -70,13 +71,11 @@ from verify_envelope import (
 
 STEP_UP_TYP = "wt-stepup/v0"
 
-
 class RiskTier(StrEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
     CRITICAL = "critical"
-
 
 _RISK_RANK = {
     RiskTier.LOW: 0,
@@ -89,14 +88,11 @@ _RISK_RANK = {
 # per rule.
 _STEP_UP_BY_DEFAULT_AT = RiskTier.HIGH
 
-
 class ToolPolicyError(ValueError):
     """Raised when tool policy inputs violate v0 invariants."""
 
-
 class StepUpError(EnvelopeVerificationError):
     """Raised when a step-up attestation fails verification."""
-
 
 @dataclass(frozen=True)
 class ToolRule:
@@ -134,7 +130,6 @@ class ToolRule:
             return self.step_up_required
         return _RISK_RANK[self.risk_tier] >= _RISK_RANK[_STEP_UP_BY_DEFAULT_AT]
 
-
 @dataclass(frozen=True)
 class ToolPolicy:
     """A closed allowlist of named tools.
@@ -164,7 +159,6 @@ class ToolPolicy:
                 return rule
         return None
 
-
 @dataclass(frozen=True)
 class ToolCall:
     tool_name: str
@@ -185,7 +179,6 @@ class ToolCall:
                 f"arguments_digest must be hex sha256: {self.arguments_digest!r}"
             )
 
-
 @dataclass(frozen=True)
 class StepUpAttestation:
     """Out-of-band proof that step-up auth happened for a specific call."""
@@ -204,7 +197,6 @@ class StepUpAttestation:
     def to_dict(self) -> dict:
         return dataclasses.asdict(self)
 
-
 def _stepup_body(att: StepUpAttestation) -> bytes:
     body = {
         "typ": STEP_UP_TYP,
@@ -220,10 +212,8 @@ def _stepup_body(att: StepUpAttestation) -> bytes:
     }
     return jcs.canonicalize(body)
 
-
 def _b64u(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
 
 def sign_step_up(
     att: StepUpAttestation, signing_key: Ed25519PrivateKey
@@ -231,10 +221,8 @@ def sign_step_up(
     sig = _b64u(signing_key.sign(_stepup_body(att)))
     return dataclasses.replace(att, signature=sig)
 
-
 def to_json(att: StepUpAttestation) -> bytes:
     return json.dumps(att.to_dict(), separators=(",", ":")).encode("utf-8")
-
 
 def from_json(data: bytes) -> StepUpAttestation:
     try:
@@ -261,10 +249,8 @@ def from_json(data: bytes) -> StepUpAttestation:
         )
     return StepUpAttestation(**{k: obj[k] for k in required})
 
-
 def _malformed(msg: str) -> StepUpError:
     return StepUpError(msg, reason=DenyReason.TOOL_STEP_UP_MALFORMED)
-
 
 def _validate_shape(att: StepUpAttestation) -> None:
     if not isinstance(att.tool_name, str) or not att.tool_name:
@@ -288,7 +274,6 @@ def _validate_shape(att: StepUpAttestation) -> None:
             raise _malformed(f"{name} must be a NumericDate (int)")
     if not isinstance(att.signature, str) or not att.signature:
         raise _malformed("signature must be a non-empty string")
-
 
 def verify_step_up(
     att: StepUpAttestation,
@@ -376,13 +361,11 @@ def verify_step_up(
 
     return att
 
-
 @dataclass(frozen=True)
 class ToolCallDecision:
     allowed: bool
     reason: str
     reason_code: str = ""
-
 
 def evaluate_tool_call(
     *,
@@ -456,10 +439,8 @@ def evaluate_tool_call(
 
     return ToolCallDecision(allowed=True, reason="ok", reason_code="ok")
 
-
 class ToolPolicyDenied(EnvelopeVerificationError):
     """Raised by :func:`require_tool_call` on denial."""
-
 
 def require_tool_call(
     *,

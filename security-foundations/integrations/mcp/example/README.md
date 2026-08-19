@@ -34,8 +34,7 @@ and the `walkietalkie-envelope[dev]` ruff dependency.
 
 ```bash
 .venv/bin/python -m unittest discover \
-  -s security-foundations/envelope \
-  -t security-foundations/envelope
+  -s security-foundations -p 'test_*.py'
 ```
 
 Expect **705 tests OK**. If this fails, do not proceed; the
@@ -67,8 +66,7 @@ generation.
 
 ```bash
 .venv/bin/python -m unittest discover \
-  -s security-foundations/integrations \
-  -t security-foundations/integrations
+  -s security-foundations/integrations -p 'test_*.py'
 ```
 
 Expect **50 tests OK**. The four `test_smoke` tests are the
@@ -145,10 +143,8 @@ if your generator isn't using the deterministic clock wrapper).
 
 ```python
 import pathlib
-import sys
-sys.path.insert(0, "security-foundations/envelope")
 
-from audit import JsonlAuditSink, verify_chain
+from envelope.audit import JsonlAuditSink, verify_chain
 
 sink = JsonlAuditSink(
     pathlib.Path("security-foundations/integrations/mcp/example/sample-audit.jsonl")

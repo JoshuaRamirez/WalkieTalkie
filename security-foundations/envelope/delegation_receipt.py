@@ -51,8 +51,9 @@ from datetime import UTC, datetime, timedelta
 import jcs
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from deny_reason import DenyReason
-from verify_envelope import (
+
+from .deny_reason import DenyReason
+from .verify_envelope import (
     KID_RE,
     SPIFFE_ID_RE,
     UUID_V7_RE,
@@ -63,14 +64,12 @@ from verify_envelope import (
 
 DELEGATION_TYP = "wt-delegation/v0"
 
-
 class DelegationError(EnvelopeVerificationError):
     """Raised when a delegation receipt fails verification.
 
     Subclasses :class:`EnvelopeVerificationError` so callers that already
     catch the envelope error don't need a separate branch.
     """
-
 
 @dataclass(frozen=True)
 class DelegationReceipt:
@@ -91,7 +90,6 @@ class DelegationReceipt:
     def to_dict(self) -> dict:
         return dataclasses.asdict(self)
 
-
 @dataclass(frozen=True)
 class ParentClaims:
     """Subset of a parent receipt or capability-token claim set used for
@@ -106,7 +104,6 @@ class ParentClaims:
     exp: int
     hop_index: int = -1  # -1 means "this is a cap token, not another receipt"
 
-
 def parent_from_capability_claims(claims) -> ParentClaims:
     """Build a :class:`ParentClaims` from a
     :class:`capability_token.CapabilityClaims`."""
@@ -120,7 +117,6 @@ def parent_from_capability_claims(claims) -> ParentClaims:
         hop_index=-1,
     )
 
-
 def parent_from_receipt(receipt: DelegationReceipt) -> ParentClaims:
     return ParentClaims(
         jti=receipt.jti,
@@ -131,7 +127,6 @@ def parent_from_receipt(receipt: DelegationReceipt) -> ParentClaims:
         exp=receipt.exp,
         hop_index=receipt.hop_index,
     )
-
 
 def _body_for_signing(receipt: DelegationReceipt) -> bytes:
     body = {
@@ -151,10 +146,8 @@ def _body_for_signing(receipt: DelegationReceipt) -> bytes:
     }
     return jcs.canonicalize(body)
 
-
 def _b64u(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
 
 def sign_receipt(
     receipt: DelegationReceipt, signing_key: Ed25519PrivateKey
@@ -162,10 +155,8 @@ def sign_receipt(
     sig = _b64u(signing_key.sign(_body_for_signing(receipt)))
     return dataclasses.replace(receipt, signature=sig)
 
-
 def to_json(receipt: DelegationReceipt) -> bytes:
     return json.dumps(receipt.to_dict(), separators=(",", ":")).encode("utf-8")
-
 
 def from_json(data: bytes) -> DelegationReceipt:
     try:
@@ -191,10 +182,8 @@ def from_json(data: bytes) -> DelegationReceipt:
         )
     return DelegationReceipt(**{k: obj[k] for k in required})
 
-
 def _malformed(msg: str) -> DelegationError:
     return DelegationError(msg, reason=DenyReason.DELEGATION_MALFORMED)
-
 
 def _validate_shape(receipt: DelegationReceipt) -> None:
     if not isinstance(receipt.chain_id, str) or not UUID_V7_RE.match(receipt.chain_id):
@@ -227,16 +216,13 @@ def _validate_shape(receipt: DelegationReceipt) -> None:
         if not isinstance(value, int) or isinstance(value, bool):
             raise _malformed(f"{name} must be a NumericDate (int)")
 
-
 @dataclass(frozen=True)
 class DelegationVerificationConfig:
     max_clock_skew: timedelta = field(default_factory=lambda: timedelta(seconds=60))
     max_receipt_ttl: timedelta = field(default_factory=lambda: timedelta(minutes=5))
     max_chain_depth: int = 3  # hop_index < max_chain_depth
 
-
 DEFAULT_DELEGATION_CONFIG = DelegationVerificationConfig()
-
 
 def verify_receipt(
     receipt: DelegationReceipt,

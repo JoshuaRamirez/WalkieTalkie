@@ -1,26 +1,21 @@
 """Tests for discovery propagation integrity (Phase 3 Track A A3)."""
 
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime, timedelta
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from discovery_propagation import (
+from envelope.discovery_propagation import (
     DiscoveryAdmissionGate,
     DiscoveryPropagationError,
     InMemoryDiscoveryFreshnessTracker,
     InMemoryDiscoveryPropagationLimiter,
 )
-from discovery_record import DiscoveryRecord
+from envelope.discovery_record import DiscoveryRecord
 
 _NOW = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
 _WORKLOAD_ISS = "spiffe://mesh.example/ns-a/agent-1"
 _WORKLOAD_KID = "workload-kid-1"
 _ISSUER_ISS = "spiffe://mesh.example/ns-iss/discovery-1"
 _ISSUER_KID = "issuer-kid-1"
-
 
 def _record(*, issued_at: datetime = _NOW, workload_iss: str = _WORKLOAD_ISS) -> DiscoveryRecord:
     return DiscoveryRecord(
@@ -34,7 +29,6 @@ def _record(*, issued_at: datetime = _NOW, workload_iss: str = _WORKLOAD_ISS) ->
         expires_at=(issued_at + timedelta(hours=1)).isoformat().replace("+00:00", "Z"),
         signature="placeholder",
     )
-
 
 class FreshnessTests(unittest.TestCase):
     def test_first_record_allowed(self):
@@ -110,7 +104,6 @@ class FreshnessTests(unittest.TestCase):
         with self.assertRaises(DiscoveryPropagationError):
             tracker.check(bad)
 
-
 class RateLimitTests(unittest.TestCase):
     def test_first_republish_allowed(self):
         limiter = InMemoryDiscoveryPropagationLimiter()
@@ -164,7 +157,6 @@ class RateLimitTests(unittest.TestCase):
         with self.assertRaises(DiscoveryPropagationError):
             limiter.check(_record(), at=datetime(2026, 4, 14, 12))
 
-
 class AdmissionGateTests(unittest.TestCase):
     def _gate(self):
         return DiscoveryAdmissionGate(
@@ -210,7 +202,6 @@ class AdmissionGateTests(unittest.TestCase):
         # still within window.
         decision = gate.evaluate(third, at=_NOW + timedelta(seconds=90))
         self.assertTrue(decision.allowed)
-
 
 if __name__ == "__main__":
     unittest.main()

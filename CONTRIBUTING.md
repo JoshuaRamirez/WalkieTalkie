@@ -31,24 +31,16 @@ python -m venv .venv
 
 ## Running the checks
 
-Each package and example is its own import root (some MCP subdirs have no
-`__init__.py` and set up `sys.path` per test), so run the suites per-root:
+Tests run against the installed/editable packages (`envelope`, `mesh`,
+`integrations`), not against flat package directories on `sys.path`:
 
 ```sh
-for r in \
-  security-foundations/envelope \
-  security-foundations/mesh \
-  security-foundations/integrations/mcp \
-  security-foundations/integrations/mcp/bridge \
-  security-foundations/integrations/mcp/federation \
-  security-foundations/integrations/mcp/workspace ; do
-  .venv/bin/python -m unittest discover -s "$r" -t "$r"
-done
+.venv/bin/python -m unittest discover -s security-foundations -p 'test_*.py'
 .venv/bin/python -m ruff check security-foundations
 ```
 
-CI (`.github/workflows/test.yml`) runs the same `compileall`, `ruff`, and all six
-suites on Python 3.11 and 3.12. Both must be clean before a change lands.
+CI (`.github/workflows/test.yml`) runs the same `compileall`, `ruff`, and the
+full suite on Python 3.11 and 3.12. Both must be clean before a change lands.
 
 ## The proof-obligation rule
 

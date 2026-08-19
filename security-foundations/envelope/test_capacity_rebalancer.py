@@ -1,17 +1,13 @@
 """Tests for the capacity rebalancer (Phase 3 B3 deferred half)."""
 
-import pathlib
-import sys
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from capacity_budgets import (
+from envelope.capacity_budgets import (
     BudgetPool,
     CapacityBudgetError,
     build_controller,
 )
-from capacity_rebalancer import (
+from envelope.capacity_rebalancer import (
     CapacityRebalancer,
     CeilingChange,
     RebalanceDecision,
@@ -34,7 +30,6 @@ def _three_pool_controller():
         ],
     )
 
-
 class RebalancerValidationTests(unittest.TestCase):
     def test_thresholds_must_be_in_range(self):
         with self.assertRaisesRegex(RebalancerError, "stress_threshold"):
@@ -49,7 +44,6 @@ class RebalancerValidationTests(unittest.TestCase):
     def test_negative_cascade_min_stressed_rejected(self):
         with self.assertRaisesRegex(RebalancerError, "cascade_min_stressed"):
             CapacityRebalancer(cascade_min_stressed=0)
-
 
 class SignalsTests(unittest.TestCase):
     def test_no_cascading_at_idle(self):
@@ -83,7 +77,6 @@ class SignalsTests(unittest.TestCase):
         reb = CapacityRebalancer()
         sigs = reb.signals(ctrl)
         self.assertFalse(sigs.cascading)
-
 
 class EvaluateTests(unittest.TestCase):
     def test_noop_when_not_cascading(self):
@@ -140,7 +133,6 @@ class EvaluateTests(unittest.TestCase):
         # cold slack_headroom = 80 - 10 = 70. donation = 17.
         # Both stressed pools have excess 0 → even split, 8 + 9 = 17.
         self.assertEqual(sum(c.delta for c in decision.changes), 0)
-
 
 class ApplyTests(unittest.TestCase):
     def test_apply_mutates_controller(self):
@@ -210,7 +202,6 @@ class ApplyTests(unittest.TestCase):
         self.assertLess(pools["slack"].ceiling, 180)
         self.assertGreater(pools["stressed"].ceiling, 20)
 
-
 class AdjustCeilingTests(unittest.TestCase):
     """Pin BudgetController.adjust_ceiling invariants directly."""
 
@@ -240,7 +231,6 @@ class AdjustCeilingTests(unittest.TestCase):
         self.assertEqual(pools["security"].ceiling, 50)
         self.assertEqual(pools["security"].reserved, 20)
 
-
 class EndToEndTests(unittest.TestCase):
     """Acceptance-style: rebalance lets a previously-deny path succeed."""
 
@@ -262,7 +252,6 @@ class EndToEndTests(unittest.TestCase):
         decision_after = ctrl.acquire(pool="security")
         self.assertTrue(decision_after.allowed)
 
-
 class DecisionShapeTests(unittest.TestCase):
     def test_decision_is_frozen_dataclass(self):
         ctrl = _three_pool_controller()
@@ -275,7 +264,6 @@ class DecisionShapeTests(unittest.TestCase):
     def test_change_delta(self):
         change = CeilingChange(pool="x", old_ceiling=10, new_ceiling=15)
         self.assertEqual(change.delta, 5)
-
 
 if __name__ == "__main__":
     unittest.main()

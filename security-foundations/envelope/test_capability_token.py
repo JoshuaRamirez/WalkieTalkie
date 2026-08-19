@@ -1,28 +1,23 @@
 import base64
 import json
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime, timedelta
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from capability_token import (
+from envelope.capability_token import (
     EXPECTED_ALG,
     EXPECTED_TYP,
     MAX_TOKEN_BYTES,
     CapabilityClaims,
     verify_capability_token,
 )
-from verify_envelope import EnvelopeVerificationError
+from envelope.verify_envelope import EnvelopeVerificationError
 
 
 def _b64u(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
 
 def _ed25519_keypair():
     priv = Ed25519PrivateKey.generate()
@@ -31,7 +26,6 @@ def _ed25519_keypair():
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
     return priv, pem
-
 
 def _make_token(
     *,
@@ -69,7 +63,6 @@ def _make_token(
     signing_input = (h + "." + p).encode("ascii")
     sig = _b64u(private_key.sign(signing_input))
     return f"{h}.{p}.{sig}"
-
 
 class CapabilityTokenTests(unittest.TestCase):
     def setUp(self):
@@ -244,7 +237,7 @@ class CapabilityTokenTests(unittest.TestCase):
             self._verify(f"{h}.{p}.{bad_sig}")
 
     def test_revoked_jti_rejected(self):
-        from revocation_list import InMemoryRevocationList
+        from envelope.revocation_list import InMemoryRevocationList
 
         token = _make_token(private_key=self.priv)
         # Match the jti baked into _make_token's default payload.
@@ -263,7 +256,7 @@ class CapabilityTokenTests(unittest.TestCase):
         # signature failure, not the revocation. This is the intended order:
         # we never consult the revocation list for unauthenticated tokens
         # (avoids leaking which jti values are revoked to forgery attempts).
-        from revocation_list import InMemoryRevocationList
+        from envelope.revocation_list import InMemoryRevocationList
 
         token = _make_token(private_key=self.priv)
         h, p, _ = token.split(".")
@@ -295,7 +288,6 @@ class CapabilityTokenTests(unittest.TestCase):
                 )
                 with self.assertRaises(EnvelopeVerificationError):
                     self._verify(token)
-
 
 if __name__ == "__main__":
     unittest.main()

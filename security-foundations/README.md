@@ -708,23 +708,19 @@ Several items once listed here as out of scope have since shipped: mutual TLS 1.
 
 ## Running tests
 
-From the repository root, with dev extras installed (`pip install -e ".[dev]"`),
-run every suite — each package/example is its own import root:
+From the repository root, with the package installed (`pip install -e ".[dev]"`),
+run the full suite against the packages (`envelope`, `mesh`, `integrations`):
 
 ```sh
-for r in \
-  security-foundations/envelope \
-  security-foundations/mesh \
-  security-foundations/integrations/mcp \
-  security-foundations/integrations/mcp/bridge \
-  security-foundations/integrations/mcp/federation \
-  security-foundations/integrations/mcp/workspace ; do
-  python -m unittest discover -s "$r" -t "$r"
-done
+python -m unittest discover -s security-foundations -p 'test_*.py'
 ```
 
-CI runs the same install + `python -m compileall`, `ruff check`, and all six
-suites on Python 3.11 and 3.12 — see `.github/workflows/test.yml`.
+`import envelope.verify_envelope` (and `mesh.*` / `integrations.*`) must work
+without putting package directories on `sys.path`. Intra-package imports are
+relative; cross-package imports are fully qualified.
+
+CI runs the same install + `python -m compileall`, `ruff check`, and the full
+suite on Python 3.11 and 3.12 — see `.github/workflows/test.yml`.
 
 ## Next implementation targets
 

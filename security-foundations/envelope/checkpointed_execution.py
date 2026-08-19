@@ -55,14 +55,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
-from capability_token import CapabilityClaims
-from deny_reason import DenyReason
-from verify_envelope import UUID_V7_RE
+from .capability_token import CapabilityClaims
+from .deny_reason import DenyReason
+from .verify_envelope import UUID_V7_RE
 
 
 class CheckpointError(ValueError):
     """Raised when checkpoint inputs violate v0 invariants."""
-
 
 class CheckpointAction(StrEnum):
     """What the runtime should do given the checkpoint verdict."""
@@ -70,7 +69,6 @@ class CheckpointAction(StrEnum):
     COMMIT = "commit"
     ABORT = "abort"
     DOWNGRADE = "downgrade"
-
 
 @dataclass(frozen=True)
 class Checkpoint:
@@ -100,14 +98,12 @@ class Checkpoint:
         if not isinstance(self.intended_action, str) or not self.intended_action:
             raise CheckpointError("intended_action must be a non-empty string")
 
-
 class RevocationLedger(ABC):
     """Bookkeeping for revoked capability ``jti`` values."""
 
     @abstractmethod
     def is_revoked(self, jti: str) -> bool:
         ...
-
 
 @dataclass
 class InMemoryRevocationLedger(RevocationLedger):
@@ -140,7 +136,6 @@ class InMemoryRevocationLedger(RevocationLedger):
 
     def is_revoked(self, jti: str) -> bool:
         return jti in self.revoked
-
 
 @dataclass(frozen=True)
 class CheckpointPolicy:
@@ -178,13 +173,11 @@ class CheckpointPolicy:
                     f"reserved for the success path"
                 )
 
-
 @dataclass(frozen=True)
 class CheckpointDecision:
     action: CheckpointAction
     reason: str
     reason_code: str = ""
-
 
 def validate_checkpoint(
     *,

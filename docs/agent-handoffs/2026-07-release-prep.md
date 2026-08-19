@@ -5,6 +5,11 @@ Supersedes `2026-07-phase-6-close.md` as the most-recent brief. Read
 intentionally not done; read this for the moment-in-time framing the
 release-prep pass ended on.
 
+> **Later update:** the "Installable-package import restructure" (Path A
+> below) has shipped. `pip install -e .` produces an importable library
+> (`envelope` / `mesh` / `integrations`). This brief's "source checkout
+> only" diagnosis is historical.
+
 **Branch state, not a merged milestone.** All the work below is on
 `claude/resolve-merge-conflicts-tMxSj`.
 

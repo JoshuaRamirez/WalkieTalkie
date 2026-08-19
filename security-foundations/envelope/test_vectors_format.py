@@ -13,16 +13,12 @@ implementations have nothing to validate against. This module asserts:
 import base64
 import json
 import pathlib
-import sys
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from audit import JsonlAuditSink, verify_chain
-from capability_token import parse_jwt
+from envelope.audit import JsonlAuditSink, verify_chain
+from envelope.capability_token import parse_jwt
 
 _VECTORS_DIR = pathlib.Path(__file__).resolve().parent / "test-vectors"
-
 
 class EnvelopeVectorTests(unittest.TestCase):
     def test_valid_envelope_has_all_required_fields(self):
@@ -51,7 +47,6 @@ class EnvelopeVectorTests(unittest.TestCase):
         self.assertEqual(payload["aud"], envelope["recipient_spiffe_id"])
         self.assertEqual(payload["scope"], envelope["purpose_of_use"])
         self.assertEqual(payload["cnf"]["envelope_digest"], envelope["payload_digest"])
-
 
 class AuditEventVectorTests(unittest.TestCase):
     def test_audit_chain_verifies(self):
@@ -97,7 +92,6 @@ class AuditEventVectorTests(unittest.TestCase):
                 elif e.event_type == "capability.verify":
                     self.assertEqual(e.artifact_version, "wt-cap+jwt")
 
-
 class TestVectorBytesAreReproducible(unittest.TestCase):
     """The cap-token vector is base64url ASCII; if it has whitespace anywhere
     other than the trailing newline, downstream consumers will trip."""
@@ -114,7 +108,6 @@ class TestVectorBytesAreReproducible(unittest.TestCase):
         for segment in parts:
             padded = segment + ("=" * ((4 - len(segment) % 4) % 4))
             base64.urlsafe_b64decode(padded.encode("ascii"))
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,16 +1,12 @@
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime, timedelta
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from capability_issuer import CapabilityIssuer, generate_uuidv7
-from capability_token import verify_capability_token
-from verify_envelope import UUID_V7_RE, EnvelopeVerificationError
+from envelope.capability_issuer import CapabilityIssuer, generate_uuidv7
+from envelope.capability_token import verify_capability_token
+from envelope.verify_envelope import UUID_V7_RE, EnvelopeVerificationError
 
 _ISS = "spiffe://mesh/cap-issuer-1"
 _KID = "issuer-kid-1"
@@ -18,7 +14,6 @@ _SUB = "spiffe://mesh/ns-a/service-a"
 _AUD = "spiffe://mesh/ns-b/service-b"
 _PURPOSE = "invoke_tool"
 _DIGEST = "94fabd33a2221b6d3986e8d5ba98d75a91dcdad9b978ac7ea70bbc996fb2bb45"
-
 
 def _make_issuer(**overrides) -> tuple[CapabilityIssuer, bytes]:
     priv = Ed25519PrivateKey.generate()
@@ -29,7 +24,6 @@ def _make_issuer(**overrides) -> tuple[CapabilityIssuer, bytes]:
     kwargs: dict = {"iss": _ISS, "kid": _KID, "signing_key": priv}
     kwargs.update(overrides)
     return CapabilityIssuer(**kwargs), pem
-
 
 class GenerateUuidv7Tests(unittest.TestCase):
     def test_matches_uuidv7_regex(self):
@@ -48,7 +42,6 @@ class GenerateUuidv7Tests(unittest.TestCase):
     def test_rejects_wrong_rand_length(self):
         with self.assertRaisesRegex(ValueError, "10 bytes"):
             generate_uuidv7(rand_bytes=b"\x00" * 9)
-
 
 class CapabilityIssuerConstructionTests(unittest.TestCase):
     def test_invalid_iss_rejected_at_construction(self):
@@ -74,7 +67,6 @@ class CapabilityIssuerConstructionTests(unittest.TestCase):
             CapabilityIssuer(
                 iss=_ISS, kid=_KID, signing_key=priv, clock_skew=timedelta(seconds=-1)
             )
-
 
 class CapabilityIssuerIssueTests(unittest.TestCase):
     def test_round_trip_through_validator(self):
@@ -191,7 +183,6 @@ class CapabilityIssuerIssueTests(unittest.TestCase):
                 ttl=timedelta(0),
             )
 
-
 class CapabilityIssuerPolicyTests(unittest.TestCase):
     """Phase 1 Track C C1 acceptance — policy gates issuance, denials are
     fail-closed, and the issuance audit event reflects each decision.
@@ -206,7 +197,7 @@ class CapabilityIssuerPolicyTests(unittest.TestCase):
         self.assertEqual(len(token.split(".")), 3)
 
     def test_allowlist_policy_permits_listed_grant(self):
-        from issuance_policy import AllowlistPolicy
+        from envelope.issuance_policy import AllowlistPolicy
 
         issuer, _ = _make_issuer(
             policy=AllowlistPolicy(
@@ -219,7 +210,7 @@ class CapabilityIssuerPolicyTests(unittest.TestCase):
         self.assertEqual(len(token.split(".")), 3)
 
     def test_allowlist_policy_denies_unlisted_grant(self):
-        from issuance_policy import AllowlistPolicy, IssuancePolicyError
+        from envelope.issuance_policy import AllowlistPolicy, IssuancePolicyError
 
         issuer, _ = _make_issuer(
             policy=AllowlistPolicy(
@@ -239,7 +230,7 @@ class CapabilityIssuerPolicyTests(unittest.TestCase):
     def test_allowlist_policy_denies_ttl_above_cap(self):
         from datetime import timedelta as _td
 
-        from issuance_policy import AllowlistPolicy, IssuancePolicyError
+        from envelope.issuance_policy import AllowlistPolicy, IssuancePolicyError
 
         issuer, _ = _make_issuer(
             policy=AllowlistPolicy(
@@ -257,11 +248,7 @@ class CapabilityIssuerPolicyTests(unittest.TestCase):
             )
 
     def test_audit_sink_records_issue_allow_event(self):
-        import sys as _sys
-        from pathlib import Path as _P
-
-        _sys.path.insert(0, str(_P(__file__).resolve().parent))
-        from audit import InMemoryAuditSink
+        from envelope.audit import InMemoryAuditSink
 
         sink = InMemoryAuditSink()
         issuer, _ = _make_issuer(audit_sink=sink)
@@ -280,8 +267,8 @@ class CapabilityIssuerPolicyTests(unittest.TestCase):
         self.assertEqual(ev.issuer_kid, _KID)
 
     def test_audit_sink_records_issue_deny_event_on_policy_failure(self):
-        from audit import InMemoryAuditSink
-        from issuance_policy import AllowlistPolicy, IssuancePolicyError
+        from envelope.audit import InMemoryAuditSink
+        from envelope.issuance_policy import AllowlistPolicy, IssuancePolicyError
 
         sink = InMemoryAuditSink()
         issuer, _ = _make_issuer(
@@ -303,7 +290,6 @@ class CapabilityIssuerPolicyTests(unittest.TestCase):
         self.assertEqual(ev.outcome, "deny")
         self.assertEqual(ev.reason_code, "issuance_policy_denied")
         self.assertIn("not in allowlist", ev.reason)
-
 
 if __name__ == "__main__":
     unittest.main()

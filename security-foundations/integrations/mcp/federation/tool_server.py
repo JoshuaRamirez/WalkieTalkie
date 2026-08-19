@@ -34,10 +34,7 @@ import sys
 import threading
 import time
 
-_HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE.parents[2] / "mesh"))
-
-from socket_transport import LocalSocketTransport  # noqa: E402
+from mesh.socket_transport import LocalSocketTransport
 
 
 class ToolServer:
@@ -103,7 +100,6 @@ class ToolServer:
         with __import__("contextlib").suppress(OSError):
             (self.registry / f"backend-{self.name}.json").unlink()
 
-
 # --- preset toolsets (stubs; swap handlers for real integrations) ----------
 
 REPO_TOOLS = {
@@ -146,7 +142,6 @@ DEPLOY_TOOLS = {
 
 _PRESETS = {"repo": REPO_TOOLS, "deploy": DEPLOY_TOOLS}
 
-
 def main() -> None:
     ap = argparse.ArgumentParser(description="Mesh-connected backend tool server")
     ap.add_argument("--name", required=True)
@@ -166,7 +161,6 @@ def main() -> None:
         pass
     finally:
         server.close()
-
 
 if __name__ == "__main__":
     main()

@@ -31,8 +31,9 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from deny_reason import DenyReason
-from verify_envelope import (
+
+from .deny_reason import DenyReason
+from .verify_envelope import (
     KID_RE,
     SPIFFE_ID_RE,
     EnvelopeVerificationError,
@@ -46,7 +47,6 @@ class IssuerKey:
     kid: str
     pem: bytes
     not_after: datetime | None = None
-
 
 class IssuerTrustStore:
     def __init__(self, keys: dict[tuple[str, str], IssuerKey]) -> None:

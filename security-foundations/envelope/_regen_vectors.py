@@ -33,11 +33,12 @@ import pathlib
 from datetime import UTC, datetime, timedelta
 
 import jcs
-from capability_issuer import CapabilityIssuer
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from discovery_record import DiscoveryRecord, sign_record
-from discovery_record import to_json as discovery_to_json
+
+from envelope.capability_issuer import CapabilityIssuer
+from envelope.discovery_record import DiscoveryRecord, sign_record
+from envelope.discovery_record import to_json as discovery_to_json
 
 # Deterministic 32-byte seeds derived from tag strings so the tags can be
 # edited without breaking Ed25519PrivateKey.from_private_bytes' length
@@ -55,10 +56,8 @@ _PURPOSE = "invoke_tool"
 # Deterministic jti so the regenerated vectors are reproducible.
 _FIXED_JTI = "0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c2"
 
-
 def _b64u(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
 
 def _build_envelope(target: str, capability_token: str) -> dict:
     envelope = {
@@ -77,7 +76,6 @@ def _build_envelope(target: str, capability_token: str) -> dict:
     }
     envelope["payload_digest"] = hashlib.sha256(jcs.canonicalize(envelope["payload"])).hexdigest()
     return envelope
-
 
 def main() -> None:
     signer_priv = Ed25519PrivateKey.from_private_bytes(_SIGNER_SEED)
@@ -165,7 +163,6 @@ def main() -> None:
     (out / "tampered-discovery-record.json").write_bytes(
         discovery_to_json(tampered_disco)
     )
-
 
 if __name__ == "__main__":
     main()

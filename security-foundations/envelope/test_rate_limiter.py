@@ -2,23 +2,19 @@
 
 import base64
 import json
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime, timedelta
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from rate_limiter import (
+from envelope.rate_limiter import (
     IdentityRateLimiter,
     RateLimitedVerifier,
     RateLimitExceededError,
 )
-from verifier import VerificationResult, Verifier
-from verify_envelope import (
+from envelope.verifier import VerificationResult, Verifier
+from envelope.verify_envelope import (
     EnvelopeVerificationError,
     InMemoryReplayCache,
     _digest_payload,
@@ -28,7 +24,6 @@ from verify_envelope import (
 _SENDER_A = "spiffe://mesh.example/ns-a/svc"
 _SENDER_B = "spiffe://mesh.example/ns-b/svc"
 _NOW = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
-
 
 class IdentityRateLimiterConstructionTests(unittest.TestCase):
     def test_zero_limit_rejected(self):
@@ -46,7 +41,6 @@ class IdentityRateLimiterConstructionTests(unittest.TestCase):
     def test_override_with_empty_identity_rejected(self):
         with self.assertRaisesRegex(ValueError, "override identity"):
             IdentityRateLimiter(limit=10, overrides={"": 5})
-
 
 class IdentityRateLimiterBehaviorTests(unittest.TestCase):
     def setUp(self):
@@ -116,7 +110,6 @@ class IdentityRateLimiterBehaviorTests(unittest.TestCase):
         self.assertTrue(self.limiter.check(_SENDER_A, now=_NOW + timedelta(seconds=4)).allowed)
         self.assertTrue(self.limiter.check(_SENDER_B, now=_NOW + timedelta(seconds=4)).allowed)
 
-
 # --- Integration: RateLimitedVerifier wraps a real Verifier ---
 
 _ISSUER = "spiffe://mesh.example/cap-issuer-1"
@@ -124,10 +117,8 @@ _ISSUER_KID = "issuer-kid-1"
 _RECIPIENT = "spiffe://mesh.example/ns-b/svc"
 _PURPOSE = "invoke_tool"
 
-
 def _b64u(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
 
 def _ed25519_keypair():
     priv = Ed25519PrivateKey.generate()
@@ -141,7 +132,6 @@ def _ed25519_keypair():
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
     return priv_pem, pub_pem
-
 
 def _mint_token(issuer_priv_pem: bytes, payload_digest: str, now: datetime) -> str:
     priv = serialization.load_pem_private_key(issuer_priv_pem, password=None)
@@ -164,7 +154,6 @@ def _mint_token(issuer_priv_pem: bytes, payload_digest: str, now: datetime) -> s
     sig = _b64u(priv.sign((h + "." + p).encode("ascii")))
     return f"{h}.{p}.{sig}"
 
-
 def _sign_envelope(envelope: dict, signer_priv_pem: bytes) -> dict:
     signer = serialization.load_pem_private_key(signer_priv_pem, password=None)
     assert isinstance(signer, Ed25519PrivateKey)
@@ -172,7 +161,6 @@ def _sign_envelope(envelope: dict, signer_priv_pem: bytes) -> dict:
     signing_input = canonicalize_envelope_for_signing(envelope)
     envelope["signature"] = _b64u(signer.sign(signing_input))
     return envelope
-
 
 class RateLimitedVerifierTests(unittest.TestCase):
     @classmethod
@@ -276,7 +264,6 @@ class RateLimitedVerifierTests(unittest.TestCase):
         # _SENDER_A should still succeed.
         legit = self._envelope(nonce="nonce-000000000099")
         rl_verifier.verify(legit, now=_NOW)
-
 
 if __name__ == "__main__":
     unittest.main()

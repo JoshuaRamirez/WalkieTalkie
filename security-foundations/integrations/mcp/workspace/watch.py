@@ -21,16 +21,12 @@ import pathlib
 import sys
 import time
 
-_HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE.parents[2] / "mesh"))
-
-from socket_transport import LocalSocketTransport  # noqa: E402
+from mesh.socket_transport import LocalSocketTransport
 
 _TIMEOUT = 5.0
 # Fields that constitute real "news" — updated_at changes every poll and is
 # deliberately excluded so an idle workspace produces no digest churn.
 _NEWS_FIELDS = ("branch", "note", "recent_commits", "changed_files")
-
 
 class WorkspaceWatcher:
     def __init__(self, watcher_id: str, registry: pathlib.Path, *, transport=None) -> None:
@@ -96,7 +92,6 @@ class WorkspaceWatcher:
     def close(self) -> None:
         self.transport.close()
 
-
 def render_digest(status: dict) -> str:
     lines = [f"📋 {status.get('workspace')} — {status.get('branch')}"]
     if status.get("note"):
@@ -106,7 +101,6 @@ def render_digest(status: dict) -> str:
     if status.get("changed_files"):
         lines.append(f"   changed: {len(status['changed_files'])} file(s)")
     return "\n".join(lines)
-
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Watch a teammate's workspace status")
@@ -132,7 +126,6 @@ def main() -> int:
             time.sleep(args.interval)
     finally:
         w.close()
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

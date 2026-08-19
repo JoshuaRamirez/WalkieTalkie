@@ -17,14 +17,10 @@ import subprocess
 import sys
 import tempfile
 
+from integrations.mcp.federation.tool_server import DEPLOY_TOOLS, REPO_TOOLS, ToolServer
+
 _HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE))
-sys.path.insert(0, str(_HERE.parents[2] / "mesh"))
-
-from tool_server import DEPLOY_TOOLS, REPO_TOOLS, ToolServer  # noqa: E402
-
 _GATEWAY = _HERE / "mcp_gateway.py"
-
 
 class _Client:
     def __init__(self, registry):
@@ -68,10 +64,8 @@ class _Client:
         self.proc.terminate()
         self.proc.wait(timeout=5)
 
-
 def line(c="-"):
     print(c * 66)
-
 
 def main():
     with tempfile.TemporaryDirectory() as td:
@@ -110,7 +104,6 @@ def main():
             client.close()
             repo.close()
             deploy.close()
-
 
 if __name__ == "__main__":
     main()

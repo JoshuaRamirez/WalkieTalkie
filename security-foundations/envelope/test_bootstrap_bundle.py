@@ -2,16 +2,13 @@
 
 import json
 import pathlib
-import sys
 import tempfile
 import unittest
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from bootstrap_bundle import (
+from envelope.bootstrap_bundle import (
     BootstrapAnchor,
     BootstrapBundle,
     BootstrapBundleError,
@@ -23,12 +20,11 @@ from bootstrap_bundle import (
     verify_bundle,
     write_bundle,
 )
-from verify_envelope import EnvelopeVerificationError
+from envelope.verify_envelope import EnvelopeVerificationError
 
 _TRUST_DOMAIN = "mesh.example"
 _ANCHOR_ISS = "spiffe://mesh.example/cap-issuer-1"
 _ANCHOR_KID = "issuer-kid-1"
-
 
 def _keypair():
     priv = Ed25519PrivateKey.generate()
@@ -37,7 +33,6 @@ def _keypair():
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
     return priv, pub_pem
-
 
 def _bundle(*, anchors=None, version=1, epoch=1, trust_domain=_TRUST_DOMAIN) -> BootstrapBundle:
     if anchors is None:
@@ -53,7 +48,6 @@ def _bundle(*, anchors=None, version=1, epoch=1, trust_domain=_TRUST_DOMAIN) -> 
         epoch=epoch,
         anchors=anchors,
     )
-
 
 class SignAndVerifyTests(unittest.TestCase):
     def setUp(self):
@@ -119,7 +113,6 @@ class SignAndVerifyTests(unittest.TestCase):
         with self.assertRaisesRegex(BootstrapBundleError, "invalid root public key"):
             verify_bundle(signed, expected_root_pem=b"not a pem")
 
-
 class ShapeValidationTests(unittest.TestCase):
     def setUp(self):
         self.root_priv, self.root_pem = _keypair()
@@ -166,7 +159,6 @@ class ShapeValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(BootstrapBundleError, "valid Ed25519"):
             verify_bundle(signed, expected_root_pem=self.root_pem)
 
-
 class JsonRoundTripTests(unittest.TestCase):
     def setUp(self):
         self.root_priv, self.root_pem = _keypair()
@@ -189,7 +181,6 @@ class JsonRoundTripTests(unittest.TestCase):
         with self.assertRaisesRegex(BootstrapBundleError, "pem_b64"):
             from_json(json.dumps(obj).encode())
 
-
 class FileIoTests(unittest.TestCase):
     def test_write_and_read_round_trip(self):
         priv, root_pem = _keypair()
@@ -202,7 +193,6 @@ class FileIoTests(unittest.TestCase):
             # Lookup should succeed.
             store(_ANCHOR_ISS, _ANCHOR_KID)
 
-
 class IssuerTrustStoreInteropTests(unittest.TestCase):
     """The materialized store SHOULD behave like a manifest-loaded one."""
 
@@ -212,7 +202,6 @@ class IssuerTrustStoreInteropTests(unittest.TestCase):
         store = verify_bundle(signed, expected_root_pem=root_pem)
         with self.assertRaises(EnvelopeVerificationError):
             store("spiffe://mesh.example/unknown", "kid")
-
 
 if __name__ == "__main__":
     unittest.main()

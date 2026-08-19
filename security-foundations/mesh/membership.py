@@ -41,7 +41,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 
-from transport import Transport, TransportError
+from .transport import Transport, TransportError
 
 _PING = "ping"
 _ACK = "ack"
@@ -51,12 +51,10 @@ _ACK = "ack"
 # Far above any real SPIFFE-style id.
 MAX_NODE_ID_LEN = 256
 
-
 class MemberState(StrEnum):
     ALIVE = "alive"
     SUSPECT = "suspect"
     DEAD = "dead"
-
 
 @dataclass
 class Member:
@@ -66,7 +64,6 @@ class Member:
     incarnation: int
     state: MemberState
     ticks_since_heard: int = 0
-
 
 def _supersedes(
     in_state: MemberState, in_inc: int, cur_state: MemberState, cur_inc: int
@@ -86,7 +83,6 @@ def _supersedes(
     if in_state is MemberState.DEAD:
         return in_inc > cur_inc or (in_inc == cur_inc and cur_state is not MemberState.DEAD)
     return False
-
 
 class SwimMembership:
     """One node's membership state machine.

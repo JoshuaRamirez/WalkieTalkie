@@ -1,15 +1,11 @@
 """Tests for retrieval policy (Phase 2 Track B B2)."""
 
 import hashlib
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from data_classification import DataClass, classify
-from retrieval_policy import (
+from envelope.data_classification import DataClass, classify
+from envelope.retrieval_policy import (
     AllowlistRetrievalPolicy,
     CrossTenantRetrieval,
     RetrievalDecision,
@@ -30,7 +26,6 @@ _KID = "kid-a"
 # Different trust domain.
 _FOREIGN_ACTOR = "spiffe://other-mesh.example/ns-z/foreign"
 
-
 def _data(*, data_class: DataClass = DataClass.INTERNAL, actor: str = _ACTOR_A):
     return classify(
         data_digest=_DIGEST,
@@ -39,7 +34,6 @@ def _data(*, data_class: DataClass = DataClass.INTERNAL, actor: str = _ACTOR_A):
         actor_kid=_KID,
         now=_NOW,
     )
-
 
 class RuleValidationTests(unittest.TestCase):
     def test_invalid_caller_iss_rejected(self):
@@ -65,7 +59,6 @@ class RuleValidationTests(unittest.TestCase):
                 purpose_of_use="invoke_tool",
                 max_class="internal",  # type: ignore[arg-type]
             )
-
 
 class AllowlistRetrievalPolicyTests(unittest.TestCase):
     def _policy(self, *rules, cross_tenant=CrossTenantRetrieval.DENY):
@@ -135,7 +128,6 @@ class AllowlistRetrievalPolicyTests(unittest.TestCase):
         self.assertFalse(decision.allowed)
         self.assertEqual(decision.reason_code, "retrieval_class_exceeds_rule")
 
-
 class CrossTenantTests(unittest.TestCase):
     def test_cross_tenant_denied_by_default(self):
         policy = AllowlistRetrievalPolicy(
@@ -195,7 +187,6 @@ class CrossTenantTests(unittest.TestCase):
         )
         self.assertTrue(decision.allowed)
 
-
 class RequireRetrievalTests(unittest.TestCase):
     def test_allows_silently_on_success(self):
         policy = AllowlistRetrievalPolicy(
@@ -228,7 +219,6 @@ class RequireRetrievalTests(unittest.TestCase):
         self.assertEqual(
             ctx.exception.decision.reason_code, "retrieval_class_exceeds_rule"
         )
-
 
 if __name__ == "__main__":
     unittest.main()

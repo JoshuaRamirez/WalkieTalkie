@@ -35,11 +35,10 @@ import socket
 import threading
 from collections import deque
 
-from transport import Frame, Transport, TransportError
+from .transport import Frame, Transport, TransportError
 
 _LEN_PREFIX = 4  # bytes, big-endian frame length
 _MAX_FRAME = 8 * 1024 * 1024  # 8 MiB cap; envelopes are small
-
 
 def _recv_exactly(conn: socket.socket, n: int) -> bytes | None:
     buf = bytearray()
@@ -49,7 +48,6 @@ def _recv_exactly(conn: socket.socket, n: int) -> bytes | None:
             return None
         buf.extend(chunk)
     return bytes(buf)
-
 
 class LocalSocketTransport(Transport):
     """A :class:`Transport` over real TCP on localhost.

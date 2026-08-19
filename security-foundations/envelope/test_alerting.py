@@ -1,25 +1,20 @@
 """Tests for the audit-stream alerting layer (Phase 1 Track D D3)."""
 
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime, timedelta
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from alerting import (
+from envelope.alerting import (
     ABNORMAL_ISSUANCE_VOLUME,
     REPEATED_VALIDATION_FAILURE,
     Alert,
     AlertingAuditSink,
     ThresholdAlertingPolicy,
 )
-from audit import InMemoryAuditSink
+from envelope.audit import InMemoryAuditSink
 
 _SENDER_A = "spiffe://mesh/ns-a/service-a"
 _SENDER_B = "spiffe://mesh/ns-b/service-b"
 _RECIPIENT = "spiffe://mesh/ns-x/service-x"
-
 
 def _record_deny(sink, *, sender: str, when: datetime, reason_code: str = "signature_invalid") -> None:
     sink.record(
@@ -32,7 +27,6 @@ def _record_deny(sink, *, sender: str, when: datetime, reason_code: str = "signa
         recipient=_RECIPIENT,
         timestamp=when,
     )
-
 
 def _record_issue_allow(sink, *, sender: str, when: datetime) -> None:
     sink.record(
@@ -48,7 +42,6 @@ def _record_issue_allow(sink, *, sender: str, when: datetime) -> None:
         timestamp=when,
     )
 
-
 class ThresholdAlertingPolicyConstructionTests(unittest.TestCase):
     def test_zero_window_rejected(self):
         with self.assertRaisesRegex(ValueError, "window"):
@@ -59,7 +52,6 @@ class ThresholdAlertingPolicyConstructionTests(unittest.TestCase):
             ThresholdAlertingPolicy(repeated_deny_threshold=0)
         with self.assertRaisesRegex(ValueError, "issuance_volume_threshold"):
             ThresholdAlertingPolicy(issuance_volume_threshold=0)
-
 
 class AlertingAuditSinkBehaviorTests(unittest.TestCase):
     def setUp(self):
@@ -187,7 +179,6 @@ class AlertingAuditSinkBehaviorTests(unittest.TestCase):
                 timestamp=ts + timedelta(seconds=i),
             )
         self.assertEqual(self.alerts, [])
-
 
 if __name__ == "__main__":
     unittest.main()

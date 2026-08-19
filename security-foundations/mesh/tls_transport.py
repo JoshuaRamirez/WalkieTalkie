@@ -44,18 +44,13 @@ from datetime import UTC, datetime
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from transport import Frame, Transport, TransportError
 
-# Substrate identity primitives live in the envelope package; the mesh
-# test/discovery paths already add it to sys.path. Import lazily-safe names.
-from workload_ca import (  # noqa: E402  (sys.path set by importer, as in the package)
-    SvidVerificationError,
-    verify_svid,
-)
+from envelope.workload_ca import SvidVerificationError, verify_svid
+
+from .transport import Frame, Transport, TransportError
 
 _LEN_PREFIX = 4
 _MAX_FRAME = 8 * 1024 * 1024
-
 
 def _recv_exactly(conn: ssl.SSLSocket, n: int) -> bytes | None:
     buf = bytearray()
@@ -65,7 +60,6 @@ def _recv_exactly(conn: ssl.SSLSocket, n: int) -> bytes | None:
             return None
         buf.extend(chunk)
     return bytes(buf)
-
 
 @dataclass(frozen=True)
 class TlsIdentity:
@@ -122,7 +116,6 @@ class TlsIdentity:
                 os.rmdir(d)
         return ctx
 
-
 def mint_identity(ca, spiffe_id: str, *, now: datetime | None = None) -> TlsIdentity:
     """Generate a keypair, have ``ca`` issue it an SVID, and bundle it with
     the CA root as a :class:`TlsIdentity`. For tests/demos; in a real mesh
@@ -133,7 +126,6 @@ def mint_identity(ca, spiffe_id: str, *, now: datetime | None = None) -> TlsIden
     return TlsIdentity(
         spiffe_id=spiffe_id, private_key=key, svid_cert=cert, root_cert=ca.root_cert
     )
-
 
 class TlsSocketTransport(Transport):
     """A :class:`Transport` over mutually-authenticated TLS 1.3 on a

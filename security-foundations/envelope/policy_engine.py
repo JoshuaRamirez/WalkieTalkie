@@ -42,27 +42,23 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from capability_issuer import generate_uuidv7
+from .capability_issuer import generate_uuidv7
 
 # A wildcard token that matches any principal / action / resource.
 ANY = "*"
 
-
 class PolicyEngineError(ValueError):
     """Raised when policy inputs violate v0 invariants."""
-
 
 class Effect(StrEnum):
     PERMIT = "permit"
     DENY = "deny"
-
 
 class ConditionOp(StrEnum):
     EQUALS = "equals"
     NOT_EQUALS = "not_equals"
     IN = "in"
     NOT_IN = "not_in"
-
 
 @dataclass(frozen=True)
 class Condition:
@@ -96,7 +92,6 @@ class Condition:
         if self.op is ConditionOp.NOT_IN:
             return actual not in self.value
         raise PolicyEngineError(f"unhandled op: {self.op!r}")  # pragma: no cover
-
 
 @dataclass(frozen=True)
 class PolicyRule:
@@ -133,7 +128,6 @@ class PolicyRule:
             and all(c.matches(request.context) for c in self.conditions)
         )
 
-
 @dataclass(frozen=True)
 class PolicyRequest:
     principal: str
@@ -149,7 +143,6 @@ class PolicyRequest:
         if not isinstance(self.context, dict):
             raise PolicyEngineError("context must be a dict")
 
-
 @dataclass(frozen=True)
 class PolicyDecision:
     effect: Effect
@@ -161,14 +154,12 @@ class PolicyDecision:
     def permitted(self) -> bool:
         return self.effect is Effect.PERMIT
 
-
 class PolicyEngine(ABC):
     @abstractmethod
     def decide(
         self, request: PolicyRequest, *, now: datetime | None = None
     ) -> PolicyDecision:
         ...
-
 
 @dataclass(frozen=True)
 class NativePolicyEngine(PolicyEngine):

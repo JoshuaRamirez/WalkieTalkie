@@ -1,14 +1,10 @@
 """Tests for the pooled connection transport (Phase 6 Track D D6.7)."""
 
-import pathlib
-import sys
 import time
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from connection_pool import PooledSocketTransport
-from transport import TransportError
+from mesh.connection_pool import PooledSocketTransport
+from mesh.transport import TransportError
 
 
 def _await(t, want, tries=100):
@@ -22,7 +18,6 @@ def _await(t, want, tries=100):
         else:
             time.sleep(0.02)
     return got
-
 
 class ConnectionReuseTests(unittest.TestCase):
     def test_many_frames_over_one_connection(self):
@@ -41,7 +36,6 @@ class ConnectionReuseTests(unittest.TestCase):
         finally:
             a.close()
             b.close()
-
 
 class ReconnectTests(unittest.TestCase):
     def test_recovers_after_dropped_connection(self):
@@ -67,7 +61,6 @@ class ReconnectTests(unittest.TestCase):
             a.close()
             b.close()
 
-
 class BoundedPoolTests(unittest.TestCase):
     def test_lru_eviction_beyond_max_connections(self):
         a = PooledSocketTransport("a", max_connections=2)
@@ -82,7 +75,6 @@ class BoundedPoolTests(unittest.TestCase):
             a.close()
             for p in peers:
                 p.close()
-
 
 class ValidationTests(unittest.TestCase):
     def test_bad_dest_raises(self):
@@ -100,7 +92,6 @@ class ValidationTests(unittest.TestCase):
                 a.send("127.0.0.1:1", b"nobody home")  # port 1: no listener
         finally:
             a.close()
-
 
 if __name__ == "__main__":
     unittest.main()

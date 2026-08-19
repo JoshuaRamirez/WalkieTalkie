@@ -33,15 +33,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from deny_reason import DenyReason
-from discovery_record import DiscoveryRecord
+from .deny_reason import DenyReason
+from .discovery_record import DiscoveryRecord
 
 if TYPE_CHECKING:
-    from audit import AuditSink
+    from .audit import AuditSink
 
 ADMISSION_EVENT_TYPE = "admission.evaluate"
 ADMISSION_ARTIFACT_VERSION = "wt-admission/v0"
-
 
 class AdmissionError(ValueError):
     """Raised by :func:`require_admission` when the policy denies."""
@@ -50,7 +49,6 @@ class AdmissionError(ValueError):
         super().__init__(decision.reason)
         self.decision = decision
 
-
 @dataclass(frozen=True)
 class AdmissionDecision:
     admitted: bool
@@ -58,7 +56,6 @@ class AdmissionDecision:
     workload_iss: str
     endpoints: tuple[str, ...] = ()
     reason_code: str = ""
-
 
 @dataclass(frozen=True)
 class AdmissionPolicy:
@@ -83,7 +80,6 @@ class AdmissionPolicy:
             raise TypeError("accepted_discovery_versions must be a frozenset")
         if not self.accepted_discovery_versions:
             raise ValueError("accepted_discovery_versions must be non-empty")
-
 
 def admit(
     record: DiscoveryRecord,
@@ -128,7 +124,6 @@ def admit(
     _emit(decision, record, audit_sink)
     return decision
 
-
 def _emit(decision: AdmissionDecision, record: DiscoveryRecord, sink: AuditSink | None) -> None:
     if sink is None:
         return
@@ -143,7 +138,6 @@ def _emit(decision: AdmissionDecision, record: DiscoveryRecord, sink: AuditSink 
         issuer_iss=record.issuer_iss,
         issuer_kid=record.issuer_kid,
     )
-
 
 def require_admission(
     record: DiscoveryRecord,

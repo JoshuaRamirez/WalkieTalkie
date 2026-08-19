@@ -1,18 +1,14 @@
 """Tests for image signature attestation (Phase 5 Track D D5.6)."""
 
 import hashlib
-import pathlib
-import sys
 import unittest
 from dataclasses import replace
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from deny_reason import DenyReason
-from image_attestation import (
+from envelope.deny_reason import DenyReason
+from envelope.image_attestation import (
     ImageSignature,
     ImageSignatureError,
     from_json,
@@ -26,7 +22,6 @@ _KID = "release-key-1"
 _DIGEST = hashlib.sha256(b"reference-image-layer").hexdigest()
 _OTHER_DIGEST = hashlib.sha256(b"a-different-image").hexdigest()
 
-
 def _keypair():
     priv = Ed25519PrivateKey.generate()
     pub_pem = priv.public_key().public_bytes(
@@ -34,7 +29,6 @@ def _keypair():
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
     return priv, pub_pem
-
 
 def _lookup_for(pub_pem: bytes):
     def _lookup(signer_id: str, kid: str) -> bytes:
@@ -44,13 +38,11 @@ def _lookup_for(pub_pem: bytes):
 
     return _lookup
 
-
 def _signed(priv, *, digest: str = _DIGEST) -> ImageSignature:
     return sign_image_signature(
         ImageSignature(image_digest=digest, signer_id=_SIGNER, signer_kid=_KID),
         priv,
     )
-
 
 class HappyPathTests(unittest.TestCase):
     def test_valid_signature_verifies(self):
@@ -69,7 +61,6 @@ class HappyPathTests(unittest.TestCase):
         verify_image_signature(
             restored, expected_digest=_DIGEST, issuer_lookup=_lookup_for(pub)
         )
-
 
 class DenialTests(unittest.TestCase):
     def test_wrong_key_rejected_as_invalid(self):
@@ -161,7 +152,6 @@ class DenialTests(unittest.TestCase):
         with self.assertRaises(ImageSignatureError) as ctx:
             from_json(b'{"image_digest":"' + _DIGEST.encode() + b'"}')
         self.assertEqual(ctx.exception.reason, DenyReason.IMAGE_SIG_MALFORMED)
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -48,12 +48,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from dataclasses import replace as _dc_replace
 
-from deny_reason import DenyReason
+from .deny_reason import DenyReason
 
 
 class CapacityBudgetError(ValueError):
     """Raised when budget inputs violate v0 invariants."""
-
 
 @dataclass(frozen=True)
 class BudgetPool:
@@ -72,7 +71,6 @@ class BudgetPool:
             raise CapacityBudgetError(
                 f"ceiling ({self.ceiling}) must be >= reserved ({self.reserved})"
             )
-
 
 @dataclass(frozen=True)
 class TenantBudget:
@@ -95,13 +93,11 @@ class TenantBudget:
                 f"burst ({self.burst}) must be >= reserve ({self.reserve})"
             )
 
-
 @dataclass(frozen=True)
 class BudgetDecision:
     allowed: bool
     reason: str
     reason_code: str = ""
-
 
 @dataclass
 class BudgetController:
@@ -350,7 +346,6 @@ class BudgetController:
             else:
                 new_pools.append(p)
         self.pools = tuple(new_pools)
-
 
 def build_controller(
     *,

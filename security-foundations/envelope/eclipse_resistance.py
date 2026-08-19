@@ -35,13 +35,12 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from audit_query import trust_domain_of
-from verify_envelope import KID_RE, SPIFFE_ID_RE
+from .audit_query import trust_domain_of
+from .verify_envelope import KID_RE, SPIFFE_ID_RE
 
 
 class EclipseResistanceError(ValueError):
     """Raised when selection inputs violate v0 invariants."""
-
 
 @dataclass(frozen=True)
 class NeighborCandidate:
@@ -68,7 +67,6 @@ class NeighborCandidate:
     @property
     def trust_domain(self) -> str:
         return trust_domain_of(self.peer_iss) or ""
-
 
 @dataclass(frozen=True)
 class DiversityRule:
@@ -98,12 +96,10 @@ class DiversityRule:
                 "min_distinct_trust_domains cannot exceed target_count"
             )
 
-
 @dataclass(frozen=True)
 class RejectedCandidate:
     candidate: NeighborCandidate
     reason_code: str
-
 
 @dataclass(frozen=True)
 class NeighborSelection:
@@ -123,7 +119,6 @@ class NeighborSelection:
             if cand.trust_domain:
                 c[cand.trust_domain] += 1
         return dict(c)
-
 
 def select_neighbors(
     candidates: Iterable[NeighborCandidate],
@@ -198,13 +193,11 @@ def select_neighbors(
         target_shortfall=len(selected) < rule.target_count,
     )
 
-
 # ---------------------------------------------------------------------
 # Surge-rate anomaly detector (lightweight pair to the diversity
 # selector). Spots a sudden flood of new peers from one trust domain
 # inside a sliding window.
 # ---------------------------------------------------------------------
-
 
 @dataclass(frozen=True)
 class TrustDomainSurge:
@@ -214,7 +207,6 @@ class TrustDomainSurge:
     count: int
     window_start: datetime
     window_end: datetime
-
 
 def detect_trust_domain_surges(
     candidates: Iterable[NeighborCandidate],

@@ -15,31 +15,23 @@ layers agree on identity: the TLS-verified peer SPIFFE id equals the
 envelope's signed sender.
 """
 
-import pathlib
-import sys
 import time
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "envelope"))
-sys.path.insert(
-    0, str(pathlib.Path(__file__).resolve().parent.parent / "integrations" / "mcp")
-)
-
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from envelope_adapter import envelope_from_json, envelope_to_json
+
+from envelope.verify_envelope import verify_envelope
+from envelope.workload_ca import WorkloadCA
+from integrations.mcp.envelope_adapter import envelope_from_json, envelope_to_json
 
 # Reuse the Phase 5 signed-envelope fixture verbatim.
-from test_mesh_round_trip import _A, _A_KID, _B, _B_KID, _NOW, _Fabric
-from tls_transport import TlsSocketTransport, mint_identity
-from transport import TransportError
-from verify_envelope import verify_envelope
-from workload_ca import WorkloadCA
+from mesh.test_mesh_round_trip import _A, _A_KID, _B, _B_KID, _NOW, _Fabric
+from mesh.tls_transport import TlsSocketTransport, mint_identity
+from mesh.transport import TransportError
 
 # The envelope SPIFFE ids live in trust domain "mesh.example"; the TLS CA
 # must mint SVIDs in the SAME domain so channel identity == message identity.
 _TRUST_DOMAIN = "mesh.example"
-
 
 def _await(t, tries=80):
     for _ in range(tries):
@@ -48,7 +40,6 @@ def _await(t, tries=80):
             return f
         time.sleep(0.02)
     return None
-
 
 class MtlsRoundTripTests(unittest.TestCase):
     def test_signed_round_trip_over_mtls_two_layers_agree(self):
@@ -121,7 +112,6 @@ class MtlsRoundTripTests(unittest.TestCase):
         finally:
             b_tls.close()
             impostor.close()
-
 
 if __name__ == "__main__":
     unittest.main()

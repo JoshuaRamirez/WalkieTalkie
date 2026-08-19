@@ -47,8 +47,9 @@ from pathlib import Path
 import jcs
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from issuance_policy import AllowlistPolicy
-from verify_envelope import (
+
+from .issuance_policy import AllowlistPolicy
+from .verify_envelope import (
     KID_RE,
     SPIFFE_ID_RE,
     decode_base64url,
@@ -57,10 +58,8 @@ from verify_envelope import (
 
 POLICY_BUNDLE_TYP = "wt-policy-bundle/v0"
 
-
 class PolicyBundleError(ValueError):
     """Raised when a bundle fails verification, signature check, or rollback."""
-
 
 @dataclass(frozen=True)
 class PolicyBundle:
@@ -79,7 +78,6 @@ class PolicyBundle:
         d["allowlist_grants"] = [list(g) for g in self.allowlist_grants]
         return d
 
-
 def _body_for_signing(bundle: PolicyBundle) -> bytes:
     body = {
         "typ": POLICY_BUNDLE_TYP,
@@ -91,21 +89,17 @@ def _body_for_signing(bundle: PolicyBundle) -> bytes:
     }
     return jcs.canonicalize(body)
 
-
 def _b64u(data: bytes) -> str:
     import base64
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
 
 def sign_bundle(bundle: PolicyBundle, signing_key: Ed25519PrivateKey) -> PolicyBundle:
     """Return a copy of ``bundle`` with ``signature`` populated."""
     sig = _b64u(signing_key.sign(_body_for_signing(bundle)))
     return dataclasses.replace(bundle, signature=sig)
 
-
 def to_json(bundle: PolicyBundle) -> bytes:
     return json.dumps(bundle.to_dict(), separators=(",", ":")).encode("utf-8")
-
 
 def from_json(data: bytes) -> PolicyBundle:
     """Parse a JSON-encoded bundle (does not verify signature or contents)."""
@@ -141,7 +135,6 @@ def from_json(data: bytes) -> PolicyBundle:
         signature=obj["signature"],
     )
 
-
 def _validate_bundle_shape(bundle: PolicyBundle) -> None:
     if not isinstance(bundle.version, int) or isinstance(bundle.version, bool) or bundle.version < 1:
         raise PolicyBundleError("version must be a positive integer")
@@ -159,7 +152,6 @@ def _validate_bundle_shape(bundle: PolicyBundle) -> None:
             raise PolicyBundleError(f"allowlist_grants[{index}].aud invalid: {aud!r}")
         if not isinstance(scope, str) or not scope:
             raise PolicyBundleError(f"allowlist_grants[{index}].scope empty")
-
 
 def verify_bundle(
     bundle: PolicyBundle,
@@ -199,7 +191,6 @@ def verify_bundle(
         max_ttl=timedelta(seconds=bundle.max_ttl_seconds),
     )
 
-
 class RollbackGuard:
     """Tracks the highest accepted bundle version per ``issuer_iss``.
 
@@ -226,7 +217,6 @@ class RollbackGuard:
     def _put(self, issuer_iss: str, version: int) -> None:
         raise NotImplementedError
 
-
 class InMemoryRollbackGuard(RollbackGuard):
     def __init__(self) -> None:
         self._last: dict[str, int] = {}
@@ -236,7 +226,6 @@ class InMemoryRollbackGuard(RollbackGuard):
 
     def _put(self, issuer_iss: str, version: int) -> None:
         self._last[issuer_iss] = version
-
 
 class FileBackedRollbackGuard(RollbackGuard):
     """Persists the highest accepted version per issuer to a JSON file.

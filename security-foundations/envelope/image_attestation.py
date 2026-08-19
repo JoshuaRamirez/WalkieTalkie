@@ -40,8 +40,9 @@ from dataclasses import dataclass
 import jcs
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from deny_reason import DenyReason
-from verify_envelope import (
+
+from .deny_reason import DenyReason
+from .verify_envelope import (
     HEX_SHA256_RE,
     KID_RE,
     SPIFFE_ID_RE,
@@ -52,14 +53,12 @@ from verify_envelope import (
 
 IMAGE_SIG_TYP = "wt-image-sig/v0"
 
-
 class ImageSignatureError(EnvelopeVerificationError):
     """Raised when an image signature fails verification.
 
     Subclasses :class:`EnvelopeVerificationError` so callers already
     catching the envelope error don't need a separate branch.
     """
-
 
 @dataclass(frozen=True)
 class ImageSignature:
@@ -81,7 +80,6 @@ class ImageSignature:
     def to_dict(self) -> dict:
         return dataclasses.asdict(self)
 
-
 def _body_for_signing(sig: ImageSignature) -> bytes:
     body = {
         "typ": IMAGE_SIG_TYP,
@@ -91,10 +89,8 @@ def _body_for_signing(sig: ImageSignature) -> bytes:
     }
     return jcs.canonicalize(body)
 
-
 def _b64u(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
 
 def sign_image_signature(
     sig: ImageSignature, signing_key: Ed25519PrivateKey
@@ -103,14 +99,11 @@ def sign_image_signature(
     signed = _b64u(signing_key.sign(_body_for_signing(sig)))
     return dataclasses.replace(sig, signature=signed)
 
-
 def to_json(sig: ImageSignature) -> bytes:
     return json.dumps(sig.to_dict(), separators=(",", ":")).encode("utf-8")
 
-
 def _malformed(msg: str) -> ImageSignatureError:
     return ImageSignatureError(msg, reason=DenyReason.IMAGE_SIG_MALFORMED)
-
 
 def from_json(data: bytes) -> ImageSignature:
     try:
@@ -125,7 +118,6 @@ def from_json(data: bytes) -> ImageSignature:
         raise _malformed(f"missing required fields: {','.join(missing)}")
     return ImageSignature(**{k: obj[k] for k in required})
 
-
 def _validate_shape(sig: ImageSignature) -> None:
     if not isinstance(sig.image_digest, str) or not HEX_SHA256_RE.match(sig.image_digest):
         raise _malformed(f"image_digest must be lowercase sha256 hex: {sig.image_digest!r}")
@@ -133,7 +125,6 @@ def _validate_shape(sig: ImageSignature) -> None:
         raise _malformed(f"invalid signer_id: {sig.signer_id!r}")
     if not isinstance(sig.signer_kid, str) or not KID_RE.match(sig.signer_kid):
         raise _malformed(f"invalid signer_kid: {sig.signer_kid!r}")
-
 
 def verify_image_signature(
     sig: ImageSignature,

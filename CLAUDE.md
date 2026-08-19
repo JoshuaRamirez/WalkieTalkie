@@ -58,9 +58,12 @@ within an agent session. The cadence is:
 5. Add proof obligations for new invariants in
    `security-foundations/envelope/proof_obligations.py`.
 6. Run `.venv/bin/python -m unittest discover -s
-   security-foundations/envelope -t security-foundations/envelope`
-   and `.venv/bin/ruff check security-foundations`. Both must be
-   clean.
+   security-foundations -p 'test_*.py'` and
+   `.venv/bin/ruff check security-foundations`. Both must be
+   clean. After `pip install -e ".[dev]"`,
+   `python -c "import envelope.verify_envelope"` must succeed —
+   do not put package directories on `sys.path` to make imports
+   work.
 7. Commit with a substantive message (what, why, what changed, test
    delta). Include `https://claude.ai/code/session_<id>` as the
    trailing reference.
@@ -71,6 +74,18 @@ within an agent session. The cadence is:
 
 If the repo doesn't have a `.venv`, recreate with
 `python -m venv .venv && .venv/bin/pip install -e ".[dev]"`.
+
+## Package layout (importable library)
+
+`pip install -e .` installs three top-level packages from
+`security-foundations/`: `envelope`, `mesh`, and `integrations`.
+Intra-package imports are relative (`from .audit import …`).
+Cross-package imports are fully qualified
+(`from envelope.workload_ca import …`). Tests import the same way
+(`from envelope.audit import …`, `from mesh.node import …`) and are
+discovered as `envelope.test_*` / `mesh.test_*` /
+`integrations.mcp.test_*`. Do not add a `sys.path.insert` of a
+package directory — that is the retired flat-dir convention.
 
 ## Pattern for signed artifacts
 

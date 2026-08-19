@@ -46,7 +46,6 @@ _DEFAULT_PROMPT = (
     "replies brief and on-topic."
 )
 
-
 def peek_unread(inbox: pathlib.Path) -> list[dict]:
     """Return unread inbox entries WITHOUT marking them read — the wake
     signal. Claude's own check_inbox is what marks them read."""
@@ -65,7 +64,6 @@ def peek_unread(inbox: pathlib.Path) -> list[dict]:
             out.append(entry)
     return out
 
-
 def build_claude_cmd(args, *, resume: bool) -> list[str]:
     cmd = [
         args.claude_bin, "-p", args.prompt,
@@ -76,7 +74,6 @@ def build_claude_cmd(args, *, resume: bool) -> list[str]:
     if resume:
         cmd.append("--continue")  # keep the same conversation across wakes
     return cmd
-
 
 def run(args) -> int:
     inbox = args.config / f"inbox-{args.name}.jsonl"
@@ -101,7 +98,6 @@ def run(args) -> int:
             return 0
         time.sleep(args.interval)
 
-
 def main() -> int:
     ap = argparse.ArgumentParser(description="Wake Claude on new mesh mail")
     ap.add_argument("--name", required=True, help="this agent's name")
@@ -121,7 +117,6 @@ def main() -> int:
     if args.workdir is None:
         args.workdir = args.config
     return run(args)
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

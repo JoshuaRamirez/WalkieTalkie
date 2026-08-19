@@ -2,15 +2,14 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-# NOTE ON DISTRIBUTION: WalkieTalkie currently runs from a source checkout.
-# Modules import their siblings by bare name (each package dir is its own
-# import root — the dev/test convention), so while a wheel builds, the
-# installed package is not yet importable as a library. `pip install -e .`
-# here is for pulling dependencies and running the suites from source; the
-# import-restructure that would make it a clean installable package is a
-# tracked follow-up (see DEFERRED.md, "Installable-package import
-# restructure"). Metadata below describes the source project, not a
-# published library.
+# NOTE ON DISTRIBUTION: `pip install .` / `pip install -e .` produces an
+# importable library. Hatch ships the three source trees as top-level
+# packages: `envelope`, `mesh`, and `integrations`. Intra-package imports
+# are relative (`from .audit import …`); cross-package imports are fully
+# qualified (`from envelope.workload_ca import …`). Tests run against the
+# installed/editable package (`python -m unittest discover -s
+# security-foundations -p 'test_*.py'`), not against flat package dirs
+# on sys.path.
 
 [project]
 name = "walkietalkie-envelope"
@@ -66,3 +65,6 @@ line-length = 110
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]
 ignore = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["envelope", "mesh", "integrations"]

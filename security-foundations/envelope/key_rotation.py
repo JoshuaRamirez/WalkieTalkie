@@ -43,20 +43,18 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from deny_reason import DenyReason
-from verify_envelope import KID_RE, SPIFFE_ID_RE
+from .deny_reason import DenyReason
+from .verify_envelope import KID_RE, SPIFFE_ID_RE
 
 
 class KeyRotationError(ValueError):
     """Raised when rotation inputs violate v0 invariants."""
-
 
 class RotationPhase(StrEnum):
     PRE_OVERLAP = "pre_overlap"     # only old_kid accepted
     OVERLAP = "overlap"             # both accepted
     POST_CUTOVER = "post_cutover"   # both accepted (sunset window)
     COMPLETE = "complete"           # only new_kid accepted
-
 
 @dataclass(frozen=True)
 class KeyRotationPlan:
@@ -100,7 +98,6 @@ class KeyRotationPlan:
                 "overlap_end must be >= cutover_at"
             )
 
-
 def current_phase(plan: KeyRotationPlan, *, now: datetime) -> RotationPhase:
     """Return the deterministic phase of ``plan`` at ``now``."""
     if not isinstance(now, datetime) or now.tzinfo is None:
@@ -113,7 +110,6 @@ def current_phase(plan: KeyRotationPlan, *, now: datetime) -> RotationPhase:
     if now_utc <= plan.overlap_end.astimezone(UTC):
         return RotationPhase.POST_CUTOVER
     return RotationPhase.COMPLETE
-
 
 def accepted_kids(plan: KeyRotationPlan, *, now: datetime) -> frozenset[str]:
     """Return the kids a verifier should honor for ``plan`` at ``now``.
@@ -129,12 +125,10 @@ def accepted_kids(plan: KeyRotationPlan, *, now: datetime) -> frozenset[str]:
         return frozenset({plan.new_kid})
     return frozenset({plan.old_kid, plan.new_kid})
 
-
 def _intervals_overlap(
     a_start: datetime, a_end: datetime, b_start: datetime, b_end: datetime
 ) -> bool:
     return a_start <= b_end and b_start <= a_end
-
 
 @dataclass
 class RotationRegistry:
@@ -211,7 +205,6 @@ class RotationRegistry:
     def snapshot(self) -> tuple[KeyRotationPlan, ...]:
         return tuple(self._plans)
 
-
 def require_accepted_kid(
     registry: RotationRegistry,
     *,
@@ -234,7 +227,6 @@ def require_accepted_kid(
         f"[code={DenyReason.ROTATION_KID_NOT_ACCEPTED.value}]"
     )
 
-
 def build_plan(
     *,
     subject_iss: str,
@@ -253,7 +245,6 @@ def build_plan(
         cutover_at=cutover_at,
         overlap_end=overlap_end,
     )
-
 
 def build_registry(plans: Iterable[KeyRotationPlan] = ()) -> RotationRegistry:
     reg = RotationRegistry()

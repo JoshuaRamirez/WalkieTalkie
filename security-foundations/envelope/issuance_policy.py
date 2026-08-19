@@ -34,7 +34,6 @@ class PolicyDecision:
     allowed: bool
     reason: str
 
-
 class IssuancePolicyError(ValueError):
     """Raised by :meth:`CapabilityIssuer.issue` when the policy denies.
 
@@ -45,7 +44,6 @@ class IssuancePolicyError(ValueError):
     def __init__(self, message: str, *, decision: PolicyDecision) -> None:
         super().__init__(message)
         self.decision = decision
-
 
 class IssuancePolicy(ABC):
     @abstractmethod
@@ -59,7 +57,6 @@ class IssuancePolicy(ABC):
     ) -> PolicyDecision:
         ...
 
-
 class AllowAllPolicy(IssuancePolicy):
     """Permissive default. Equivalent to no policy at all.
 
@@ -70,7 +67,6 @@ class AllowAllPolicy(IssuancePolicy):
 
     def evaluate(self, *, sub: str, aud: str, scope: str, ttl: timedelta) -> PolicyDecision:
         return PolicyDecision(allowed=True, reason="permissive")
-
 
 @dataclass(frozen=True)
 class AllowlistPolicy(IssuancePolicy):

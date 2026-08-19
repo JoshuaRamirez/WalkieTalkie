@@ -38,13 +38,13 @@ import hashlib
 from dataclasses import dataclass, field
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from deny_reason import DenyReason
-from verify_envelope import SPIFFE_ID_RE
+
+from .deny_reason import DenyReason
+from .verify_envelope import SPIFFE_ID_RE
 
 
 class PeerAdmissionError(ValueError):
     """Raised when admission inputs violate v0 invariants."""
-
 
 def public_key_fingerprint(public_key: Ed25519PublicKey) -> str:
     """Stable hex sha256 over the raw Ed25519 public key.
@@ -53,7 +53,6 @@ def public_key_fingerprint(public_key: Ed25519PublicKey) -> str:
     compares against, so a pinned peer must present the exact key the
     operator recorded."""
     return hashlib.sha256(public_key.public_bytes_raw()).hexdigest()
-
 
 @dataclass(frozen=True)
 class AdmissionRule:
@@ -76,13 +75,11 @@ class AdmissionRule:
                     f"{self.pinned_fingerprint!r}"
                 )
 
-
 @dataclass(frozen=True)
 class AdmissionDecision:
     allowed: bool
     reason: str
     reason_code: str = ""
-
 
 @dataclass(frozen=True)
 class PeerAdmissionPolicy:
@@ -110,7 +107,6 @@ class PeerAdmissionPolicy:
 
     def _rules_for_identity(self, spiffe_id: str) -> tuple[AdmissionRule, ...]:
         return tuple(r for r in self.rules if r.spiffe_id == spiffe_id)
-
 
 def admit_peer(
     *,
@@ -182,14 +178,12 @@ def admit_peer(
         reason_code=DenyReason.ADMISSION_TIER_MISMATCH.value,
     )
 
-
 class PeerAdmissionDenied(ValueError):
     """Raised by :func:`require_admission` on denial."""
 
     def __init__(self, decision: AdmissionDecision) -> None:
         super().__init__(decision.reason)
         self.decision = decision
-
 
 def require_admission(
     *,

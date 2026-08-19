@@ -1,13 +1,9 @@
 """Tests for key rotation drills (Phase 3 Track D D1)."""
 
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime, timedelta
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from key_rotation import (
+from envelope.key_rotation import (
     KeyRotationError,
     KeyRotationPlan,
     RotationPhase,
@@ -23,7 +19,6 @@ _SUB = "spiffe://mesh.example/ns-a/agent-1"
 _OLD = "kid-old"
 _NEW = "kid-new"
 
-
 def _plan(**overrides) -> KeyRotationPlan:
     kwargs = dict(
         subject_iss=_SUB,
@@ -35,7 +30,6 @@ def _plan(**overrides) -> KeyRotationPlan:
     )
     kwargs.update(overrides)
     return build_plan(**kwargs)
-
 
 class PlanValidationTests(unittest.TestCase):
     def test_old_equals_new_rejected(self):
@@ -53,7 +47,6 @@ class PlanValidationTests(unittest.TestCase):
     def test_overlap_end_before_cutover_rejected(self):
         with self.assertRaisesRegex(KeyRotationError, "overlap_end"):
             _plan(overlap_end=_NOW + timedelta(minutes=30))
-
 
 class PhaseTests(unittest.TestCase):
     def test_pre_overlap(self):
@@ -84,7 +77,6 @@ class PhaseTests(unittest.TestCase):
             RotationPhase.COMPLETE,
         )
 
-
 class AcceptedKidsTests(unittest.TestCase):
     def test_pre_overlap_only_old(self):
         plan = _plan()
@@ -113,7 +105,6 @@ class AcceptedKidsTests(unittest.TestCase):
             accepted_kids(plan, now=_NOW + timedelta(hours=3)),
             frozenset({_NEW}),
         )
-
 
 class RegistryTests(unittest.TestCase):
     def test_register_and_query(self):
@@ -180,7 +171,6 @@ class RegistryTests(unittest.TestCase):
         reg.register(plan)
         self.assertEqual(reg.snapshot(), (plan,))
 
-
 class RequireAcceptedKidTests(unittest.TestCase):
     def test_accepted_kid_passes(self):
         reg = RotationRegistry()
@@ -208,7 +198,6 @@ class RequireAcceptedKidTests(unittest.TestCase):
                 reg, subject_iss=_SUB, kid=_OLD,
                 now=_NOW + timedelta(hours=3),
             )
-
 
 if __name__ == "__main__":
     unittest.main()

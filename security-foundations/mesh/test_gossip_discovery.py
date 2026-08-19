@@ -1,16 +1,11 @@
 """Tests for gossip-driven discovery + admission (Phase 6 Track B D6.4)."""
 
-import pathlib
-import sys
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "envelope"))
-
-from gossip_discovery import GossipDiscovery
-from membership import SwimMembership
-from peer_admission import AdmissionRule, PeerAdmissionPolicy
-from transport import InMemoryTransport, Switchboard
+from envelope.peer_admission import AdmissionRule, PeerAdmissionPolicy
+from mesh.gossip_discovery import GossipDiscovery
+from mesh.membership import SwimMembership
+from mesh.transport import InMemoryTransport, Switchboard
 
 _A = "spiffe://mesh.local/a"
 _B = "spiffe://mesh.local/b"
@@ -25,7 +20,6 @@ _POLICY = PeerAdmissionPolicy(
     )
 )
 
-
 def _fabric():
     """A, B, and a rogue all gossip into one cluster (all seeded to A)."""
     sb = Switchboard()
@@ -36,14 +30,12 @@ def _fabric():
         mem[i] = SwimMembership(i, InMemoryTransport(i, sb), seeds=seeds)
     return ids, mem
 
-
 def _converge(mem, ids, rounds=25):
     for m in mem.values():
         m.join()
     for _ in range(rounds):
         for i in ids:
             mem[i].tick()
-
 
 class GossipAdmissionTests(unittest.TestCase):
     def test_reachable_rogue_is_not_routable(self):
@@ -83,7 +75,6 @@ class GossipAdmissionTests(unittest.TestCase):
         )
         self.assertIn(_B, disc.alive_ids())
         self.assertNotIn(_B, disc.routable_peers())
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,14 +1,9 @@
 """Tests for runtime trust tiers (Phase 5 Track D D1)."""
 
-import pathlib
-import sys
+import json
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-import json
-
-from runtime_profile import (
+from envelope.runtime_profile import (
     EgressPolicy,
     RuntimeProfile,
     RuntimeProfileError,
@@ -51,7 +46,6 @@ class ProfileValidationTests(unittest.TestCase):
                 egress_allowlist=frozenset({"api.example"}),
             )
 
-
 class BuiltinProfileTests(unittest.TestCase):
     def test_strict_denies_egress_and_has_minimal_writable(self):
         p = strict_profile()
@@ -86,7 +80,6 @@ class BuiltinProfileTests(unittest.TestCase):
         p = strict_profile()
         with self.assertRaises(FrozenInstanceError):
             p.egress = EgressPolicy.ALLOW_ALL  # type: ignore[misc]
-
 
 class SeccompGenerationTests(unittest.TestCase):
     def test_document_shape_is_oci_deny_by_default(self):
@@ -125,7 +118,6 @@ class SeccompGenerationTests(unittest.TestCase):
     def test_non_profile_rejected(self):
         with self.assertRaises(RuntimeProfileError):
             generate_seccomp({"tier": "strict"})  # type: ignore[arg-type]
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -43,12 +43,29 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jcs
-from audit import AuditSink, InMemoryAuditSink
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from data_classification import DataClass
-from demo_tools import DEMO_TOOLS
-from egress_policy import EgressAction, EgressPolicy
-from envelope_adapter import (
+
+from envelope.audit import AuditSink, InMemoryAuditSink
+from envelope.data_classification import DataClass
+from envelope.egress_policy import EgressAction, EgressPolicy
+from envelope.output_scanning import PatternRegistry, scan
+from envelope.rate_limiter import IdentityRateLimiter
+from envelope.revocation_list import RevocationList
+from envelope.tool_policy_gate import (
+    StepUpAttestation,
+    ToolCall,
+    ToolPolicy,
+    evaluate_tool_call,
+)
+from envelope.verify_envelope import (
+    EnvelopeVerificationError,
+    ReplayCache,
+    VerificationConfig,
+    verify_envelope,
+)
+
+from .demo_tools import DEMO_TOOLS
+from .envelope_adapter import (
     EnvelopeFields,
     MCPRequest,
     MCPResponse,
@@ -57,26 +74,11 @@ from envelope_adapter import (
     sign_envelope,
     unwrap_request,
 )
-from host_support import (
+from .host_support import (
     derive_reply_id,
     derive_reply_nonce,
     exc_reason_code,
     request_id_from_envelope,
-)
-from output_scanning import PatternRegistry, scan
-from rate_limiter import IdentityRateLimiter
-from revocation_list import RevocationList
-from tool_policy_gate import (
-    StepUpAttestation,
-    ToolCall,
-    ToolPolicy,
-    evaluate_tool_call,
-)
-from verify_envelope import (
-    EnvelopeVerificationError,
-    ReplayCache,
-    VerificationConfig,
-    verify_envelope,
 )
 
 # JSON-RPC 2.0 standard error codes used in our error replies.
@@ -90,10 +92,8 @@ _APP_TOOL_DENIED = -32002
 _APP_EGRESS_DENIED = -32003
 _APP_RATE_LIMITED = -32004
 
-
 class ExampleMCPHostError(RuntimeError):
     """Raised when host configuration is invalid."""
-
 
 @dataclass
 class HostConfig:
@@ -138,7 +138,6 @@ class HostConfig:
                 "host_iss and host_kid must be non-empty strings"
             )
 
-
 @dataclass(frozen=True)
 class HandleOptions:
     """Per-request overrides that the caller supplies alongside the envelope."""
@@ -148,11 +147,9 @@ class HandleOptions:
     reply_message_id: str = ""
     reply_nonce: str = ""
 
-
 # ---------------------------------------------------------------------
 # The host
 # ---------------------------------------------------------------------
-
 
 class ExampleMCPHost:
     """Single-process MCP host wired with the substrate."""
@@ -458,7 +455,6 @@ class ExampleMCPHost:
             recipient=str(env.get("recipient_spiffe_id", "")),
             envelope_kid=str(env.get("kid", "")),
         )
-
 
 __all__ = [
     "DEMO_TOOLS",

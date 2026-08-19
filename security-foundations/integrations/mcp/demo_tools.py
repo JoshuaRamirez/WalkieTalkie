@@ -21,7 +21,6 @@ def tool_read_file(params: dict[str, Any]) -> dict[str, Any]:
         "contents": f"demo body for {path or '<no path>'}",
     }
 
-
 def tool_exec_sql(params: dict[str, Any]) -> dict[str, Any]:
     query = params.get("query", "") if isinstance(params, dict) else ""
     return {
@@ -29,11 +28,9 @@ def tool_exec_sql(params: dict[str, Any]) -> dict[str, Any]:
         "rows": [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
     }
 
-
 DEMO_TOOLS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "read_file": tool_read_file,
     "exec_sql": tool_exec_sql,
 }
-
 
 __all__ = ["DEMO_TOOLS", "tool_exec_sql", "tool_read_file"]

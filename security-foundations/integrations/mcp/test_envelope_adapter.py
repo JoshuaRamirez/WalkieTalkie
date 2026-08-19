@@ -1,18 +1,12 @@
 """Tests for the MCP envelope adapter (Phase 4 D4.1)."""
 
 import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime, timedelta
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-sys.path.insert(
-    0, str(pathlib.Path(__file__).resolve().parent.parent.parent / "envelope")
-)
-
-from envelope_adapter import (
+from integrations.mcp.envelope_adapter import (
     EnvelopeFields,
     MCPAdapterError,
     MCPRequest,
@@ -37,7 +31,6 @@ _NONCE = "nonce-abcdefghijklmnop"
 _KID = "dev-kid-1"
 _CAP_TOKEN = "eyJ.eyJ.AAA"  # opaque to the adapter; envelope verifier checks it
 
-
 def _fields(**overrides) -> EnvelopeFields:
     kwargs = dict(
         sender_spiffe_id=_SENDER,
@@ -53,7 +46,6 @@ def _fields(**overrides) -> EnvelopeFields:
     kwargs.update(overrides)
     return EnvelopeFields(**kwargs)
 
-
 class MCPRequestValidationTests(unittest.TestCase):
     def test_empty_method_rejected(self):
         with self.assertRaisesRegex(MCPAdapterError, "method"):
@@ -66,7 +58,6 @@ class MCPRequestValidationTests(unittest.TestCase):
     def test_bad_id_type_rejected(self):
         with self.assertRaisesRegex(MCPAdapterError, "id"):
             MCPRequest(method="x", id=3.14)  # type: ignore[arg-type]
-
 
 class MCPResponseValidationTests(unittest.TestCase):
     def test_must_carry_exactly_one_of_result_or_error(self):
@@ -82,7 +73,6 @@ class MCPResponseValidationTests(unittest.TestCase):
     def test_error_must_have_code_and_message(self):
         with self.assertRaisesRegex(MCPAdapterError, "code.*message"):
             MCPResponse(id=1, error={"code": -32600})  # type: ignore[arg-type]
-
 
 class PayloadRoundTripTests(unittest.TestCase):
     def test_request_round_trip(self):
@@ -122,7 +112,6 @@ class PayloadRoundTripTests(unittest.TestCase):
         with self.assertRaisesRegex(MCPAdapterError, "method"):
             payload_to_mcp_request({"jsonrpc": "2.0", "id": 1})
 
-
 class EnvelopeFieldsTests(unittest.TestCase):
     def test_naive_issued_at_rejected(self):
         with self.assertRaisesRegex(MCPAdapterError, "issued_at"):
@@ -135,7 +124,6 @@ class EnvelopeFieldsTests(unittest.TestCase):
     def test_empty_required_field_rejected(self):
         with self.assertRaisesRegex(MCPAdapterError, "kid"):
             _fields(kid="")
-
 
 class BuildEnvelopeTests(unittest.TestCase):
     def _payload(self):
@@ -184,7 +172,6 @@ class BuildEnvelopeTests(unittest.TestCase):
     def test_non_dict_payload_rejected(self):
         with self.assertRaisesRegex(MCPAdapterError, "payload"):
             build_envelope(payload="not a dict", fields=_fields())  # type: ignore[arg-type]
-
 
 class SignEnvelopeTests(unittest.TestCase):
     def test_signature_attaches_and_is_valid(self):
@@ -239,7 +226,6 @@ class SignEnvelopeTests(unittest.TestCase):
         resigned = sign_envelope(mutated, priv)
         self.assertNotEqual(signed["signature"], resigned["signature"])
 
-
 class UnwrapTests(unittest.TestCase):
     def test_unwrap_request_round_trip(self):
         req = MCPRequest(method="tools/list", id=1)
@@ -254,7 +240,6 @@ class UnwrapTests(unittest.TestCase):
             payload=mcp_response_to_payload(resp), fields=_fields()
         )
         self.assertEqual(unwrap_response(env), resp)
-
 
 class JsonTransportTests(unittest.TestCase):
     def test_envelope_to_from_json(self):
@@ -273,7 +258,6 @@ class JsonTransportTests(unittest.TestCase):
     def test_non_object_json_rejected(self):
         with self.assertRaisesRegex(MCPAdapterError, "object"):
             envelope_from_json(b"[1,2,3]")
-
 
 class IntegrationWithVerifierTests(unittest.TestCase):
     """The adapter is only useful if its output is verifiable by the
@@ -310,7 +294,6 @@ class IntegrationWithVerifierTests(unittest.TestCase):
         extra = set(env) - required
         self.assertFalse(missing, f"adapter omitted required fields: {missing}")
         self.assertFalse(extra, f"adapter emitted unexpected fields: {extra}")
-
 
 if __name__ == "__main__":
     unittest.main()

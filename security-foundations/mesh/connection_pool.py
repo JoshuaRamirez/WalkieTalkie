@@ -39,11 +39,10 @@ import threading
 import time
 from collections import OrderedDict, deque
 
-from transport import Frame, Transport, TransportError
+from .transport import Frame, Transport, TransportError
 
 _LEN_PREFIX = 4
 _MAX_FRAME = 8 * 1024 * 1024
-
 
 def _recv_exactly(conn: socket.socket, n: int) -> bytes | None:
     buf = bytearray()
@@ -56,7 +55,6 @@ def _recv_exactly(conn: socket.socket, n: int) -> bytes | None:
             return None
         buf.extend(chunk)
     return bytes(buf)
-
 
 class PooledSocketTransport(Transport):
     """A :class:`Transport` over persistent, pooled loopback-TCP

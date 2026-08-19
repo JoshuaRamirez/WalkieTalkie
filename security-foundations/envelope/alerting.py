@@ -36,12 +36,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from audit import AuditEvent, AuditSink
-from verify_envelope import parse_rfc3339
+from .audit import AuditEvent, AuditSink
+from .verify_envelope import parse_rfc3339
 
 REPEATED_VALIDATION_FAILURE = "repeated_validation_failure"
 ABNORMAL_ISSUANCE_VOLUME = "abnormal_issuance_volume"
-
 
 @dataclass(frozen=True)
 class Alert:
@@ -53,12 +52,10 @@ class Alert:
     window_seconds: int
     triggered_at: datetime
 
-
 class AlertingPolicy(ABC):
     @abstractmethod
     def observe(self, event: AuditEvent) -> list[Alert]:
         """Called after each event. Return any alerts the event triggers."""
-
 
 @dataclass
 class ThresholdAlertingPolicy(AlertingPolicy):
@@ -139,7 +136,6 @@ class ThresholdAlertingPolicy(AlertingPolicy):
     def _purge(bucket: deque[datetime], cutoff: datetime) -> None:
         while bucket and bucket[0] < cutoff:
             bucket.popleft()
-
 
 class AlertingAuditSink(AuditSink):
     """Decorator: forwards events to ``inner`` and feeds them to ``policy``.

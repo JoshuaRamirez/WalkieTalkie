@@ -56,8 +56,9 @@ from datetime import UTC, datetime, timedelta
 import jcs
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from deny_reason import DenyReason
-from verify_envelope import (
+
+from .deny_reason import DenyReason
+from .verify_envelope import (
     HEX_SHA256_RE,
     KID_RE,
     SPIFFE_ID_RE,
@@ -69,10 +70,8 @@ from verify_envelope import (
 
 READMISSION_TYP = "wt-readmission/v0"
 
-
 class ReAdmissionError(EnvelopeVerificationError):
     """Raised when re-admission inputs violate v0 invariants."""
-
 
 @dataclass(frozen=True)
 class QuarantineEntry:
@@ -116,7 +115,6 @@ class QuarantineEntry:
                 reason=DenyReason.READMISSION_ATTESTATION_MALFORMED,
             )
 
-
 @dataclass(frozen=True)
 class CleanRoomAttestation:
     """Signed proof that a workload was rebuilt from a clean baseline."""
@@ -137,7 +135,6 @@ class CleanRoomAttestation:
     def to_dict(self) -> dict:
         return dataclasses.asdict(self)
 
-
 def _body(att: CleanRoomAttestation) -> bytes:
     body = {
         "typ": READMISSION_TYP,
@@ -155,10 +152,8 @@ def _body(att: CleanRoomAttestation) -> bytes:
     }
     return jcs.canonicalize(body)
 
-
 def _b64u(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
 
 def sign_attestation(
     att: CleanRoomAttestation, signing_key: Ed25519PrivateKey
@@ -166,10 +161,8 @@ def sign_attestation(
     sig = _b64u(signing_key.sign(_body(att)))
     return dataclasses.replace(att, signature=sig)
 
-
 def to_json(att: CleanRoomAttestation) -> bytes:
     return json.dumps(att.to_dict(), separators=(",", ":")).encode("utf-8")
-
 
 def from_json(data: bytes) -> CleanRoomAttestation:
     try:
@@ -197,12 +190,10 @@ def from_json(data: bytes) -> CleanRoomAttestation:
         )
     return CleanRoomAttestation(**{k: obj[k] for k in required})
 
-
 def _malformed(msg: str) -> ReAdmissionError:
     return ReAdmissionError(
         msg, reason=DenyReason.READMISSION_ATTESTATION_MALFORMED
     )
-
 
 def _validate_shape(att: CleanRoomAttestation) -> None:
     if not isinstance(att.quarantine_id, str) or not UUID_V7_RE.match(
@@ -240,7 +231,6 @@ def _validate_shape(att: CleanRoomAttestation) -> None:
     if not isinstance(att.signature, str) or not att.signature:
         raise _malformed("signature must be a non-empty string")
 
-
 @dataclass(frozen=True)
 class ReAdmissionGrant:
     workload_iss: str
@@ -248,7 +238,6 @@ class ReAdmissionGrant:
     monitoring_period: timedelta
     baseline_digest: str
     granted_at: datetime
-
 
 def verify_readmission(
     attestation: CleanRoomAttestation,

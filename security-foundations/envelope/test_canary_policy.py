@@ -1,14 +1,10 @@
 """Tests for canary policy releases (Phase 1 Track C C3)."""
 
-import pathlib
-import sys
 import unittest
 from datetime import timedelta
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from canary_policy import CanaryPolicy
-from issuance_policy import (
+from envelope.canary_policy import CanaryPolicy
+from envelope.issuance_policy import (
     AllowAllPolicy,
     AllowlistPolicy,
     IssuancePolicy,
@@ -18,7 +14,6 @@ from issuance_policy import (
 _SUB = "spiffe://mesh.example/ns-a/svc"
 _AUD = "spiffe://mesh.example/ns-b/svc"
 _SCOPE = "invoke_tool"
-
 
 class _LabelingPolicy(IssuancePolicy):
     """Always-allow policy that tags its decisions with a label so tests can
@@ -34,7 +29,6 @@ class _LabelingPolicy(IssuancePolicy):
         self.calls += 1
         return PolicyDecision(allowed=True, reason=self.label)
 
-
 class _StrictPolicy(IssuancePolicy):
     """Always-deny policy used to drive the auto-rollback path."""
 
@@ -42,7 +36,6 @@ class _StrictPolicy(IssuancePolicy):
         self, *, sub: str, aud: str, scope: str, ttl: timedelta
     ) -> PolicyDecision:
         return PolicyDecision(allowed=False, reason="strict candidate denied")
-
 
 class ConstructionTests(unittest.TestCase):
     def test_canary_buckets_out_of_range_rejected(self):
@@ -66,7 +59,6 @@ class ConstructionTests(unittest.TestCase):
                 candidate=AllowAllPolicy(),
                 rollback_after_denials=0,
             )
-
 
 class TrafficSplitTests(unittest.TestCase):
     def test_zero_percent_routes_all_to_stable(self):
@@ -114,7 +106,6 @@ class TrafficSplitTests(unittest.TestCase):
         for _ in range(20):
             again = canary.evaluate(sub=_SUB, aud=_AUD, scope=_SCOPE, ttl=timedelta(seconds=60))
             self.assertEqual(again.reason, first.reason)
-
 
 class AutoRollbackTests(unittest.TestCase):
     def test_rollback_after_threshold_denials(self):
@@ -205,7 +196,6 @@ class AutoRollbackTests(unittest.TestCase):
             )
         self.assertFalse(canary.rolled_back)
         self.assertEqual(canary.candidate_denials, 0)
-
 
 if __name__ == "__main__":
     unittest.main()

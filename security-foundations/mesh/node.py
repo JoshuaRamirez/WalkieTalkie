@@ -36,19 +36,19 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from discovery_record import DiscoveryRecord, verify_record
-from eclipse_resistance import (
+from envelope.discovery_record import DiscoveryRecord, verify_record
+from envelope.eclipse_resistance import (
     DiversityRule,
     NeighborCandidate,
     select_neighbors,
 )
-from peer_admission import PeerAdmissionPolicy, admit_peer
-from transport import Frame, Transport
+from envelope.peer_admission import PeerAdmissionPolicy, admit_peer
+
+from .transport import Frame, Transport
 
 
 class MeshNodeError(ValueError):
     """Raised when mesh-node inputs violate v0 invariants."""
-
 
 @dataclass(frozen=True)
 class Peer:
@@ -59,14 +59,12 @@ class Peer:
     transport_address: str
     learned_at: datetime
 
-
 @dataclass(frozen=True)
 class LearnResult:
     admitted: bool
     reason: str
     reason_code: str = ""
     peer: Peer | None = None
-
 
 @dataclass
 class MeshNode:

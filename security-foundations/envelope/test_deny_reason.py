@@ -14,7 +14,6 @@ fallback." This file pins:
 
 import json
 import pathlib
-import sys
 import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -22,15 +21,13 @@ from datetime import UTC, datetime, timedelta
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from audit import InMemoryAuditSink
-from capability_token import verify_capability_token
-from deny_reason import DenyReason
-from issuer_trust_store import IssuerTrustStore
-from revocation_list import InMemoryRevocationList
-from trust_store import FileSystemTrustStore
-from verify_envelope import (
+from envelope.audit import InMemoryAuditSink
+from envelope.capability_token import verify_capability_token
+from envelope.deny_reason import DenyReason
+from envelope.issuer_trust_store import IssuerTrustStore
+from envelope.revocation_list import InMemoryRevocationList
+from envelope.trust_store import FileSystemTrustStore
+from envelope.verify_envelope import (
     EnvelopeVerificationError,
     InMemoryReplayCache,
     _digest_payload,
@@ -54,7 +51,6 @@ class DenyReasonEnumTests(unittest.TestCase):
         # StrEnum: each value behaves as its string form.
         self.assertEqual(str(DenyReason.REPLAY_DETECTED), "replay_detected")
 
-
 class ExceptionContractTests(unittest.TestCase):
     def test_default_reason_is_none(self):
         exc = EnvelopeVerificationError("legacy error")
@@ -65,7 +61,6 @@ class ExceptionContractTests(unittest.TestCase):
         exc = EnvelopeVerificationError("x", reason=DenyReason.SIGNATURE_INVALID)
         self.assertIs(exc.reason, DenyReason.SIGNATURE_INVALID)
         self.assertEqual(exc.reason_code, "signature_invalid")
-
 
 def _ed25519_keypair():
     priv = Ed25519PrivateKey.generate()
@@ -80,18 +75,15 @@ def _ed25519_keypair():
     )
     return priv_pem, pub_pem
 
-
 def _b64u(data: bytes) -> str:
     import base64
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
 
 _ISSUER = "spiffe://mesh/cap-issuer-1"
 _ISSUER_KID = "issuer-kid-1"
 _SENDER = "spiffe://mesh/ns-a/service-a"
 _RECIPIENT = "spiffe://mesh/ns-b/service-b"
 _PURPOSE = "invoke_tool"
-
 
 def _mint_token(
     issuer_priv_pem: bytes,
@@ -122,7 +114,6 @@ def _mint_token(
     sig = _b64u(issuer_priv.sign((h + "." + p).encode("ascii")))
     return f"{h}.{p}.{sig}"
 
-
 def _sign_envelope(envelope: dict, signer_priv_pem: bytes) -> dict:
     signer = serialization.load_pem_private_key(signer_priv_pem, password=None)
     assert isinstance(signer, Ed25519PrivateKey)
@@ -130,7 +121,6 @@ def _sign_envelope(envelope: dict, signer_priv_pem: bytes) -> dict:
     signing_input = canonicalize_envelope_for_signing(envelope)
     envelope["signature"] = _b64u(signer.sign(signing_input))
     return envelope
-
 
 class CapabilityTokenReasonCodeTests(unittest.TestCase):
     def setUp(self):
@@ -195,7 +185,6 @@ class CapabilityTokenReasonCodeTests(unittest.TestCase):
             DenyReason.CAP_REVOKED,
             lambda: self._verify(token, revocation_list=rl),
         )
-
 
 class EnvelopeReasonCodeTests(unittest.TestCase):
     @classmethod
@@ -330,7 +319,6 @@ class EnvelopeReasonCodeTests(unittest.TestCase):
             self._verify(envelope, now)
         self.assertIs(ctx.exception.reason, DenyReason.UNKNOWN_ISSUER_KEY)
 
-
 class TrustStoreReasonCodeTests(unittest.TestCase):
     def test_filesystem_unknown_kid_reason(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -355,7 +343,6 @@ class TrustStoreReasonCodeTests(unittest.TestCase):
             with self.assertRaises(EnvelopeVerificationError) as ctx:
                 store("spiffe://mesh/other", "x")
             self.assertIs(ctx.exception.reason, DenyReason.UNKNOWN_ISSUER_KEY)
-
 
 if __name__ == "__main__":
     unittest.main()

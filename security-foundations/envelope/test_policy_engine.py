@@ -1,13 +1,9 @@
 """Tests for the policy engine (Phase 5 Track B B1)."""
 
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from policy_engine import (
+from envelope.policy_engine import (
     ANY,
     Condition,
     ConditionOp,
@@ -20,7 +16,6 @@ from policy_engine import (
 
 _NOW = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
 _CALLER = "spiffe://mesh.example/ns-a/agent-1"
-
 
 class ConditionTests(unittest.TestCase):
     def test_equals(self):
@@ -43,7 +38,6 @@ class ConditionTests(unittest.TestCase):
         with self.assertRaisesRegex(PolicyEngineError, "collection"):
             Condition(key="t", op=ConditionOp.IN, value="not-a-list")
 
-
 class RuleValidationTests(unittest.TestCase):
     def test_empty_name_rejected(self):
         with self.assertRaisesRegex(PolicyEngineError, "name"):
@@ -53,13 +47,11 @@ class RuleValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(PolicyEngineError, "effect"):
             PolicyRule(name="r", effect="permit")  # type: ignore[arg-type]
 
-
 class EngineValidationTests(unittest.TestCase):
     def test_duplicate_rule_name_rejected(self):
         r = PolicyRule(name="dup", effect=Effect.PERMIT)
         with self.assertRaisesRegex(PolicyEngineError, "duplicate"):
             NativePolicyEngine(rules=(r, r))
-
 
 class DecisionTests(unittest.TestCase):
     def test_deny_by_default(self):
@@ -168,12 +160,10 @@ class DecisionTests(unittest.TestCase):
         self.assertTrue(permit.decision_id)
         self.assertTrue(deny.decision_id)
 
-
 class RequestValidationTests(unittest.TestCase):
     def test_empty_principal_rejected(self):
         with self.assertRaisesRegex(PolicyEngineError, "principal"):
             PolicyRequest(principal="", action="a", resource="r")
-
 
 if __name__ == "__main__":
     unittest.main()

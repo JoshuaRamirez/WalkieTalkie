@@ -48,9 +48,7 @@ def read_unread(inbox: pathlib.Path) -> list[dict]:
         finally:
             fcntl.flock(lf, fcntl.LOCK_UN)
 
-
 _DEFAULT_CONFIG_DIR = pathlib.Path.home() / ".claude" / "mesh"
-
 
 def main() -> int:
     ap = argparse.ArgumentParser()
@@ -79,7 +77,6 @@ def main() -> int:
     )
     print("\n".join(lines))
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

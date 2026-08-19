@@ -12,17 +12,11 @@ the audit-log skeleton looks right.
 
 import json
 import pathlib
-import sys
 import unittest
 
-sys.path.insert(
-    0, str(pathlib.Path(__file__).resolve().parent.parent.parent / "envelope")
-)
-
-from audit import AuditEvent, verify_chain  # noqa: E402
+from envelope.audit import AuditEvent, verify_chain
 
 _EXAMPLE_DIR = pathlib.Path(__file__).resolve().parent / "example"
-
 
 class RunbookArtifactsTests(unittest.TestCase):
     def test_readme_exists(self):
@@ -36,7 +30,6 @@ class RunbookArtifactsTests(unittest.TestCase):
 
     def test_sample_audit_exists(self):
         self.assertTrue((_EXAMPLE_DIR / "sample-audit.jsonl").is_file())
-
 
 class SampleAuditChainTests(unittest.TestCase):
     """The shipped sample audit must hash-validate, otherwise an
@@ -77,7 +70,6 @@ class SampleAuditChainTests(unittest.TestCase):
         for required in ("capability.issue", "envelope.verify", "tool.gate",
                          "egress.evaluate"):
             self.assertIn(required, types)
-
 
 if __name__ == "__main__":
     unittest.main()

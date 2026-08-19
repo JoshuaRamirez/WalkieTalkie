@@ -1,14 +1,10 @@
 """Tests for the mesh transport (Phase 5 Track C C1)."""
 
-import pathlib
-import sys
 import time
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from socket_transport import LocalSocketTransport
-from transport import (
+from mesh.socket_transport import LocalSocketTransport
+from mesh.transport import (
     Frame,
     InMemoryTransport,
     Switchboard,
@@ -24,7 +20,6 @@ class FrameTests(unittest.TestCase):
     def test_non_bytes_payload_rejected(self):
         with self.assertRaisesRegex(TransportError, "payload"):
             Frame(source="a", payload="not-bytes")  # type: ignore[arg-type]
-
 
 class SwitchboardTests(unittest.TestCase):
     def test_duplicate_registration_rejected(self):
@@ -42,7 +37,6 @@ class SwitchboardTests(unittest.TestCase):
         sb = Switchboard()
         sb.register("node-a")
         self.assertIsNone(sb.drain_one("node-a"))
-
 
 class InMemoryTransportTests(unittest.TestCase):
     def test_send_and_receive(self):
@@ -85,7 +79,6 @@ class InMemoryTransportTests(unittest.TestCase):
         self.assertIsNone(a.receive())
         self.assertEqual(b.receive().payload, b"for-b")
 
-
 class LocalSocketBindTests(unittest.TestCase):
     """The plain socket transport's bind interface is configurable so peers
     on other machines can connect; the default is unchanged."""
@@ -123,7 +116,6 @@ class LocalSocketBindTests(unittest.TestCase):
     def test_empty_bind_host_rejected(self):
         with self.assertRaises(TransportError):
             LocalSocketTransport("a", bind_host="")
-
 
 if __name__ == "__main__":
     unittest.main()

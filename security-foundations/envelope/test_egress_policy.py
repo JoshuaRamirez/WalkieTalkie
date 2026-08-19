@@ -1,13 +1,9 @@
 """Tests for policy-adaptive egress (Phase 2 Track C C2)."""
 
-import pathlib
-import sys
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from data_classification import DataClass
-from egress_policy import (
+from envelope.data_classification import DataClass
+from envelope.egress_policy import (
     EgressAction,
     EgressDecision,
     EgressError,
@@ -15,12 +11,11 @@ from egress_policy import (
     MatrixEgressPolicy,
     require_egress,
 )
-from output_scanning import RiskLevel
+from envelope.output_scanning import RiskLevel
 
 
 def _cell(risk: RiskLevel, dc: DataClass, action: EgressAction) -> EgressMatrixCell:
     return EgressMatrixCell(risk=risk, data_class=dc, action=action)
-
 
 class CellValidationTests(unittest.TestCase):
     def test_non_risklevel_rejected(self):
@@ -47,7 +42,6 @@ class CellValidationTests(unittest.TestCase):
                 action="allow",  # type: ignore[arg-type]
             )
 
-
 class MatrixValidationTests(unittest.TestCase):
     def test_duplicate_cell_rejected(self):
         c = _cell(RiskLevel.NONE, DataClass.PUBLIC, EgressAction.ALLOW)
@@ -60,7 +54,6 @@ class MatrixValidationTests(unittest.TestCase):
                 cells=(_cell(RiskLevel.NONE, DataClass.PUBLIC, EgressAction.ALLOW),),
                 restricted_no_export="yes",  # type: ignore[arg-type]
             )
-
 
 class MatrixDispatchTests(unittest.TestCase):
     def _full_policy(self, **overrides):
@@ -105,7 +98,6 @@ class MatrixDispatchTests(unittest.TestCase):
         )
         self.assertEqual(decision.action, EgressAction.DENY)
         self.assertEqual(decision.reason_code, "egress_no_matrix_entry")
-
 
 class RestrictedNoExportTests(unittest.TestCase):
     def test_restricted_denied_even_with_allow_cell(self):
@@ -159,7 +151,6 @@ class RestrictedNoExportTests(unittest.TestCase):
         )
         self.assertEqual(decision.action, EgressAction.ALLOW)
 
-
 class RequireEgressTests(unittest.TestCase):
     def test_allow_returns_decision(self):
         policy = MatrixEgressPolicy(
@@ -188,7 +179,6 @@ class RequireEgressTests(unittest.TestCase):
                 risk=RiskLevel.LOW, data_class=DataClass.PUBLIC, policy=policy
             )
         self.assertEqual(ctx.exception.decision.action, EgressAction.QUARANTINE)
-
 
 if __name__ == "__main__":
     unittest.main()

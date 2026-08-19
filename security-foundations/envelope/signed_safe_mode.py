@@ -54,8 +54,9 @@ from datetime import UTC, datetime, timedelta
 import jcs
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from deny_reason import DenyReason
-from safe_mode_engine import (
+
+from .deny_reason import DenyReason
+from .safe_mode_engine import (
     DowngradeApproval,
     SafeModeEngine,
     SafeModeEngineError,
@@ -64,7 +65,7 @@ from safe_mode_engine import (
     TriggerCategory,
     TriggerKind,
 )
-from verify_envelope import (
+from .verify_envelope import (
     KID_RE,
     SPIFFE_ID_RE,
     UUID_V7_RE,
@@ -76,15 +77,12 @@ from verify_envelope import (
 TRANSITION_TYP = "wt-safe-mode-transition/v0"
 DOWNGRADE_TYP = "wt-safe-mode-downgrade/v0"
 
-
 class SignedSafeModeError(EnvelopeVerificationError):
     """Raised when a signed safe-mode artifact fails verification."""
-
 
 # ---------------------------------------------------------------------
 # SignedStateTransition
 # ---------------------------------------------------------------------
-
 
 @dataclass(frozen=True)
 class SignedStateTransition:
@@ -108,7 +106,6 @@ class SignedStateTransition:
         d["to_state"] = self.to_state.value
         return d
 
-
 def _transition_body(rec: SignedStateTransition) -> bytes:
     body = {
         "typ": TRANSITION_TYP,
@@ -124,16 +121,13 @@ def _transition_body(rec: SignedStateTransition) -> bytes:
     }
     return jcs.canonicalize(body)
 
-
 def _b64u(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
 
 def _malformed(msg: str) -> SignedSafeModeError:
     return SignedSafeModeError(
         msg, reason=DenyReason.SAFE_MODE_ARTIFACT_MALFORMED
     )
-
 
 def from_transition(
     transition: StateTransition,
@@ -157,13 +151,11 @@ def from_transition(
         jti=jti,
     )
 
-
 def sign_transition(
     rec: SignedStateTransition, signing_key: Ed25519PrivateKey
 ) -> SignedStateTransition:
     sig = _b64u(signing_key.sign(_transition_body(rec)))
     return dataclasses.replace(rec, signature=sig)
-
 
 def _validate_transition_shape(rec: SignedStateTransition) -> None:
     if not isinstance(rec.from_state, SafeModeState):
@@ -193,7 +185,6 @@ def _validate_transition_shape(rec: SignedStateTransition) -> None:
         raise _malformed(f"jti must be UUIDv7: {rec.jti!r}")
     if not isinstance(rec.signature, str) or not rec.signature:
         raise _malformed("signature must be a non-empty string")
-
 
 def verify_transition(
     rec: SignedStateTransition,
@@ -232,10 +223,8 @@ def verify_transition(
         ) from exc
     return rec
 
-
 def transition_to_json(rec: SignedStateTransition) -> bytes:
     return json.dumps(rec.to_dict(), separators=(",", ":")).encode("utf-8")
-
 
 def transition_from_json(data: bytes) -> SignedStateTransition:
     try:
@@ -269,11 +258,9 @@ def transition_from_json(data: bytes) -> SignedStateTransition:
         signature=obj["signature"],
     )
 
-
 # ---------------------------------------------------------------------
 # SignedDowngradeApproval
 # ---------------------------------------------------------------------
-
 
 @dataclass(frozen=True)
 class SignedDowngradeApproval:
@@ -294,7 +281,6 @@ class SignedDowngradeApproval:
         d["authority"] = self.authority.value
         return d
 
-
 def _approval_body(app: SignedDowngradeApproval) -> bytes:
     body = {
         "typ": DOWNGRADE_TYP,
@@ -309,13 +295,11 @@ def _approval_body(app: SignedDowngradeApproval) -> bytes:
     }
     return jcs.canonicalize(body)
 
-
 def sign_downgrade_approval(
     app: SignedDowngradeApproval, signing_key: Ed25519PrivateKey
 ) -> SignedDowngradeApproval:
     sig = _b64u(signing_key.sign(_approval_body(app)))
     return dataclasses.replace(app, signature=sig)
-
 
 def _validate_approval_shape(app: SignedDowngradeApproval) -> None:
     if not isinstance(app.approver_iss, str) or not SPIFFE_ID_RE.match(app.approver_iss):
@@ -344,7 +328,6 @@ def _validate_approval_shape(app: SignedDowngradeApproval) -> None:
         raise _malformed(f"jti must be UUIDv7: {app.jti!r}")
     if not isinstance(app.signature, str) or not app.signature:
         raise _malformed("signature must be a non-empty string")
-
 
 def verify_downgrade_approval(
     app: SignedDowngradeApproval,
@@ -410,7 +393,6 @@ def verify_downgrade_approval(
         ) from exc
     return app
 
-
 def verified_downgrade(
     engine: SafeModeEngine,
     *,
@@ -451,10 +433,8 @@ def verified_downgrade(
         # authority / floor failures; let them propagate as-is.
         raise
 
-
 def approval_to_json(app: SignedDowngradeApproval) -> bytes:
     return json.dumps(app.to_dict(), separators=(",", ":")).encode("utf-8")
-
 
 def approval_from_json(data: bytes) -> SignedDowngradeApproval:
     try:

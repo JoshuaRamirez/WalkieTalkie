@@ -44,12 +44,10 @@ from enum import StrEnum
 class RuntimeProfileError(ValueError):
     """Raised when a runtime profile violates v0 invariants."""
 
-
 class TrustTier(StrEnum):
     STRICT = "strict"
     STANDARD = "standard"
     LIMITED_TRUST = "limited_trust"
-
 
 class EgressPolicy(StrEnum):
     """Outbound network posture. DENY_ALL is the vision's default
@@ -58,7 +56,6 @@ class EgressPolicy(StrEnum):
     DENY_ALL = "deny_all"
     ALLOWLIST = "allowlist"
     ALLOW_ALL = "allow_all"
-
 
 @dataclass(frozen=True)
 class RuntimeProfile:
@@ -112,13 +109,11 @@ class RuntimeProfile:
                 "egress_allowlist is only meaningful when egress=ALLOWLIST"
             )
 
-
 # A minimal syscall base every tier needs just to run. The strict
 # tier adds nothing; higher-trust tiers add more.
 _BASE_SYSCALLS = frozenset(
     {"read", "write", "close", "exit", "exit_group", "brk", "mmap", "munmap"}
 )
-
 
 def strict_profile(*, secret_scopes: frozenset[str] = frozenset()) -> RuntimeProfile:
     """High-risk tools / low-trust peers: deny-all egress, no writable
@@ -130,7 +125,6 @@ def strict_profile(*, secret_scopes: frozenset[str] = frozenset()) -> RuntimePro
         egress=EgressPolicy.DENY_ALL,
         secret_scopes=secret_scopes,
     )
-
 
 def standard_profile(
     *,
@@ -150,7 +144,6 @@ def standard_profile(
         secret_scopes=secret_scopes,
     )
 
-
 def limited_trust_profile(
     *,
     allowed_syscalls: frozenset[str],
@@ -165,7 +158,6 @@ def limited_trust_profile(
         egress=EgressPolicy.DENY_ALL,
         secret_scopes=secret_scopes,
     )
-
 
 # --- Seccomp generation (Phase 5 Track D, D5.6) ---------------------------
 #
@@ -190,7 +182,6 @@ _SECCOMP_ARCHITECTURES = (
 # keeps a mis-scoped profile debuggable instead of silently crashing.
 _SECCOMP_DEFAULT_ACTION = "SCMP_ACT_ERRNO"
 _SECCOMP_ALLOW_ACTION = "SCMP_ACT_ALLOW"
-
 
 def generate_seccomp(profile: RuntimeProfile) -> dict:
     """Render a profile's syscall allowlist as an OCI seccomp document.
@@ -219,7 +210,6 @@ def generate_seccomp(profile: RuntimeProfile) -> dict:
             }
         ],
     }
-
 
 def seccomp_to_json(profile: RuntimeProfile) -> str:
     """Serialize :func:`generate_seccomp` as a stable JSON string (sorted

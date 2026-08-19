@@ -1,18 +1,15 @@
 """Tests for reviewer workflow (Phase 2 Track C C3)."""
 
 import hashlib
-import pathlib
-import sys
 import unittest
 from datetime import UTC, datetime
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from data_classification import DataClass
-from output_scanning import RiskLevel
-from reviewer_workflow import (
+
+from envelope.data_classification import DataClass
+from envelope.output_scanning import RiskLevel
+from envelope.reviewer_workflow import (
     QuarantineRecord,
     ReviewDecision,
     ReviewError,
@@ -23,7 +20,7 @@ from reviewer_workflow import (
     verify_decision,
     verify_release_authorization,
 )
-from verify_envelope import EnvelopeVerificationError
+from envelope.verify_envelope import EnvelopeVerificationError
 
 _NOW = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
 _NOW_TS = int(_NOW.timestamp())
@@ -33,7 +30,6 @@ _REQUESTER_ISS = "spiffe://mesh.example/ns-a/workload-1"
 _RECORD_UUID = "01900000-0000-7000-8000-000000000001"
 _DECISION_UUID = "01900000-0000-7000-8000-000000000002"
 _ARTIFACT_DIGEST = hashlib.sha256(b"artifact").hexdigest()
-
 
 def _record(**overrides) -> QuarantineRecord:
     kwargs = dict(
@@ -47,7 +43,6 @@ def _record(**overrides) -> QuarantineRecord:
     )
     kwargs.update(overrides)
     return QuarantineRecord(**kwargs)
-
 
 def _unsigned_decision(record: QuarantineRecord, **overrides) -> ReviewDecision:
     kwargs = dict(
@@ -64,7 +59,6 @@ def _unsigned_decision(record: QuarantineRecord, **overrides) -> ReviewDecision:
     kwargs.update(overrides)
     return ReviewDecision(**kwargs)
 
-
 def _make_keypair():
     priv = Ed25519PrivateKey.generate()
     pem = priv.public_key().public_bytes(
@@ -72,7 +66,6 @@ def _make_keypair():
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
     return priv, pem
-
 
 def _lookup(expected_iss: str, expected_kid: str, pem: bytes):
     def _f(iss: str, kid: str) -> bytes:
@@ -82,7 +75,6 @@ def _lookup(expected_iss: str, expected_kid: str, pem: bytes):
             )
         return pem
     return _f
-
 
 class QuarantineRecordTests(unittest.TestCase):
     def test_invalid_record_id_rejected(self):
@@ -102,7 +94,6 @@ class QuarantineRecordTests(unittest.TestCase):
         a = _record()
         b = _record(artifact_digest=hashlib.sha256(b"other").hexdigest())
         self.assertNotEqual(a.record_digest, b.record_digest)
-
 
 class HappyPathTests(unittest.TestCase):
     def test_release_decision_verifies(self):
@@ -133,7 +124,6 @@ class HappyPathTests(unittest.TestCase):
         )
         self.assertIs(result, decision)
 
-
 class BindingTests(unittest.TestCase):
     def test_record_digest_mismatch_rejected(self):
         priv, pem = _make_keypair()
@@ -149,7 +139,6 @@ class BindingTests(unittest.TestCase):
                 current=_NOW,
             )
         self.assertEqual(ctx.exception.reason, "review_record_mismatch")
-
 
 class TimeWindowTests(unittest.TestCase):
     def _verify(self, decision: ReviewDecision, record: QuarantineRecord, pem: bytes, **kw):
@@ -227,7 +216,6 @@ class TimeWindowTests(unittest.TestCase):
             self._verify(decision, record, pem)
         self.assertEqual(ctx.exception.reason, "review_expired")
 
-
 class SignatureTests(unittest.TestCase):
     def test_tampered_decision_fails_signature_check(self):
         priv, pem = _make_keypair()
@@ -277,7 +265,6 @@ class SignatureTests(unittest.TestCase):
             )
         self.assertEqual(ctx.exception.reason, "review_signature_invalid")
 
-
 class VerdictTests(unittest.TestCase):
     def test_reject_blocks_release_path(self):
         priv, pem = _make_keypair()
@@ -293,7 +280,6 @@ class VerdictTests(unittest.TestCase):
                 current=_NOW,
             )
         self.assertEqual(ctx.exception.reason, "review_rejected")
-
 
 class JsonRoundTripTests(unittest.TestCase):
     def test_round_trip_preserves_fields(self):
@@ -312,7 +298,6 @@ class JsonRoundTripTests(unittest.TestCase):
         with self.assertRaises(ReviewError) as ctx:
             from_json(blob)
         self.assertEqual(ctx.exception.reason, "review_malformed")
-
 
 if __name__ == "__main__":
     unittest.main()

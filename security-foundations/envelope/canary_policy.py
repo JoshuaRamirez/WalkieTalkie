@@ -42,7 +42,7 @@ import hashlib
 from dataclasses import dataclass, field
 from datetime import timedelta
 
-from issuance_policy import IssuancePolicy, PolicyDecision
+from .issuance_policy import IssuancePolicy, PolicyDecision
 
 
 @dataclass

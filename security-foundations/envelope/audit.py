@@ -61,10 +61,8 @@ _HASHED_FIELDS = (
 
 ALLOWED_OUTCOMES = ("allow", "deny")
 
-
 class AuditChainError(ValueError):
     """Raised when an audit chain fails integrity checks."""
-
 
 @dataclass(frozen=True)
 class AuditEvent:
@@ -94,19 +92,16 @@ class AuditEvent:
     def to_dict(self) -> dict:
         return asdict(self)
 
-
 def _compute_this_hash(prev_hash: str, fields: dict[str, str]) -> str:
     body = {name: fields[name] for name in _HASHED_FIELDS}
     payload = prev_hash.encode("ascii") + jcs.canonicalize(body)
     return hashlib.sha256(payload).hexdigest()
-
 
 def _build_event(prev_hash: str, **fields: str) -> AuditEvent:
     if fields["outcome"] not in ALLOWED_OUTCOMES:
         raise ValueError(f"outcome must be one of {ALLOWED_OUTCOMES!r}")
     this_hash = _compute_this_hash(prev_hash, fields)
     return AuditEvent(prev_hash=prev_hash, this_hash=this_hash, **fields)
-
 
 class AuditSink(ABC):
     """Append-only sink for envelope verification audit events."""
@@ -154,7 +149,6 @@ class AuditSink(ABC):
         self._append(event)
         return event
 
-
 class InMemoryAuditSink(AuditSink):
     def __init__(self) -> None:
         self._events: list[AuditEvent] = []
@@ -168,7 +162,6 @@ class InMemoryAuditSink(AuditSink):
     @property
     def events(self) -> tuple[AuditEvent, ...]:
         return tuple(self._events)
-
 
 class JsonlAuditSink(AuditSink):
     """Append-only newline-delimited JSON file.
@@ -222,7 +215,6 @@ class JsonlAuditSink(AuditSink):
                 record.setdefault("artifact_version", "")
                 events.append(AuditEvent(**record))
         return tuple(events)
-
 
 def verify_chain(events: Iterable[AuditEvent]) -> None:
     """Re-derive every event's hash. Raise AuditChainError on the first break."""

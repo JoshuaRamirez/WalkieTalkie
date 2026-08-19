@@ -1,12 +1,8 @@
 """Tests for instruction isolation (Phase 2 Track D D1)."""
 
-import pathlib
-import sys
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from instruction_isolation import (
+from envelope.instruction_isolation import (
     AuditEntry,
     ContentChannel,
     ContentSegment,
@@ -25,7 +21,6 @@ def _sys(text: str = "You are a tool-using assistant.") -> ContentSegment:
         text=text,
     )
 
-
 def _user(text: str) -> ContentSegment:
     return ContentSegment(
         channel=ContentChannel.USER,
@@ -33,7 +28,6 @@ def _user(text: str) -> ContentSegment:
         trust=Trust.UNTRUSTED,
         text=text,
     )
-
 
 def _tool(text: str, *, trust: Trust = Trust.UNTRUSTED, signature_ref: str = "") -> ContentSegment:
     return ContentSegment(
@@ -44,7 +38,6 @@ def _tool(text: str, *, trust: Trust = Trust.UNTRUSTED, signature_ref: str = "")
         signature_ref=signature_ref,
     )
 
-
 def _retrieved(text: str) -> ContentSegment:
     return ContentSegment(
         channel=ContentChannel.RETRIEVED,
@@ -52,7 +45,6 @@ def _retrieved(text: str) -> ContentSegment:
         trust=Trust.UNTRUSTED,
         text=text,
     )
-
 
 class ChannelTrustRulesTests(unittest.TestCase):
     def test_system_must_be_trusted(self):
@@ -96,7 +88,6 @@ class ChannelTrustRulesTests(unittest.TestCase):
         seg = _tool("hi", trust=Trust.TRUSTED, signature_ref="envelope:msg-123")
         self.assertEqual(seg.trust, Trust.TRUSTED)
         self.assertEqual(seg.signature_ref, "envelope:msg-123")
-
 
 class AssemblyShapeTests(unittest.TestCase):
     def test_system_emitted_unwrapped(self):
@@ -142,7 +133,6 @@ class AssemblyShapeTests(unittest.TestCase):
             result.text,
         )
 
-
 class AuditLogTests(unittest.TestCase):
     def test_audit_log_records_every_segment(self):
         result = assemble_isolated_prompt(
@@ -162,7 +152,6 @@ class AuditLogTests(unittest.TestCase):
         self.assertEqual(result.audit_log[1].channel, ContentChannel.USER)
         self.assertEqual(result.audit_log[2].channel, ContentChannel.TOOL)
         self.assertEqual(result.audit_log[2].signature_ref, "env:abc")
-
 
 class InjectionResistanceTests(unittest.TestCase):
     def test_segment_with_synthetic_close_tag_is_escaped(self):
@@ -207,7 +196,6 @@ class InjectionResistanceTests(unittest.TestCase):
         # attribute cannot be coerced into a different shape.
         self.assertIn('source="kb:doc&lt;script&gt;"', result.text)
 
-
 class AssemblyValidationTests(unittest.TestCase):
     def test_non_segment_input_rejected(self):
         with self.assertRaisesRegex(InstructionIsolationError, "segments\\[0\\]"):
@@ -217,13 +205,11 @@ class AssemblyValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(InstructionIsolationError, "nonce"):
             assemble_isolated_prompt([_sys()], nonce="")
 
-
 class ResultShapeTests(unittest.TestCase):
     def test_returns_isolated_prompt(self):
         result = assemble_isolated_prompt([_sys()], nonce="abc")
         self.assertIsInstance(result, IsolatedPrompt)
         self.assertEqual(result.nonce, "abc")
-
 
 if __name__ == "__main__":
     unittest.main()

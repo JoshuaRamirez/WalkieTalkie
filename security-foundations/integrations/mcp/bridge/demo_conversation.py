@@ -20,12 +20,10 @@ import sys
 import tempfile
 import time
 
+from integrations.mcp.bridge.gen_bridge_config import generate
+
 _HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE))
-from gen_bridge_config import generate  # noqa: E402
-
 _BRIDGE = _HERE / "mesh_mcp_bridge.py"
-
 
 class Client:
     """Stands in for one Claude Code instance driving its bridge over stdio."""
@@ -71,10 +69,8 @@ class Client:
         self.proc.terminate()
         self.proc.wait(timeout=5)
 
-
 def line(c="-"):
     print(c * 66)
-
 
 def main():
     with tempfile.TemporaryDirectory() as td:
@@ -122,7 +118,6 @@ def main():
         finally:
             alice.close()
             bob.close()
-
 
 if __name__ == "__main__":
     main()

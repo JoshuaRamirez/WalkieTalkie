@@ -31,15 +31,16 @@ import os
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from audit import AuditSink
-from capability_token import EXPECTED_ALG, EXPECTED_TYP
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from issuance_policy import (
+
+from .audit import AuditSink
+from .capability_token import EXPECTED_ALG, EXPECTED_TYP
+from .issuance_policy import (
     AllowAllPolicy,
     IssuancePolicy,
     IssuancePolicyError,
 )
-from verify_envelope import (
+from .verify_envelope import (
     HEX_SHA256_RE,
     KID_RE,
     SPIFFE_ID_RE,
@@ -49,7 +50,6 @@ from verify_envelope import (
 
 def _b64u(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
 
 def generate_uuidv7(*, now: datetime | None = None, rand_bytes: bytes | None = None) -> str:
     """Generate a RFC 9562 UUIDv7. Suitable for jti.
@@ -71,7 +71,6 @@ def generate_uuidv7(*, now: datetime | None = None, rand_bytes: bytes | None = N
         f"{hex_str[0:8]}-{hex_str[8:12]}-{hex_str[12:16]}-"
         f"{hex_str[16:20]}-{hex_str[20:32]}"
     )
-
 
 @dataclass
 class CapabilityIssuer:

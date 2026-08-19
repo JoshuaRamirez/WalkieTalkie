@@ -25,26 +25,21 @@ implementation exist to be raced in the first place.
 """
 
 import pathlib
-import sys
 import tempfile
 import threading
 import unittest
 from datetime import timedelta
 from typing import NamedTuple
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from verify_envelope import InMemoryReplayCache, ReplayCache, SQLiteReplayCache
+from envelope.verify_envelope import InMemoryReplayCache, ReplayCache, SQLiteReplayCache
 
 _SENDER = "spiffe://mesh/ns-a/service-a"
 _TTL = timedelta(minutes=5)
-
 
 class RaceResult(NamedTuple):
     winners: int
     losers: int
     errors: tuple[BaseException, ...]
-
 
 def race_one_nonce(cache, nonce: str, *, threads: int = 32) -> RaceResult:
     """Race ``threads`` callers on one nonce; return every outcome.
@@ -86,7 +81,6 @@ def race_one_nonce(cache, nonce: str, *, threads: int = 32) -> RaceResult:
         losers=outcomes.count(False),
         errors=tuple(errors),
     )
-
 
 class InterfaceForcesAtomicityTests(unittest.TestCase):
     """A cache cannot exist without deciding how it reserves atomically.
@@ -153,7 +147,6 @@ class InterfaceForcesAtomicityTests(unittest.TestCase):
         self.assertEqual(raced.errors, ())
         self.assertEqual(raced.winners, 1)
         self.assertEqual(raced.losers, 31)
-
 
 class BundledCacheAtomicityTests(unittest.TestCase):
     """The shipped caches reserve atomically under real contention."""
@@ -222,7 +215,6 @@ class BundledCacheAtomicityTests(unittest.TestCase):
         self.assertTrue(cache.mark_if_new("spiffe://mesh/a", "shared", _TTL))
         self.assertTrue(cache.mark_if_new("spiffe://mesh/b", "shared", _TTL))
         self.assertFalse(cache.mark_if_new("spiffe://mesh/a", "shared", _TTL))
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -37,10 +37,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from audit_query import trust_domain_of
-from data_classification import ClassifiedData, DataClass, is_more_restrictive
-from deny_reason import DenyReason
-from verify_envelope import SPIFFE_ID_RE
+from .audit_query import trust_domain_of
+from .data_classification import ClassifiedData, DataClass, is_more_restrictive
+from .deny_reason import DenyReason
+from .verify_envelope import SPIFFE_ID_RE
 
 
 class CrossTenantRetrieval(StrEnum):
@@ -49,13 +49,11 @@ class CrossTenantRetrieval(StrEnum):
     DENY = "deny"
     ALLOW = "allow"
 
-
 @dataclass(frozen=True)
 class RetrievalDecision:
     allowed: bool
     reason: str
     reason_code: str = ""
-
 
 @dataclass(frozen=True)
 class RetrievalRule:
@@ -71,7 +69,6 @@ class RetrievalRule:
         if not isinstance(self.max_class, DataClass):
             raise ValueError(f"max_class must be a DataClass: {self.max_class!r}")
 
-
 class RetrievalPolicy(ABC):
     @abstractmethod
     def evaluate(
@@ -82,7 +79,6 @@ class RetrievalPolicy(ABC):
         data: ClassifiedData,
     ) -> RetrievalDecision:
         ...
-
 
 @dataclass(frozen=True)
 class AllowlistRetrievalPolicy(RetrievalPolicy):
@@ -158,14 +154,12 @@ class AllowlistRetrievalPolicy(RetrievalPolicy):
             reason_code=DenyReason.RETRIEVAL_NO_RULE_MATCH.value,
         )
 
-
 class RetrievalError(ValueError):
     """Raised by :func:`require_retrieval` on denial."""
 
     def __init__(self, decision: RetrievalDecision) -> None:
         super().__init__(decision.reason)
         self.decision = decision
-
 
 def require_retrieval(
     *,

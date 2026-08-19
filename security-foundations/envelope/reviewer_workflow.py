@@ -54,10 +54,11 @@ from enum import StrEnum
 import jcs
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from data_classification import DataClass
-from deny_reason import DenyReason
-from output_scanning import RiskLevel
-from verify_envelope import (
+
+from .data_classification import DataClass
+from .deny_reason import DenyReason
+from .output_scanning import RiskLevel
+from .verify_envelope import (
     HEX_SHA256_RE,
     KID_RE,
     SPIFFE_ID_RE,
@@ -69,11 +70,9 @@ from verify_envelope import (
 
 REVIEW_TYP = "wt-review/v0"
 
-
 class ReviewVerdict(StrEnum):
     RELEASE = "release"
     REJECT = "reject"
-
 
 class ReviewError(EnvelopeVerificationError):
     """Raised when a review decision fails verification.
@@ -81,7 +80,6 @@ class ReviewError(EnvelopeVerificationError):
     Subclasses :class:`EnvelopeVerificationError` so callers that
     already handle the envelope error don't need a separate branch.
     """
-
 
 @dataclass(frozen=True)
 class QuarantineRecord:
@@ -140,7 +138,6 @@ class QuarantineRecord:
         }
         return hashlib.sha256(jcs.canonicalize(body)).hexdigest()
 
-
 @dataclass(frozen=True)
 class ReviewDecision:
     """The signed verdict produced by a human reviewer."""
@@ -161,7 +158,6 @@ class ReviewDecision:
         d["verdict"] = self.verdict.value
         return d
 
-
 def _body_for_signing(decision: ReviewDecision) -> bytes:
     body = {
         "typ": REVIEW_TYP,
@@ -177,10 +173,8 @@ def _body_for_signing(decision: ReviewDecision) -> bytes:
     }
     return jcs.canonicalize(body)
 
-
 def _b64u(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
 
 def sign_decision(
     decision: ReviewDecision, signing_key: Ed25519PrivateKey
@@ -188,10 +182,8 @@ def sign_decision(
     sig = _b64u(signing_key.sign(_body_for_signing(decision)))
     return dataclasses.replace(decision, signature=sig)
 
-
 def to_json(decision: ReviewDecision) -> bytes:
     return json.dumps(decision.to_dict(), separators=(",", ":")).encode("utf-8")
-
 
 def from_json(data: bytes) -> ReviewDecision:
     try:
@@ -237,10 +229,8 @@ def from_json(data: bytes) -> ReviewDecision:
         signature=obj["signature"],
     )
 
-
 def _malformed(msg: str) -> ReviewError:
     return ReviewError(msg, reason=DenyReason.REVIEW_MALFORMED)
-
 
 def _validate_shape(decision: ReviewDecision) -> None:
     if not isinstance(decision.record_digest, str) or not HEX_SHA256_RE.match(
@@ -272,7 +262,6 @@ def _validate_shape(decision: ReviewDecision) -> None:
             raise _malformed(f"{name} must be a NumericDate (int)")
     if not isinstance(decision.signature, str) or not decision.signature:
         raise _malformed("signature must be a non-empty string")
-
 
 def verify_decision(
     decision: ReviewDecision,
@@ -360,7 +349,6 @@ def verify_decision(
         ) from exc
 
     return decision
-
 
 def verify_release_authorization(
     decision: ReviewDecision,

@@ -40,7 +40,7 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from verify_envelope import UUID_V7_RE
+from .verify_envelope import UUID_V7_RE
 
 
 class RevocationList(ABC):
@@ -49,7 +49,6 @@ class RevocationList(ABC):
     @abstractmethod
     def is_revoked(self, jti: str) -> bool:
         ...
-
 
 class InMemoryRevocationList(RevocationList):
     def __init__(self, jtis: Iterable[str] = ()) -> None:
@@ -68,7 +67,6 @@ class InMemoryRevocationList(RevocationList):
 
     def is_revoked(self, jti: str) -> bool:
         return jti in self._jtis
-
 
 class FileBackedRevocationList(RevocationList):
     """Append-only JSONL revocation log.

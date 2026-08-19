@@ -1,7 +1,5 @@
 """Tests for delegation receipts (Phase 2 Track A A1 + A2)."""
 
-import pathlib
-import sys
 import unittest
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -9,9 +7,7 @@ from datetime import UTC, datetime, timedelta
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from delegation_receipt import (
+from envelope.delegation_receipt import (
     DEFAULT_DELEGATION_CONFIG,
     DelegationError,
     DelegationReceipt,
@@ -40,7 +36,6 @@ _ROOT_JTI = "0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c1"
 _HOP1_JTI = "0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c2"
 _HOP2_JTI = "0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c3"
 
-
 def _keypair():
     priv = Ed25519PrivateKey.generate()
     pub_pem = priv.public_key().public_bytes(
@@ -48,7 +43,6 @@ def _keypair():
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
     return priv, pub_pem
-
 
 def _root_receipt(*, delegator_kid: str = "delegator-kid-a") -> DelegationReceipt:
     return DelegationReceipt(
@@ -66,7 +60,6 @@ def _root_receipt(*, delegator_kid: str = "delegator-kid-a") -> DelegationReceip
         jti=_ROOT_JTI,
     )
 
-
 def _hop1_receipt() -> DelegationReceipt:
     return DelegationReceipt(
         chain_id=_CHAIN_ID,
@@ -82,7 +75,6 @@ def _hop1_receipt() -> DelegationReceipt:
         exp=_NOW_EPOCH + 200,
         jti=_HOP1_JTI,
     )
-
 
 class RoundTripTests(unittest.TestCase):
     def setUp(self):
@@ -126,7 +118,6 @@ class RoundTripTests(unittest.TestCase):
         with self.assertRaisesRegex(DelegationError, "missing required fields: exp"):
             from_json(_json.dumps(obj).encode())
 
-
 class ShapeValidationTests(unittest.TestCase):
     def setUp(self):
         self.priv, self.pem = _keypair()
@@ -156,7 +147,6 @@ class ShapeValidationTests(unittest.TestCase):
         bad = sign_receipt(replace(_root_receipt(), hop_index=-1), self.priv)
         with self.assertRaisesRegex(DelegationError, "hop_index"):
             verify_receipt(bad, parent=None, issuer_lookup=self.lookup, current=_NOW)
-
 
 class NonEscalationTests(unittest.TestCase):
     def setUp(self):
@@ -293,7 +283,6 @@ class NonEscalationTests(unittest.TestCase):
                 current=_NOW,
             )
 
-
 class TimeWindowTests(unittest.TestCase):
     def setUp(self):
         self.priv, self.pem = _keypair()
@@ -331,7 +320,6 @@ class TimeWindowTests(unittest.TestCase):
             verify_receipt(
                 signed, parent=None, issuer_lookup=self.lookup, current=_NOW, config=tight
             )
-
 
 class SignatureTests(unittest.TestCase):
     def setUp(self):
@@ -379,14 +367,13 @@ class SignatureTests(unittest.TestCase):
                 current=_NOW,
             )
 
-
 class CapabilityClaimsBridgeTests(unittest.TestCase):
     def test_parent_from_capability_claims(self):
         # A delegation chain MAY originate from a cap token rather than
         # another receipt. parent_from_capability_claims projects the cap
         # claim set into the ParentClaims shape.
         priv, pem = _keypair()
-        from capability_token import CapabilityClaims
+        from envelope.capability_token import CapabilityClaims
 
         cap = CapabilityClaims(
             iss=_ROOT_DELEGATOR,
@@ -414,7 +401,6 @@ class CapabilityClaimsBridgeTests(unittest.TestCase):
             issuer_lookup=lambda iss, kid: pem,
             current=_NOW,
         )
-
 
 if __name__ == "__main__":
     unittest.main()

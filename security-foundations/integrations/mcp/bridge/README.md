@@ -171,8 +171,7 @@ Two scripts run the whole path headless:
 
 # The test suite: MCP handshake + delivery + replay-rejected + forgery-rejected
 .venv/bin/python -m unittest discover \
-    -s security-foundations/integrations/mcp/bridge \
-    -t security-foundations/integrations/mcp/bridge -p "test_bridge.py" -v
+    -s security-foundations/integrations/mcp/bridge -p "test_bridge.py" -v
 ```
 
 ---

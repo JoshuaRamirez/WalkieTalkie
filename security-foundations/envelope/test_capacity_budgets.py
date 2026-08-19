@@ -1,12 +1,8 @@
 """Tests for capacity budgets (Phase 3 Track B B1/B2 + B3 tenant half)."""
 
-import pathlib
-import sys
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from capacity_budgets import (
+from envelope.capacity_budgets import (
     BudgetController,
     BudgetPool,
     CapacityBudgetError,
@@ -27,7 +23,6 @@ class PoolValidationTests(unittest.TestCase):
     def test_ceiling_below_reserved_rejected(self):
         with self.assertRaisesRegex(CapacityBudgetError, "ceiling"):
             BudgetPool(name="x", reserved=10, ceiling=5)
-
 
 class ControllerValidationTests(unittest.TestCase):
     def test_duplicate_pool_rejected(self):
@@ -56,7 +51,6 @@ class ControllerValidationTests(unittest.TestCase):
                     TenantBudget(pool="b", tenant="t1", reserve=1, burst=2),
                 ),
             )
-
 
 class FloorGuardTests(unittest.TestCase):
     """The Track B acceptance criterion: data-plane flood cannot
@@ -118,7 +112,6 @@ class FloorGuardTests(unittest.TestCase):
         ctrl.release(pool="data", cost=30)
         self.assertTrue(ctrl.acquire(pool="data", cost=30).allowed)
 
-
 class CeilingTests(unittest.TestCase):
     def test_ceiling_enforced_independently_of_floor(self):
         # Single pool — ceiling lower than reserved-sum guard, so
@@ -130,7 +123,6 @@ class CeilingTests(unittest.TestCase):
         ctrl.acquire(pool="only", cost=50)
         decision = ctrl.acquire(pool="only", cost=1)
         self.assertEqual(decision.reason_code, "budget_ceiling_exceeded")
-
 
 class WorkTokenTests(unittest.TestCase):
     def test_high_cost_request_burns_ceiling_faster(self):
@@ -155,7 +147,6 @@ class WorkTokenTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(CapacityBudgetError, "cost"):
             ctrl.acquire(pool="p", cost=0)
-
 
 class TenantFairnessTests(unittest.TestCase):
     def test_tenant_burst_caps_per_tenant_usage(self):
@@ -197,7 +188,6 @@ class TenantFairnessTests(unittest.TestCase):
         ctrl.release(pool="p", tenant="t1", cost=5)
         self.assertTrue(ctrl.acquire(pool="p", tenant="t1", cost=5).allowed)
 
-
 class SnapshotTests(unittest.TestCase):
     def test_snapshot_reflects_in_flight(self):
         ctrl = build_controller(
@@ -212,7 +202,6 @@ class SnapshotTests(unittest.TestCase):
         snap = ctrl.snapshot()
         self.assertEqual(snap.get("a"), 15)
         self.assertEqual(snap.get("b"), 5)
-
 
 if __name__ == "__main__":
     unittest.main()

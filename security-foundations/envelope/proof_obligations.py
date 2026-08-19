@@ -44,7 +44,6 @@ from enum import StrEnum
 class ProofObligationError(ValueError):
     """Raised when an obligation cannot be resolved."""
 
-
 class Phase(StrEnum):
     PHASE_0 = "phase-0"
     PHASE_1 = "phase-1"
@@ -54,13 +53,14 @@ class Phase(StrEnum):
     PHASE_5 = "phase-5"
     PHASE_6 = "phase-6"
 
-
 @dataclass(frozen=True)
 class ProofObligation:
     """One safety invariant + its canonical pinning test.
 
-    ``canonical_test`` is ``"<module>.<TestClass>.<test_method>"`` —
-    importable via :func:`resolve_test`.
+    ``canonical_test`` is ``"<dotted.module>.<TestClass>.<test_method>"``
+    — importable via :func:`resolve_test`. The module path is fully
+    qualified (``envelope.test_…``, ``mesh.test_…``,
+    ``integrations.mcp.test_…``).
     """
 
     name: str
@@ -80,10 +80,9 @@ class ProofObligation:
             raise ProofObligationError("statement must be a non-empty string")
         if not isinstance(self.canonical_test, str) or "." not in self.canonical_test:
             raise ProofObligationError(
-                f"canonical_test must be 'module.Class.method': "
+                f"canonical_test must be 'dotted.module.Class.method': "
                 f"{self.canonical_test!r}"
             )
-
 
 def resolve_test(canonical_test: str):
     """Import the test method named by ``canonical_test``.
@@ -95,7 +94,7 @@ def resolve_test(canonical_test: str):
     parts = canonical_test.rsplit(".", 2)
     if len(parts) != 3:
         raise ProofObligationError(
-            f"canonical_test must be 'module.Class.method': {canonical_test!r}"
+            f"canonical_test must be 'dotted.module.Class.method': {canonical_test!r}"
         )
     module_name, class_name, method_name = parts
     try:
@@ -116,7 +115,6 @@ def resolve_test(canonical_test: str):
         )
     return method
 
-
 # ---------------------------------------------------------------------
 # The registry. ADD new obligations only; NEVER reuse a name.
 # ---------------------------------------------------------------------
@@ -132,7 +130,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "rejected; the replay nonce is NOT reserved on failure."
         ),
         canonical_test=(
-            "test_verify_envelope.VerifyEnvelopeTests"
+            "envelope.test_verify_envelope.VerifyEnvelopeTests"
             ".test_invalid_signature_does_not_reserve_nonce"
         ),
     ),
@@ -151,7 +149,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "audit event."
         ),
         canonical_test=(
-            "test_verifier_fail_closed.MalformedFieldTypeTests"
+            "envelope.test_verifier_fail_closed.MalformedFieldTypeTests"
             ".test_non_string_fields_deny_cleanly"
         ),
     ),
@@ -168,7 +166,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "it survives the input it exists to reject."
         ),
         canonical_test=(
-            "test_verifier_fail_closed.NestingDepthTests"
+            "envelope.test_verifier_fail_closed.NestingDepthTests"
             ".test_deeply_nested_payload_denies_cleanly"
         ),
     ),
@@ -185,7 +183,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "SystemExit) still propagates — shutdown is not a denial."
         ),
         canonical_test=(
-            "test_verifier_fail_closed.InternalErrorBackstopTests"
+            "envelope.test_verifier_fail_closed.InternalErrorBackstopTests"
             ".test_raising_key_lookup_denies_cleanly"
         ),
     ),
@@ -204,7 +202,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "json.loads accepts a bare NaN."
         ),
         canonical_test=(
-            "test_verifier_fail_closed.AuditContextSanitizationTests"
+            "envelope.test_verifier_fail_closed.AuditContextSanitizationTests"
             ".test_non_canonicalizable_identity_still_audits_its_denial"
         ),
     ),
@@ -221,7 +219,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "verifier."
         ),
         canonical_test=(
-            "test_verifier_fail_closed.AuditSinkFailureTests"
+            "envelope.test_verifier_fail_closed.AuditSinkFailureTests"
             ".test_sink_failure_on_allow_path_downgrades_to_deny"
         ),
     ),
@@ -238,7 +236,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "caches under real thread contention."
         ),
         canonical_test=(
-            "test_replay_cache_atomicity.BundledCacheAtomicityTests"
+            "envelope.test_replay_cache_atomicity.BundledCacheAtomicityTests"
             ".test_in_memory_cache_admits_exactly_one_winner"
         ),
     ),
@@ -258,7 +256,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "point ('any ReplayCache subclass') previously led."
         ),
         canonical_test=(
-            "test_replay_cache_atomicity.InterfaceForcesAtomicityTests"
+            "envelope.test_replay_cache_atomicity.InterfaceForcesAtomicityTests"
             ".test_partial_implementation_cannot_be_instantiated"
         ),
     ),
@@ -273,7 +271,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "be replayed across distinct payloads."
         ),
         canonical_test=(
-            "test_verify_envelope.VerifyEnvelopeTests"
+            "envelope.test_verify_envelope.VerifyEnvelopeTests"
             ".test_capability_wrong_envelope_digest_rejected"
         ),
     ),
@@ -287,7 +285,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "and the (iss, kid) lookup rejects the cross-pool attempt."
         ),
         canonical_test=(
-            "test_verify_envelope.VerifyEnvelopeTests"
+            "envelope.test_verify_envelope.VerifyEnvelopeTests"
             ".test_envelope_signing_key_cannot_sign_capability"
         ),
     ),
@@ -301,7 +299,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "every hop must carry an identical scope string."
         ),
         canonical_test=(
-            "test_delegation_receipt.NonEscalationTests"
+            "envelope.test_delegation_receipt.NonEscalationTests"
             ".test_scope_widening_rejected"
         ),
     ),
@@ -314,7 +312,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "every hop must carry an identical aud."
         ),
         canonical_test=(
-            "test_delegation_receipt.NonEscalationTests"
+            "envelope.test_delegation_receipt.NonEscalationTests"
             ".test_audience_drift_rejected"
         ),
     ),
@@ -327,7 +325,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "parent's window — the child cannot extend lifetime."
         ),
         canonical_test=(
-            "test_delegation_receipt.NonEscalationTests"
+            "envelope.test_delegation_receipt.NonEscalationTests"
             ".test_ttl_extending_past_parent_rejected"
         ),
     ),
@@ -339,7 +337,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "Delegation chains cannot exceed max_chain_depth (default 3)."
         ),
         canonical_test=(
-            "test_delegation_receipt.NonEscalationTests"
+            "envelope.test_delegation_receipt.NonEscalationTests"
             ".test_depth_limit_enforced"
         ),
     ),
@@ -355,7 +353,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "explicitly set."
         ),
         canonical_test=(
-            "test_retrieval_policy.CrossTenantTests"
+            "envelope.test_retrieval_policy.CrossTenantTests"
             ".test_cross_tenant_check_runs_before_rule_match"
         ),
     ),
@@ -368,7 +366,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "data class; demotion raises DataClassificationError."
         ),
         canonical_test=(
-            "test_data_classification.DeriveTests"
+            "envelope.test_data_classification.DeriveTests"
             ".test_derive_cannot_demote_class"
         ),
     ),
@@ -382,7 +380,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "artifact is denied egress regardless of matrix or risk."
         ),
         canonical_test=(
-            "test_egress_policy.RestrictedNoExportTests"
+            "envelope.test_egress_policy.RestrictedNoExportTests"
             ".test_restricted_denied_even_with_allow_cell"
         ),
     ),
@@ -395,7 +393,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "different quarantine record; record_digest is bound."
         ),
         canonical_test=(
-            "test_reviewer_workflow.BindingTests"
+            "envelope.test_reviewer_workflow.BindingTests"
             ".test_record_digest_mismatch_rejected"
         ),
     ),
@@ -409,7 +407,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "accompanied by a non-empty signature_ref."
         ),
         canonical_test=(
-            "test_instruction_isolation.ChannelTrustRulesTests"
+            "envelope.test_instruction_isolation.ChannelTrustRulesTests"
             ".test_tool_trusted_requires_signature_ref"
         ),
     ),
@@ -423,7 +421,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "for a different, more dangerous call."
         ),
         canonical_test=(
-            "test_tool_policy_gate.StepUpBindingTests"
+            "envelope.test_tool_policy_gate.StepUpBindingTests"
             ".test_step_up_for_different_arguments_rejected"
         ),
     ),
@@ -437,7 +435,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "regression fails CI."
         ),
         canonical_test=(
-            "test_adversarial_corpus.AdversarialCorpusTests"
+            "envelope.test_adversarial_corpus.AdversarialCorpusTests"
             ".test_every_entry_is_blocked"
         ),
     ),
@@ -452,7 +450,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "began. This is the Phase 2 Track E acceptance criterion."
         ),
         canonical_test=(
-            "test_checkpointed_execution.RevocationTests"
+            "envelope.test_checkpointed_execution.RevocationTests"
             ".test_revoked_capability_blocked_at_next_checkpoint"
         ),
     ),
@@ -465,7 +463,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "skip and replay both fail with the same code."
         ),
         canonical_test=(
-            "test_session_token.ResumeChainTests"
+            "envelope.test_session_token.ResumeChainTests"
             ".test_sequence_replay_rejected"
         ),
     ),
@@ -480,7 +478,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "regardless of how many candidates that domain submits."
         ),
         canonical_test=(
-            "test_eclipse_resistance.DiversityCapTests"
+            "envelope.test_eclipse_resistance.DiversityCapTests"
             ".test_per_domain_cap_blocks_sybil_dominance"
         ),
     ),
@@ -494,7 +492,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "pin for (workload_iss, workload_kid)."
         ),
         canonical_test=(
-            "test_discovery_propagation.FreshnessTests"
+            "envelope.test_discovery_propagation.FreshnessTests"
             ".test_rewound_record_rejected"
         ),
     ),
@@ -510,7 +508,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "starve security-critical services."
         ),
         canonical_test=(
-            "test_capacity_budgets.FloorGuardTests"
+            "envelope.test_capacity_budgets.FloorGuardTests"
             ".test_data_plane_cannot_consume_security_floor"
         ),
     ),
@@ -525,7 +523,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "require CRYPTO_TRUST-level approval."
         ),
         canonical_test=(
-            "test_safe_mode_engine.DowngradeTests"
+            "envelope.test_safe_mode_engine.DowngradeTests"
             ".test_downgrade_blocked_when_higher_category_trigger_active"
         ),
     ),
@@ -539,7 +537,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "produce predictable state and logs."
         ),
         canonical_test=(
-            "test_safe_mode_engine.DeterminismTests"
+            "envelope.test_safe_mode_engine.DeterminismTests"
             ".test_two_engines_walk_identical_history"
         ),
     ),
@@ -554,7 +552,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "POST_CUTOVER / COMPLETE."
         ),
         canonical_test=(
-            "test_key_rotation.PhaseTests.test_overlap"
+            "envelope.test_key_rotation.PhaseTests.test_overlap"
         ),
     ),
     ProofObligation(
@@ -566,7 +564,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "one that was quarantined; reuse of the old kid is rejected."
         ),
         canonical_test=(
-            "test_recovery_readmission.BindingTests"
+            "envelope.test_recovery_readmission.BindingTests"
             ".test_kid_reuse_rejected"
         ),
     ),
@@ -580,7 +578,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "physically cannot sign its own re-admission."
         ),
         canonical_test=(
-            "test_recovery_readmission.CleanStateEvidenceTests"
+            "envelope.test_recovery_readmission.CleanStateEvidenceTests"
             ".test_attester_trust_pool_is_separate"
         ),
     ),
@@ -594,7 +592,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "tampered with post-signing fails signature verification."
         ),
         canonical_test=(
-            "test_signed_safe_mode.TransitionFailureTests"
+            "envelope.test_signed_safe_mode.TransitionFailureTests"
             ".test_tampered_transition_rejected"
         ),
     ),
@@ -608,7 +606,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "via constructed-in-memory approvals is prevented."
         ),
         canonical_test=(
-            "test_signed_safe_mode.VerifiedDowngradeTests"
+            "envelope.test_signed_safe_mode.VerifiedDowngradeTests"
             ".test_signature_failure_blocks_engine_call"
         ),
     ),
@@ -626,7 +624,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "across regenerations."
         ),
         canonical_test=(
-            "test_discovery_test_vectors.TamperedVectorTests"
+            "envelope.test_discovery_test_vectors.TamperedVectorTests"
             ".test_tampered_vector_fails_signature_check"
         ),
     ),
@@ -642,7 +640,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "and the adapter cannot drift apart without failing CI."
         ),
         canonical_test=(
-            "test_envelope_adapter.IntegrationWithVerifierTests"
+            "integrations.mcp.test_envelope_adapter.IntegrationWithVerifierTests"
             ".test_adapter_output_passes_schema_required_fields"
         ),
     ),
@@ -658,7 +656,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "the test fails CI and forces an explicit decision."
         ),
         canonical_test=(
-            "test_host.HostLineCountTests.test_host_module_under_500_lines"
+            "integrations.mcp.test_host.HostLineCountTests.test_host_module_under_500_lines"
         ),
     ),
     # ----- Phase 4 D4.3: end-to-end smoke test -----
@@ -677,7 +675,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "proof for Phase 4."
         ),
         canonical_test=(
-            "test_smoke.HappyPathTests"
+            "integrations.mcp.test_smoke.HappyPathTests"
             ".test_round_trip_succeeds_and_reply_is_verifiable"
         ),
     ),
@@ -696,7 +694,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "demonstrated end-to-end."
         ),
         canonical_test=(
-            "test_smoke.RevocationLifecycleTests"
+            "integrations.mcp.test_smoke.RevocationLifecycleTests"
             ".test_revoked_capability_rejected_on_next_use"
         ),
     ),
@@ -713,7 +711,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "running host."
         ),
         canonical_test=(
-            "test_smoke.RateLimitLifecycleTests"
+            "integrations.mcp.test_smoke.RateLimitLifecycleTests"
             ".test_spoofed_sender_does_not_burn_victim_allowance"
         ),
     ),
@@ -728,7 +726,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "floor invariant survives every rebalance step."
         ),
         canonical_test=(
-            "test_capacity_rebalancer.ApplyTests"
+            "envelope.test_capacity_rebalancer.ApplyTests"
             ".test_apply_preserves_floor_invariant"
         ),
     ),
@@ -742,7 +740,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "the cross-pool oversubscription cap holds end-to-end."
         ),
         canonical_test=(
-            "test_capacity_rebalancer.ApplyTests"
+            "envelope.test_capacity_rebalancer.ApplyTests"
             ".test_apply_preserves_oversubscription_cap"
         ),
     ),
@@ -760,7 +758,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "mismatched id fails with svid_spiffe_mismatch."
         ),
         canonical_test=(
-            "test_verify_svid.HappyPathTests"
+            "envelope.test_verify_svid.HappyPathTests"
             ".test_binding_check_passes_when_expected_matches"
         ),
     ),
@@ -778,7 +776,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "unauthorized peer cannot join the mesh."
         ),
         canonical_test=(
-            "test_peer_admission.AdmissionTests.test_deny_by_default"
+            "envelope.test_peer_admission.AdmissionTests.test_deny_by_default"
         ),
     ),
     # ----- Phase 5 Track B: policy engine + forensic decision IDs -----
@@ -795,7 +793,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "ID' at forensic scope."
         ),
         canonical_test=(
-            "test_policy_audit.DecideAndAuditTests"
+            "envelope.test_policy_audit.DecideAndAuditTests"
             ".test_decision_id_survives_chain_validation"
         ),
     ),
@@ -813,7 +811,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "authorization."
         ),
         canonical_test=(
-            "test_node.LearnPeerTests"
+            "mesh.test_node.LearnPeerTests"
             ".test_verified_but_unadmitted_peer_rejected"
         ),
     ),
@@ -831,7 +829,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "the fabric works as a system."
         ),
         canonical_test=(
-            "test_mesh_round_trip.RoundTripTests"
+            "mesh.test_mesh_round_trip.RoundTripTests"
             ".test_two_node_signed_round_trip"
         ),
     ),
@@ -851,7 +849,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "gate that refuses unattested images is [REFERENCE] deployment."
         ),
         canonical_test=(
-            "test_image_attestation.DenialTests"
+            "envelope.test_image_attestation.DenialTests"
             ".test_digest_mismatch_rejected"
         ),
     ),
@@ -868,7 +866,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "together they are the vision's Layer A composed with Layer B."
         ),
         canonical_test=(
-            "test_mtls_round_trip.MtlsRoundTripTests"
+            "mesh.test_mtls_round_trip.MtlsRoundTripTests"
             ".test_signed_round_trip_over_mtls_two_layers_agree"
         ),
     ),
@@ -884,7 +882,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "before any message-layer processing."
         ),
         canonical_test=(
-            "test_mtls_round_trip.MtlsRoundTripTests"
+            "mesh.test_mtls_round_trip.MtlsRoundTripTests"
             ".test_unauthenticated_peer_cannot_deliver_over_mtls"
         ),
     ),
@@ -900,7 +898,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "registry or shared config file."
         ),
         canonical_test=(
-            "test_membership.ConvergenceTests.test_cluster_converges_via_gossip"
+            "mesh.test_membership.ConvergenceTests.test_cluster_converges_via_gossip"
         ),
     ),
     ProofObligation(
@@ -915,7 +913,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "failure is detected, not silently tolerated."
         ),
         canonical_test=(
-            "test_membership.FailureDetectionTests.test_downed_node_is_detected_dead"
+            "mesh.test_membership.FailureDetectionTests.test_downed_node_is_detected_dead"
         ),
     ),
     ProofObligation(
@@ -932,7 +930,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "§8.1 enforced against gossiped membership."
         ),
         canonical_test=(
-            "test_gossip_discovery.GossipAdmissionTests"
+            "mesh.test_gossip_discovery.GossipAdmissionTests"
             ".test_reachable_rogue_is_not_routable"
         ),
     ),
@@ -948,7 +946,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "intermediary never relays toward an unadmitted peer."
         ),
         canonical_test=(
-            "test_routing.DenyByDefaultForwardingTests"
+            "mesh.test_routing.DenyByDefaultForwardingTests"
             ".test_forward_denied_to_unadmitted_next_hop"
         ),
     ),
@@ -964,7 +962,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "instead of multiplying traffic."
         ),
         canonical_test=(
-            "test_routing.LoopSafetyTests.test_duplicate_message_id_is_dropped"
+            "mesh.test_routing.LoopSafetyTests.test_duplicate_message_id_is_dropped"
         ),
     ),
     ProofObligation(
@@ -983,7 +981,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "composed end to end."
         ),
         canonical_test=(
-            "test_mtls_multihop.MultiHopRoundTripTests"
+            "mesh.test_mtls_multihop.MultiHopRoundTripTests"
             ".test_signed_envelope_reaches_far_node_through_relay"
         ),
     ),
@@ -1001,7 +999,7 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "failure; later frames in the same queue still process."
         ),
         canonical_test=(
-            "test_wire_decoders_fail_closed.GossipFrameTests"
+            "mesh.test_wire_decoders_fail_closed.GossipFrameTests"
             ".test_malformed_frames_do_not_kill_the_tick"
         ),
     ),
@@ -1020,20 +1018,17 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             "characters are discarded."
         ),
         canonical_test=(
-            "test_wire_decoders_fail_closed.RoutedMessageDecodeTests"
+            "mesh.test_wire_decoders_fail_closed.RoutedMessageDecodeTests"
             ".test_malformed_frames_raise_transport_error"
         ),
     ),
 )
 
-
 def by_phase(phase: Phase) -> tuple[ProofObligation, ...]:
     return tuple(o for o in OBLIGATIONS if o.phase is phase)
 
-
 def by_track(track: str) -> tuple[ProofObligation, ...]:
     return tuple(o for o in OBLIGATIONS if o.track == track)
-
 
 def find(name: str) -> ProofObligation:
     for o in OBLIGATIONS:

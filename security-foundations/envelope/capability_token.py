@@ -41,8 +41,9 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from cryptography.exceptions import InvalidSignature
-from deny_reason import DenyReason
-from verify_envelope import (
+
+from .deny_reason import DenyReason
+from .verify_envelope import (
     HEX_SHA256_RE,
     KID_RE,
     SPIFFE_ID_RE,
@@ -53,14 +54,13 @@ from verify_envelope import (
 )
 
 if TYPE_CHECKING:
-    from revocation_list import RevocationList
+    from .revocation_list import RevocationList
 
 MAX_TOKEN_BYTES = 4096
 EXPECTED_TYP = "wt-cap+jwt"
 EXPECTED_ALG = "EdDSA"
 
 _REQUIRED_CLAIMS = ("iss", "sub", "aud", "scope", "iat", "nbf", "exp", "jti", "cnf")
-
 
 @dataclass(frozen=True)
 class CapabilityClaims:
@@ -75,12 +75,10 @@ class CapabilityClaims:
     envelope_digest: str
     issuer_kid: str
 
-
 def _err(reason_code: DenyReason, message: str) -> EnvelopeVerificationError:
     return EnvelopeVerificationError(
         f"capability token: {message}", reason=reason_code
     )
-
 
 def parse_jwt(token: str) -> tuple[dict[str, Any], dict[str, Any], bytes, bytes]:
     """Parse a JWT into (header, payload, signing_input, signature_bytes).
@@ -122,7 +120,6 @@ def parse_jwt(token: str) -> tuple[dict[str, Any], dict[str, Any], bytes, bytes]
     signing_input = (header_b64 + "." + payload_b64).encode("ascii")
     return header, payload, signing_input, signature_bytes
 
-
 def _check_header(header: dict[str, Any]) -> str:
     alg = header.get("alg")
     typ = header.get("typ")
@@ -134,7 +131,6 @@ def _check_header(header: dict[str, Any]) -> str:
     if not isinstance(kid, str) or not KID_RE.match(kid):
         raise _err(DenyReason.CAP_INVALID_KID, "invalid kid format")
     return kid
-
 
 def _extract_claims(payload: dict[str, Any], *, issuer_kid: str) -> CapabilityClaims:
     missing = [c for c in _REQUIRED_CLAIMS if c not in payload]
@@ -188,7 +184,6 @@ def _extract_claims(payload: dict[str, Any], *, issuer_kid: str) -> CapabilityCl
         envelope_digest=envelope_digest,
         issuer_kid=issuer_kid,
     )
-
 
 def verify_capability_token(
     token: str,
