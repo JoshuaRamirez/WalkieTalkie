@@ -300,6 +300,56 @@ def _saturate_hot_tenants(ctrl):
         ctrl.acquire(pool="data", tenant="hot-b")
 
 
+def _cross_pool_tenant_controller():
+    """Two hot data tenants + one slack security tenant.
+
+    Wide ceilings so the pool-ceiling half stays idle. A global
+    tenant allocation would steal security burst; intra-pool
+    grouping must not.
+    """
+    return build_controller(
+        total_capacity=400,
+        pools=[
+            BudgetPool("security", reserved=20, ceiling=200),
+            BudgetPool("data", reserved=20, ceiling=200),
+        ],
+        tenant_budgets=[
+            TenantBudget(pool="data", tenant="hot-a", reserve=5, burst=20),
+            TenantBudget(pool="data", tenant="hot-b", reserve=5, burst=20),
+            TenantBudget(
+                pool="security", tenant="cold-sec", reserve=10, burst=100
+            ),
+        ],
+    )
+
+
+def _cross_pool_with_data_slack_controller():
+    """Same-pool data cascade plus an untouched security slack tenant."""
+    return build_controller(
+        total_capacity=400,
+        pools=[
+            BudgetPool("security", reserved=20, ceiling=200),
+            BudgetPool("data", reserved=20, ceiling=200),
+        ],
+        tenant_budgets=[
+            TenantBudget(pool="data", tenant="hot-a", reserve=5, burst=20),
+            TenantBudget(pool="data", tenant="hot-b", reserve=5, burst=20),
+            TenantBudget(pool="data", tenant="cold", reserve=10, burst=100),
+            TenantBudget(
+                pool="security", tenant="cold-sec", reserve=10, burst=100
+            ),
+        ],
+    )
+
+
+def _saturate_data_hot_tenants(ctrl):
+    """Push data hot-a / hot-b to 18/20. Security tenants stay idle."""
+    for _ in range(18):
+        ctrl.acquire(pool="data", tenant="hot-a")
+    for _ in range(18):
+        ctrl.acquire(pool="data", tenant="hot-b")
+
+
 class TenantSignalsTests(unittest.TestCase):
     def test_no_tenant_budgets_is_noop_tenant_half(self):
         ctrl = _three_pool_controller()
@@ -328,6 +378,22 @@ class TenantSignalsTests(unittest.TestCase):
             ctrl.acquire(pool="data", tenant="hot-a")
         sigs = CapacityRebalancer().signals(ctrl)
         self.assertFalse(sigs.tenant_cascading)
+
+    def test_cross_pool_hot_plus_slack_is_not_tenant_cascade(self):
+        # Two stressed data-plane tenants + one slack security
+        # tenant looks cascading if you ignore pool. Intra-pool
+        # grouping must not fire.
+        ctrl = _cross_pool_tenant_controller()
+        _saturate_data_hot_tenants(ctrl)
+        sigs = CapacityRebalancer().signals(ctrl)
+        self.assertFalse(sigs.tenant_cascading)
+        self.assertEqual(
+            {(u.pool, u.tenant) for u in sigs.tenant_stressed},
+            {("data", "hot-a"), ("data", "hot-b")},
+        )
+        self.assertIn(("security", "cold-sec"), {
+            (u.pool, u.tenant) for u in sigs.tenant_slack
+        })
 
 
 class TenantEvaluateTests(unittest.TestCase):
@@ -381,6 +447,35 @@ class TenantEvaluateTests(unittest.TestCase):
         # Pool-ceiling path still drafts the same transfer.
         names = {c.pool for c in decision.changes}
         self.assertEqual(names, {"data", "security", "control"})
+
+    def test_cross_pool_tenant_transfer_does_not_happen(self):
+        ctrl = _cross_pool_tenant_controller()
+        _saturate_data_hot_tenants(ctrl)
+        decision = CapacityRebalancer().evaluate(ctrl)
+        self.assertEqual(decision.tenant_changes, ())
+        self.assertTrue(decision.is_noop)
+        cold = next(
+            tb for tb in ctrl.tenant_budgets if tb.tenant == "cold-sec"
+        )
+        self.assertEqual(cold.burst, 100)
+
+    def test_same_pool_cascade_does_not_touch_other_pool_slack(self):
+        # Data has 2 stressed + 1 slack (real intra-pool cascade).
+        # Security has a slack tenant that must keep its burst.
+        ctrl = _cross_pool_with_data_slack_controller()
+        _saturate_data_hot_tenants(ctrl)
+        reb = CapacityRebalancer(transfer_fraction=0.2)
+        decision = reb.evaluate(ctrl)
+        keys = {(c.pool, c.tenant) for c in decision.tenant_changes}
+        self.assertEqual(
+            keys, {("data", "cold"), ("data", "hot-a"), ("data", "hot-b")}
+        )
+        self.assertNotIn(("security", "cold-sec"), keys)
+        data_cold = next(
+            c for c in decision.tenant_changes if c.tenant == "cold"
+        )
+        self.assertEqual(data_cold.pool, "data")
+        self.assertEqual(data_cold.new_burst, 82)
 
 
 class TenantApplyTests(unittest.TestCase):
@@ -441,6 +536,20 @@ class TenantApplyTests(unittest.TestCase):
         pools = {p.name: p for p in ctrl.pools}
         self.assertGreater(pools["security"].ceiling, 40)
         self.assertLess(pools["data"].ceiling, 100)
+
+    def test_security_slack_tenant_keeps_burst_when_only_data_stressed(self):
+        ctrl = _cross_pool_tenant_controller()
+        _saturate_data_hot_tenants(ctrl)
+        CapacityRebalancer().evaluate_and_apply(ctrl)
+        cold = next(
+            tb for tb in ctrl.tenant_budgets if tb.tenant == "cold-sec"
+        )
+        self.assertEqual(cold.pool, "security")
+        self.assertEqual(cold.burst, 100)
+        hot_a = next(
+            tb for tb in ctrl.tenant_budgets if tb.tenant == "hot-a"
+        )
+        self.assertEqual(hot_a.burst, 20)
 
     def test_pool_ceiling_path_still_works_with_idle_tenants(self):
         # Tenant budgets exist but stay idle (all slack, none

@@ -229,7 +229,8 @@ Transitions must follow deterministic workflow:
   intermediate states never violate the oversubscription cap.
   **Landed (v0, leftover #102):** the same heuristic now also
   adjusts per-tenant `TenantBudget.burst` from
-  `tenant_snapshot()`. Burst never falls below that tenant's
+  `tenant_snapshot()`, grouped by pool (no cross-pool tenant
+  burst transfer). Burst never falls below that tenant's
   `reserve` or current in-flight; reserved stays put. Callers
   that omit `tenant_budgets` are unchanged. Mutation path:
   `BudgetController.adjust_tenant_burst`.

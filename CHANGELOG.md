@@ -64,10 +64,11 @@ deliverables carry `**Landed (v0):**` annotations in
   `CapacityRebalancer` applies the same stress/slack/cascade
   heuristic to per-tenant `TenantBudget.burst`, using
   `BudgetController.tenant_snapshot()` for live consumption.
-  Burst never falls below that tenant's reserve or in-flight;
-  reserved stays put. Pool-ceiling rebalancing is unchanged.
-  Callers that omit `tenant_budgets` are a no-op on the tenant
-  half. See leftover #102 / `DEFERRED.md`.
+  Tenant cascade and transfer are intra-pool. Burst never falls
+  below that tenant's reserve or in-flight; reserved stays put.
+  Pool-ceiling rebalancing stays global. Callers that omit
+  `tenant_budgets` are a no-op on the tenant half. See leftover
+  #102 / `DEFERRED.md`.
 - **Proof-obligation registry** (`envelope/proof_obligations.py`): 61 invariants,
   each pinned by a canonical test and gated by `test_every_obligation_resolves`.
 - Root `README.md`, `SECURITY.md` disclosure policy, `CHANGELOG.md`,

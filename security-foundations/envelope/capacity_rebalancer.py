@@ -27,12 +27,18 @@ excess demand.
   count, and recipient ceilings stay under the cross-pool
   oversubscription cap.
 - Tenants: headroom is ``burst - max(reserve, in_flight)``,
-  read from :meth:`BudgetController.tenant_snapshot`. Donations
+  read from :meth:`BudgetController.tenant_snapshot`. Cascade
+  detection and burst transfer are **intra-pool**: a slack
+  tenant in pool A never donates to a stressed tenant in
+  pool B. ``TenantBudget.burst`` is scoped to
+  ``(pool, tenant)``; shrinking a quota in another pool
+  would not free capacity in the recipients' pool. Donations
   are constrained so the donor's NEW burst never falls below
   that tenant's ``reserve`` or current in-flight. Reserved
   stays put; only burst headroom moves. Callers that never
   configure ``tenant_budgets`` see an empty tenant half
-  (no-op).
+  (no-op). Pool-ceiling rebalancing stays global — that
+  half already moves across pools on purpose.
 
 The decision is *advisory* by default. :meth:`apply` mutates the
 controller in place via :meth:`BudgetController.adjust_ceiling`
@@ -290,6 +296,7 @@ class CapacityRebalancer:
         tenant_snap = controller.tenant_snapshot()
         tenant_stressed: list[TenantUtilization] = []
         tenant_slack: list[TenantUtilization] = []
+        by_pool: dict[str, list[TenantUtilization]] = {}
         for tb in controller.tenant_budgets:
             t_util = TenantUtilization(
                 pool=tb.pool,
@@ -298,13 +305,16 @@ class CapacityRebalancer:
                 burst=tb.burst,
                 reserve=tb.reserve,
             )
+            by_pool.setdefault(tb.pool, []).append(t_util)
             if t_util.utilization >= self.stress_threshold:
                 tenant_stressed.append(t_util)
             elif t_util.utilization <= self.slack_threshold:
                 tenant_slack.append(t_util)
-        tenant_cascading = (
-            len(tenant_stressed) >= self.cascade_min_stressed
-            and len(tenant_slack) >= 1
+        # Cascade is per-pool: two hot data-plane tenants plus a
+        # slack security-plane tenant is not a tenant cascade.
+        tenant_cascading = any(
+            _tenants_cascade_in_pool(utils, reb=self)
+            for utils in by_pool.values()
         )
         return RebalanceSignals(
             stressed=tuple(stressed),
@@ -449,53 +459,72 @@ class CapacityRebalancer:
         if not sigs.tenant_cascading:
             return (), None, 0
 
-        donors, recipients, total_donation = _allocate_transfer(
-            [
-                ((s.pool, s.tenant), s.slack_headroom)
-                for s in sigs.tenant_slack
-            ],
-            [
-                ((p.pool, p.tenant), p.stress_excess)
-                for p in sigs.tenant_stressed
-            ],
-            self.transfer_fraction,
-        )
-        if total_donation == 0:
-            return (), "slack tenants have no transferable headroom", 0
+        # Allocate independently per pool. A slack tenant in pool A
+        # must never donate burst to a stressed tenant in pool B.
+        by_pool: dict[str, list[TenantUtilization]] = {}
+        for util in (*sigs.tenant_stressed, *sigs.tenant_slack):
+            by_pool.setdefault(util.pool, []).append(util)
 
         tenant_snap = controller.tenant_snapshot()
         changes: list[BurstChange] = []
-        for (pool, tenant), donation in donors.items():
-            tb = _tenant_budget_by_key(controller, pool, tenant)
-            new_burst = tb.burst - donation
-            new_burst = max(
-                new_burst,
-                tb.reserve,
-                tenant_snap.get((pool, tenant), 0),
+        total_donation = 0
+        saw_cascade_without_headroom = False
+        # Walk controller.pools so multi-pool transfers stay
+        # deterministic (pool declaration order).
+        for pool in controller.pools:
+            utils = by_pool.get(pool.name, ())
+            if not utils:
+                continue
+            if not _tenants_cascade_in_pool(utils, reb=self):
+                continue
+            stressed = [
+                u for u in utils if u.utilization >= self.stress_threshold
+            ]
+            slack = [
+                u for u in utils if u.utilization <= self.slack_threshold
+            ]
+            donors, recipients, donation = _allocate_transfer(
+                [((s.pool, s.tenant), s.slack_headroom) for s in slack],
+                [((p.pool, p.tenant), p.stress_excess) for p in stressed],
+                self.transfer_fraction,
             )
-            if new_burst != tb.burst:
-                changes.append(
-                    BurstChange(
-                        pool=pool,
-                        tenant=tenant,
-                        old_burst=tb.burst,
-                        new_burst=new_burst,
-                    )
+            if donation == 0:
+                saw_cascade_without_headroom = True
+                continue
+            total_donation += donation
+            for (pool_name, tenant), amount in donors.items():
+                tb = _tenant_budget_by_key(controller, pool_name, tenant)
+                new_burst = tb.burst - amount
+                new_burst = max(
+                    new_burst,
+                    tb.reserve,
+                    tenant_snap.get((pool_name, tenant), 0),
                 )
-        for (pool, tenant), share in recipients.items():
-            tb = _tenant_budget_by_key(controller, pool, tenant)
-            new_burst = tb.burst + share
-            if new_burst != tb.burst:
-                changes.append(
-                    BurstChange(
-                        pool=pool,
-                        tenant=tenant,
-                        old_burst=tb.burst,
-                        new_burst=new_burst,
+                if new_burst != tb.burst:
+                    changes.append(
+                        BurstChange(
+                            pool=pool_name,
+                            tenant=tenant,
+                            old_burst=tb.burst,
+                            new_burst=new_burst,
+                        )
                     )
-                )
+            for (pool_name, tenant), share in recipients.items():
+                tb = _tenant_budget_by_key(controller, pool_name, tenant)
+                new_burst = tb.burst + share
+                if new_burst != tb.burst:
+                    changes.append(
+                        BurstChange(
+                            pool=pool_name,
+                            tenant=tenant,
+                            old_burst=tb.burst,
+                            new_burst=new_burst,
+                        )
+                    )
 
         if not changes:
+            if saw_cascade_without_headroom and total_donation == 0:
+                return (), "slack tenants have no transferable headroom", 0
             return (
                 (),
                 (
@@ -510,7 +539,7 @@ class CapacityRebalancer:
                 f"cascading tenant stress: "
                 f"{len(sigs.tenant_stressed)} stressed, "
                 f"{len(sigs.tenant_slack)} slack; redistributed "
-                f"{total_donation} units of burst headroom"
+                f"{total_donation} units of intra-pool burst headroom"
             ),
             total_donation,
         )
@@ -567,3 +596,16 @@ def _tenant_budget_by_key(controller: BudgetController, pool: str, tenant: str):
         if tb.pool == pool and tb.tenant == tenant:
             return tb
     raise CapacityBudgetError(f"unknown tenant_budget: {(pool, tenant)!r}")
+
+
+def _tenants_cascade_in_pool(
+    utils: Sequence[TenantUtilization],
+    *,
+    reb: CapacityRebalancer,
+) -> bool:
+    """True iff this pool has enough stressed tenants and a slack donor."""
+    stressed = sum(
+        1 for u in utils if u.utilization >= reb.stress_threshold
+    )
+    slack = sum(1 for u in utils if u.utilization <= reb.slack_threshold)
+    return stressed >= reb.cascade_min_stressed and slack >= 1

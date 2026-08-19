@@ -265,9 +265,10 @@ each entry names the module that implements it.
   `RebalanceDecision` that moves `transfer_fraction` of each slack
   pool's donor-side headroom to the stressed pools proportional to
   their `stress_excess`. The same heuristic applies to per-tenant
-  `TenantBudget.burst` (from `tenant_snapshot()`): slack tenants
-  donate burst headroom to stressed tenants; a tenant's burst never
-  falls below that tenant's `reserve` or current in-flight.
+  `TenantBudget.burst` (from `tenant_snapshot()`), grouped by pool:
+  a slack tenant donates burst headroom only to stressed tenants in
+  the same pool. A tenant's burst never falls below that tenant's
+  `reserve` or current in-flight.
   Callers that omit `tenant_budgets` see a no-op tenant half.
   `apply()` mutates the controller via
   `BudgetController.adjust_ceiling` and
