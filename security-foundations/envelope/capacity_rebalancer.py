@@ -81,7 +81,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TypeVar
 
-from .capacity_budgets import BudgetController, CapacityBudgetError
+from .capacity_budgets import (
+    BudgetController,
+    CapacityBudgetError,
+    TenantBudget,
+)
 
 K = TypeVar("K")
 
@@ -466,6 +470,7 @@ class CapacityRebalancer:
             by_pool.setdefault(util.pool, []).append(util)
 
         tenant_snap = controller.tenant_snapshot()
+        by_key = {(tb.pool, tb.tenant): tb for tb in controller.tenant_budgets}
         changes: list[BurstChange] = []
         total_donation = 0
         saw_cascade_without_headroom = False
@@ -493,7 +498,7 @@ class CapacityRebalancer:
                 continue
             total_donation += donation
             for (pool_name, tenant), amount in donors.items():
-                tb = _tenant_budget_by_key(controller, pool_name, tenant)
+                tb = _tenant_from_index(by_key, pool_name, tenant)
                 new_burst = tb.burst - amount
                 new_burst = max(
                     new_burst,
@@ -510,7 +515,7 @@ class CapacityRebalancer:
                         )
                     )
             for (pool_name, tenant), share in recipients.items():
-                tb = _tenant_budget_by_key(controller, pool_name, tenant)
+                tb = _tenant_from_index(by_key, pool_name, tenant)
                 new_burst = tb.burst + share
                 if new_burst != tb.burst:
                     changes.append(
@@ -591,11 +596,13 @@ def _pool_by_name(controller: BudgetController, name: str):
     raise CapacityBudgetError(f"unknown pool: {name!r}")
 
 
-def _tenant_budget_by_key(controller: BudgetController, pool: str, tenant: str):
-    for tb in controller.tenant_budgets:
-        if tb.pool == pool and tb.tenant == tenant:
-            return tb
-    raise CapacityBudgetError(f"unknown tenant_budget: {(pool, tenant)!r}")
+def _tenant_from_index(
+    by_key: dict[tuple[str, str], TenantBudget], pool: str, tenant: str
+) -> TenantBudget:
+    tb = by_key.get((pool, tenant))
+    if tb is None:
+        raise CapacityBudgetError(f"unknown tenant_budget: {(pool, tenant)!r}")
+    return tb
 
 
 def _tenants_cascade_in_pool(
