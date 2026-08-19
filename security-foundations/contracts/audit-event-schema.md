@@ -24,7 +24,7 @@ types.
 | Field | Type | Notes |
 |---|---|---|
 | `timestamp` | RFC 3339 string in UTC, ending in `Z` | Wall-clock time at event emission. |
-| `event_type` | string | v0 emits `"envelope.verify"`, `"capability.verify"`, `"capability.issue"`, `"discovery.verify"`, and `"admission.evaluate"`. Future checkpoints (`policy.evaluate`, `execution.dispatch`) MUST use additional values; existing values are immutable. |
+| `event_type` | string | v0 emits `"envelope.verify"`, `"capability.verify"`, `"capability.issue"`, `"discovery.verify"`, `"admission.evaluate"`, and the Phase 2 checkpoints (`"delegation.verify"`, `"retrieval.verify"`, `"egress.verify"`, `"review.verify"`, `"tool.verify"`, `"checkpoint.evaluate"`, `"session.verify"`). Future checkpoints MUST use additional values; existing values are immutable. |
 | `outcome` | `"allow"` or `"deny"` | Closed enum. |
 | `reason` | string | Human-readable. May contain a colon-prefixed namespace (e.g., `"capability token: revoked"`). |
 | `reason_code` | string | Machine-readable. Either `"ok"`, `""` (legacy), or a `DenyReason` value (e.g., `"replay_detected"`). See deny-reason contract below. |
@@ -74,6 +74,32 @@ exactly one `admission.evaluate` event when an `audit_sink` is attached:
 | Admitted | `"ok"` |
 | Denied — wrong discovery format | `"admission_version_incompatible"` |
 | Denied — workload not in allowlist | `"admission_workload_not_allowed"` |
+
+A single Phase 2 verifier call emits exactly one event when an
+`audit_sink` is attached (callers that omit the sink emit nothing):
+
+| Function | `event_type` | `artifact_version` |
+|---|---|---|
+| `delegation_receipt.verify_receipt` | `delegation.verify` | `wt-delegation/v0` |
+| `AllowlistRetrievalPolicy.evaluate` / `require_retrieval` | `retrieval.verify` | `wt-retrieval/v0` |
+| `MatrixEgressPolicy.evaluate` / `require_egress` | `egress.verify` | `wt-egress/v0` |
+| `reviewer_workflow.verify_decision` / `verify_release_authorization` | `review.verify` | `wt-review/v0` |
+| `tool_policy_gate.evaluate_tool_call` / `require_tool_call` | `tool.verify` | `wt-tool-gate/v0` |
+| `checkpointed_execution.validate_checkpoint` | `checkpoint.evaluate` | `wt-checkpoint/v0` |
+| `session_token.verify_session_token` / `verify_resume` | `session.verify` | `wt-session/v0` |
+
+`verify_release_authorization` and `verify_resume` emit one event for
+the outer check; they do not also emit from the inner
+`verify_decision` / `verify_session_token` call. Quarantine and
+checkpoint ABORT/DOWNGRADE map to `outcome="deny"` (the audit
+alphabet is allow/deny only). The MCP host's `tool.gate` /
+`egress.evaluate` events are host-level and distinct; the host does
+not pass `audit_sink` into the primitives.
+
+Sink failure fails closed: raise-based verifiers raise with
+`reason_code="audit_sink_failure"`; decision-returning evaluators
+return a deny / ABORT decision with the same code. An unaudited
+allow is not an allow.
 
 ### Hash chain
 

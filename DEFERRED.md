@@ -76,11 +76,17 @@ without breaking consumers. v0 reserved `RiskLevel.LOW` for future
 low-confidence ML hits.
 
 ### Signed audit checkpoint emission (most modules)
-Every signed primitive returns a verification result; wiring an
-audit-pipeline `XXX.verify` event for each one is a follow-up that
-pairs with the rest of the Phase 2 checkpoint suite. Currently
-Phase 1's `audit.py` covers envelope/capability events; extending
-coverage to delegation, retrieval, egress, etc. is incremental.
+**Shipped.** Optional `audit_sink` on the Phase 2 verifiers
+(delegation, retrieval, egress, reviewer, tool gate, checkpointed
+execution, session tokens). Each emits one hash-chained
+`XXX.verify` / `checkpoint.evaluate` event on allow and on deny
+using the existing `AuditEvent` schema. Sink failure fails closed
+(`AUDIT_SINK_FAILURE`) so an unaudited allow is not an allow.
+Callers that omit the sink are unchanged. The MCP host still emits
+its own `tool.gate` / `egress.evaluate` events and does not pass
+the sink through (no double emission). Proof obligation
+`phase2_verifiers_emit_audit_checkpoints` pins the suite. See
+leftover #100.
 
 ### Tenant-level capacity rebalancing (Phase 3 Track B B3)
 The capacity rebalancer adjusts pool ceilings. Adjusting per-tenant
@@ -280,10 +286,9 @@ formal verification artifact set + CI gate report, final Go/No-Go
 recommendation memo. None produced.
 
 ### Audit-emission coverage for Phase 2 primitives
-The Phase 2 verifiers (delegation, retrieval, egress, reviewer,
-tool gate, checkpointed execution, session tokens) return their
-decisions; the audit pipeline only consumes envelope / capability
-events. Wiring the rest is an additive slice.
+**Shipped.** Same slice as "Signed audit checkpoint emission"
+above. The Phase 2 verifiers emit into `audit.py` / `AuditSink`
+when an optional `audit_sink` is attached. See leftover #100.
 
 ---
 

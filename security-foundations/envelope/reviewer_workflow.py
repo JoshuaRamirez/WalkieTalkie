@@ -55,6 +55,7 @@ import jcs
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from .audit import AuditSink
 from .data_classification import DataClass
 from .deny_reason import DenyReason
 from .output_scanning import RiskLevel
@@ -69,6 +70,8 @@ from .verify_envelope import (
 )
 
 REVIEW_TYP = "wt-review/v0"
+REVIEW_EVENT_TYPE = "review.verify"
+REVIEW_ARTIFACT_VERSION = REVIEW_TYP
 
 class ReviewVerdict(StrEnum):
     RELEASE = "release"
@@ -263,6 +266,38 @@ def _validate_shape(decision: ReviewDecision) -> None:
     if not isinstance(decision.signature, str) or not decision.signature:
         raise _malformed("signature must be a non-empty string")
 
+def _emit_verify(
+    sink: AuditSink | None,
+    decision: ReviewDecision,
+    outcome: str,
+    reason: str,
+    reason_code: str,
+    *,
+    requester_iss: str = "",
+) -> None:
+    if sink is None:
+        return
+    try:
+        sink.record(
+            event_type=REVIEW_EVENT_TYPE,
+            outcome=outcome,
+            reason=reason,
+            reason_code=reason_code,
+            artifact_version=REVIEW_ARTIFACT_VERSION,
+            message_id=decision.jti,
+            sender=decision.reviewer_iss,
+            recipient=requester_iss,
+            envelope_kid=decision.reviewer_kid,
+            issuer_iss=decision.reviewer_iss,
+            issuer_kid=decision.reviewer_kid,
+        )
+    except Exception as exc:
+        raise ReviewError(
+            f"audit sink failed: {type(exc).__name__}",
+            reason=DenyReason.AUDIT_SINK_FAILURE,
+        ) from exc
+
+
 def verify_decision(
     decision: ReviewDecision,
     *,
@@ -271,6 +306,7 @@ def verify_decision(
     current: datetime,
     max_clock_skew: timedelta = timedelta(seconds=60),
     max_review_ttl: timedelta = timedelta(hours=24),
+    audit_sink: AuditSink | None = None,
 ) -> ReviewDecision:
     """Validate shape, binding, time window, and signature.
 
@@ -278,7 +314,50 @@ def verify_decision(
     :func:`verify_release_authorization`'s job. A caller that wants the
     plain "is this decision valid?" check (for audit, dashboarding,
     archiving a REJECT) goes through this entry point.
+
+    ``audit_sink``, if supplied, receives one ``review.verify`` event
+    per call. Sink failure fails closed
+    (:class:`~deny_reason.DenyReason.AUDIT_SINK_FAILURE`).
     """
+    try:
+        verified = _verify_decision_inner(
+            decision,
+            record=record,
+            issuer_lookup=issuer_lookup,
+            current=current,
+            max_clock_skew=max_clock_skew,
+            max_review_ttl=max_review_ttl,
+        )
+    except ReviewError as exc:
+        _emit_verify(
+            audit_sink,
+            decision,
+            "deny",
+            str(exc),
+            exc.reason_code,
+            requester_iss=record.requester_iss,
+        )
+        raise
+    _emit_verify(
+        audit_sink,
+        verified,
+        "allow",
+        "ok",
+        "ok",
+        requester_iss=record.requester_iss,
+    )
+    return verified
+
+
+def _verify_decision_inner(
+    decision: ReviewDecision,
+    *,
+    record: QuarantineRecord,
+    issuer_lookup: Callable[[str, str], bytes],
+    current: datetime,
+    max_clock_skew: timedelta,
+    max_review_ttl: timedelta,
+) -> ReviewDecision:
     _validate_shape(decision)
 
     if decision.record_digest != record.record_digest:
@@ -358,6 +437,7 @@ def verify_release_authorization(
     current: datetime,
     max_clock_skew: timedelta = timedelta(seconds=60),
     max_review_ttl: timedelta = timedelta(hours=24),
+    audit_sink: AuditSink | None = None,
 ) -> ReviewDecision:
     """Verify the decision AND that it authorizes release.
 
@@ -366,19 +446,42 @@ def verify_release_authorization(
     :class:`ReviewError` with reason :class:`DenyReason.REVIEW_REJECTED`
     — that's the "release path" check that downstream egress code calls
     before letting the artifact through.
+
+    Emits one ``review.verify`` event for the release-path check when
+    ``audit_sink`` is attached (the inner :func:`verify_decision` call
+    does not emit a second event).
     """
-    verify_decision(
-        decision,
-        record=record,
-        issuer_lookup=issuer_lookup,
-        current=current,
-        max_clock_skew=max_clock_skew,
-        max_review_ttl=max_review_ttl,
-    )
-    if decision.verdict is not ReviewVerdict.RELEASE:
-        raise ReviewError(
-            f"reviewer rejected release (verdict={decision.verdict.value!r}): "
-            f"{decision.reason}",
-            reason=DenyReason.REVIEW_REJECTED,
+    try:
+        verify_decision(
+            decision,
+            record=record,
+            issuer_lookup=issuer_lookup,
+            current=current,
+            max_clock_skew=max_clock_skew,
+            max_review_ttl=max_review_ttl,
         )
+        if decision.verdict is not ReviewVerdict.RELEASE:
+            raise ReviewError(
+                f"reviewer rejected release (verdict={decision.verdict.value!r}): "
+                f"{decision.reason}",
+                reason=DenyReason.REVIEW_REJECTED,
+            )
+    except ReviewError as exc:
+        _emit_verify(
+            audit_sink,
+            decision,
+            "deny",
+            str(exc),
+            exc.reason_code,
+            requester_iss=record.requester_iss,
+        )
+        raise
+    _emit_verify(
+        audit_sink,
+        decision,
+        "allow",
+        "ok",
+        "ok",
+        requester_iss=record.requester_iss,
+    )
     return decision

@@ -69,6 +69,7 @@ each entry names the module that implements it.
   `delegator_iss == parent.sub`, scope must equal parent's scope, aud
   must equal parent's, and `[iat, exp]` must be contained within the
   parent's window. Depth capped at `max_chain_depth` (default 3).
+  Optional `audit_sink` emits one `delegation.verify` event.
 - **Data classification + lineage v0**
   (`envelope/data_classification.py`, Phase 2 Track B B1): `DataClass`
   enum (public / internal / confidential / restricted), `ClassifiedData`
@@ -87,7 +88,9 @@ each entry names the module that implements it.
   `RETRIEVAL_CROSS_TENANT` regardless of any rule. Otherwise, the first
   `(caller_iss, purpose_of_use)` rule wins and the data's class must be
   at most as restrictive as `max_class`. `require_retrieval()` raises
-  `RetrievalError` carrying the decision on denial.
+  `RetrievalError` carrying the decision on denial. Optional
+  `audit_sink` on `evaluate` / `require_retrieval` emits one
+  `retrieval.verify` event.
 - **Prompt assembly minimization v0** (`envelope/prompt_assembly.py`,
   Phase 2 Track B B3): `compose()` consumes a list of `PromptCandidate`
   records (each pairs a `ClassifiedData` with a source label and the raw
@@ -117,7 +120,9 @@ each entry names the module that implements it.
   `restricted_no_export=True` default forces any `RESTRICTED` artifact
   to deny regardless of matrix or risk score, carrying
   `EGRESS_RESTRICTED_NO_EXPORT`. `require_egress()` raises
-  `EgressError` on any non-ALLOW verdict.
+  `EgressError` on any non-ALLOW verdict. Optional `audit_sink` on
+  `evaluate` / `require_egress` emits one `egress.verify` event
+  (quarantine maps to `outcome="deny"`).
 - **Reviewer workflow v0** (`envelope/reviewer_workflow.py`, Phase 2
   Track C C3): `QuarantineRecord` is the queue-entry shape (UUIDv7
   `record_id`, `artifact_digest`, risk, data class, requester SPIFFE
@@ -128,7 +133,8 @@ each entry names the module that implements it.
   `[iat, nbf, exp]` (default max TTL 24h), and a UUIDv7 `jti`.
   `verify_release_authorization()` is the release-path check: shape +
   binding + window + signature (via `IssuerTrustStore`) + verdict ==
-  RELEASE. `verify_decision()` is the audit-only variant.
+  RELEASE. `verify_decision()` is the audit-only variant. Optional
+  `audit_sink` emits one `review.verify` event per call.
 - **Instruction isolation v0** (`envelope/instruction_isolation.py`,
   Phase 2 Track D D1): `ContentChannel` (`SYSTEM` / `USER` / `TOOL` /
   `RETRIEVED`) + `Trust` (`TRUSTED` / `UNTRUSTED`) segregate the four
@@ -152,7 +158,8 @@ each entry names the module that implements it.
   cross-protocol binding, carrying `tool_name`, `caller_iss`,
   `arguments_digest`, time window, and a UUIDv7 `jti`. The gate runs
   independent of model deliberation — operator-configured policy plus
-  out-of-band signed attestation are its only inputs.
+  out-of-band signed attestation are its only inputs. Optional
+  `audit_sink` on `evaluate_tool_call` emits one `tool.verify` event.
 - **Adversarial corpus CI gate v0**
   (`envelope/test_adversarial_corpus.py` +
   `envelope/test-vectors/adversarial-corpus-v0.json`, Phase 2 Track D
@@ -175,7 +182,9 @@ each entry names the module that implements it.
   `CheckpointPolicy` carries independent `{ABORT, DOWNGRADE}` dials
   for each failure mode so operators can choose per-class behavior.
   The acceptance criterion "Revoked capability cannot commit writes
-  post-revocation checkpoint" is pinned by a dedicated test.
+  post-revocation checkpoint" is pinned by a dedicated test. Optional
+  `audit_sink` emits one `checkpoint.evaluate` event (COMMIT → allow;
+  ABORT/DOWNGRADE → deny).
 - **Session tokens v0** (`envelope/session_token.py`, Phase 2 Track E
   E2): `SessionToken` is an EdDSA-signed JCS body with
   `typ="wt-session/v0"` cross-protocol binding, carrying a stable
@@ -187,6 +196,8 @@ each entry names the module that implements it.
   `seq == previous.seq + 1`, no subject / audience / scope drift,
   and a cumulative-lifetime cap (default 1 hour). Resume identifier
   replay (reusing `seq`) raises `SESSION_RESUME_SEQUENCE_INVALID`.
+  Optional `audit_sink` on `verify_session_token` / `verify_resume`
+  emits one `session.verify` event per call.
 - **Sybil deterrence v0** (`envelope/sybil_deterrence.py`, Phase 3
   Track A A1): `SybilDeterrence` enforces sliding-window quotas
   `max_per_issuer` and `max_per_tenant` on identity issuance.
@@ -592,7 +603,12 @@ each entry names the module that implements it.
   `discovery_signature_invalid`, `discovery_unknown_issuer`,
   `admission_workload_not_allowed`, `admission_version_incompatible`).
   Pairs with the existing `envelope.verify` / `capability.verify` /
-  `capability.issue` checkpoints in `audit.py`.
+  `capability.issue` checkpoints in `audit.py`. Phase 2 verifiers
+  (delegation, retrieval, egress, reviewer, tool gate, checkpoint,
+  session) accept the same optional `audit_sink` and emit
+  `delegation.verify` / `retrieval.verify` / `egress.verify` /
+  `review.verify` / `tool.verify` / `checkpoint.evaluate` /
+  `session.verify`. Sink failure fails closed. See leftover #100.
 - **Identity-aware rate limits v0** (`envelope/rate_limiter.py`):
   `IdentityRateLimiter` enforces per-identity fixed-count sliding
   windows with per-identity overrides. `RateLimitedVerifier` decorates

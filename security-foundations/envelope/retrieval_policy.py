@@ -27,8 +27,6 @@ Out of scope for v0
   :class:`RetrievalRule` entries.
 - Per-data-element column-level redaction (B3 territory).
 - Tenant federation rules ("allow retrieval from domain A only when X").
-- Audit checkpoint emission. Follow-up; pairs with the rest of Phase 2's
-  checkpoint suite.
 """
 
 from __future__ import annotations
@@ -37,10 +35,14 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from .audit import AuditSink
 from .audit_query import trust_domain_of
 from .data_classification import ClassifiedData, DataClass, is_more_restrictive
 from .deny_reason import DenyReason
 from .verify_envelope import SPIFFE_ID_RE
+
+RETRIEVAL_EVENT_TYPE = "retrieval.verify"
+RETRIEVAL_ARTIFACT_VERSION = "wt-retrieval/v0"
 
 
 class CrossTenantRetrieval(StrEnum):
@@ -77,6 +79,7 @@ class RetrievalPolicy(ABC):
         caller_iss: str,
         purpose_of_use: str,
         data: ClassifiedData,
+        audit_sink: AuditSink | None = None,
     ) -> RetrievalDecision:
         ...
 
@@ -106,6 +109,24 @@ class AllowlistRetrievalPolicy(RetrievalPolicy):
             )
 
     def evaluate(
+        self,
+        *,
+        caller_iss: str,
+        purpose_of_use: str,
+        data: ClassifiedData,
+        audit_sink: AuditSink | None = None,
+    ) -> RetrievalDecision:
+        decision = self._decide(
+            caller_iss=caller_iss, purpose_of_use=purpose_of_use, data=data
+        )
+        return _emit_retrieval(
+            audit_sink,
+            caller_iss=caller_iss,
+            data=data,
+            decision=decision,
+        )
+
+    def _decide(
         self,
         *,
         caller_iss: str,
@@ -161,16 +182,50 @@ class RetrievalError(ValueError):
         super().__init__(decision.reason)
         self.decision = decision
 
+def _emit_retrieval(
+    sink: AuditSink | None,
+    *,
+    caller_iss: str,
+    data: ClassifiedData,
+    decision: RetrievalDecision,
+) -> RetrievalDecision:
+    if sink is None:
+        return decision
+    origin_iss = data.lineage[0].actor_iss if data.lineage else ""
+    try:
+        sink.record(
+            event_type=RETRIEVAL_EVENT_TYPE,
+            outcome="allow" if decision.allowed else "deny",
+            reason=decision.reason,
+            reason_code=decision.reason_code,
+            artifact_version=RETRIEVAL_ARTIFACT_VERSION,
+            sender=caller_iss,
+            recipient=origin_iss,
+            issuer_iss=origin_iss,
+        )
+    except Exception as exc:
+        return RetrievalDecision(
+            allowed=False,
+            reason=f"audit sink failed: {type(exc).__name__}",
+            reason_code=DenyReason.AUDIT_SINK_FAILURE.value,
+        )
+    return decision
+
+
 def require_retrieval(
     *,
     caller_iss: str,
     purpose_of_use: str,
     data: ClassifiedData,
     policy: RetrievalPolicy,
+    audit_sink: AuditSink | None = None,
 ) -> RetrievalDecision:
     """Evaluate the policy and raise :class:`RetrievalError` on denial."""
     decision = policy.evaluate(
-        caller_iss=caller_iss, purpose_of_use=purpose_of_use, data=data
+        caller_iss=caller_iss,
+        purpose_of_use=purpose_of_use,
+        data=data,
+        audit_sink=audit_sink,
     )
     if not decision.allowed:
         raise RetrievalError(decision)

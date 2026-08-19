@@ -65,6 +65,7 @@ import jcs
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from .audit import AuditSink
 from .deny_reason import DenyReason
 from .verify_envelope import (
     KID_RE,
@@ -76,6 +77,8 @@ from .verify_envelope import (
 )
 
 SESSION_TYP = "wt-session/v0"
+SESSION_EVENT_TYPE = "session.verify"
+SESSION_ARTIFACT_VERSION = SESSION_TYP
 
 class SessionError(EnvelopeVerificationError):
     """Raised when a session token fails verification."""
@@ -193,6 +196,36 @@ def _validate_shape(token: SessionToken) -> None:
     if not isinstance(token.signature, str) or not token.signature:
         raise _malformed("signature must be a non-empty string")
 
+def _emit_verify(
+    sink: AuditSink | None,
+    token: SessionToken,
+    outcome: str,
+    reason: str,
+    reason_code: str,
+) -> None:
+    if sink is None:
+        return
+    try:
+        sink.record(
+            event_type=SESSION_EVENT_TYPE,
+            outcome=outcome,
+            reason=reason,
+            reason_code=reason_code,
+            artifact_version=SESSION_ARTIFACT_VERSION,
+            message_id=token.jti,
+            sender=token.sub,
+            recipient=token.aud,
+            envelope_kid=token.iss_kid,
+            issuer_iss=token.iss,
+            issuer_kid=token.iss_kid,
+        )
+    except Exception as exc:
+        raise SessionError(
+            f"audit sink failed: {type(exc).__name__}",
+            reason=DenyReason.AUDIT_SINK_FAILURE,
+        ) from exc
+
+
 def verify_session_token(
     token: SessionToken,
     *,
@@ -200,12 +233,40 @@ def verify_session_token(
     current: datetime,
     max_clock_skew: timedelta = timedelta(seconds=60),
     max_token_ttl: timedelta = timedelta(minutes=5),
+    audit_sink: AuditSink | None = None,
 ) -> SessionToken:
     """Validate shape, time window, and signature.
 
     Does NOT enforce chain rules — call :func:`verify_resume` for
     resume tokens.
+
+    ``audit_sink``, if supplied, receives one ``session.verify`` event
+    per call. Sink failure fails closed
+    (:class:`~deny_reason.DenyReason.AUDIT_SINK_FAILURE`).
     """
+    try:
+        verified = _verify_session_token_inner(
+            token,
+            issuer_lookup=issuer_lookup,
+            current=current,
+            max_clock_skew=max_clock_skew,
+            max_token_ttl=max_token_ttl,
+        )
+    except SessionError as exc:
+        _emit_verify(audit_sink, token, "deny", str(exc), exc.reason_code)
+        raise
+    _emit_verify(audit_sink, verified, "allow", "ok", "ok")
+    return verified
+
+
+def _verify_session_token_inner(
+    token: SessionToken,
+    *,
+    issuer_lookup: Callable[[str, str], bytes],
+    current: datetime,
+    max_clock_skew: timedelta,
+    max_token_ttl: timedelta,
+) -> SessionToken:
     _validate_shape(token)
 
     if token.iat > token.nbf or token.nbf > token.exp:
@@ -273,6 +334,7 @@ def verify_resume(
     max_clock_skew: timedelta = timedelta(seconds=60),
     max_token_ttl: timedelta = timedelta(minutes=5),
     max_session_lifetime: timedelta = timedelta(hours=1),
+    audit_sink: AuditSink | None = None,
 ) -> SessionToken:
     """Verify ``token`` as a resume of ``previous``.
 
@@ -285,7 +347,40 @@ def verify_resume(
     - ``token.aud == previous.aud`` (no audience drift)
     - ``token.scope == previous.scope`` (no scope drift)
     - ``token.exp - session_opened_at <= max_session_lifetime``
+
+    Emits one ``session.verify`` event for the resume-path check when
+    ``audit_sink`` is attached (the inner :func:`verify_session_token`
+    call does not emit a second event).
     """
+    try:
+        verified = _verify_resume_inner(
+            token,
+            previous=previous,
+            session_opened_at=session_opened_at,
+            issuer_lookup=issuer_lookup,
+            current=current,
+            max_clock_skew=max_clock_skew,
+            max_token_ttl=max_token_ttl,
+            max_session_lifetime=max_session_lifetime,
+        )
+    except SessionError as exc:
+        _emit_verify(audit_sink, token, "deny", str(exc), exc.reason_code)
+        raise
+    _emit_verify(audit_sink, verified, "allow", "ok", "ok")
+    return verified
+
+
+def _verify_resume_inner(
+    token: SessionToken,
+    *,
+    previous: SessionToken,
+    session_opened_at: int,
+    issuer_lookup: Callable[[str, str], bytes],
+    current: datetime,
+    max_clock_skew: timedelta,
+    max_token_ttl: timedelta,
+    max_session_lifetime: timedelta,
+) -> SessionToken:
     # Cross-session rules first — these are the resume contract and
     # must hold regardless of whether the new token itself verifies.
     if token.session_id != previous.session_id:

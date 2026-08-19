@@ -22,6 +22,14 @@ Enable useful peer-to-peer delegated workflows with:
 4. AI-specific injection defenses.
 5. Long-running execution controls (revocation-aware).
 6. Enhanced auditability and policy explainability.
+   **Landed (v0, leftover #100):** the Phase 2 verifiers accept an
+   optional `audit_sink` and emit one hash-chained checkpoint
+   (`delegation.verify`, `retrieval.verify`, `egress.verify`,
+   `review.verify`, `tool.verify`, `checkpoint.evaluate`,
+   `session.verify`) on allow and on deny. Sink failure fails
+   closed. Callers that omit the sink are unchanged. Pinned by
+   `envelope/test_phase2_audit_emission.py` and proof obligation
+   `phase2_verifiers_emit_audit_checkpoints`.
 
 ### Out of Scope
 - Full mesh-wide adaptive abuse economics.
