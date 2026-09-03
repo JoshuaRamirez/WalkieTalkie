@@ -244,6 +244,14 @@ def _burden_body(*, work_units: int, issuer_iss: str, issuer_kid: str) -> dict:
 
 
 def _burden_integrity(*, work_units: int, issuer_iss: str, issuer_kid: str) -> str:
+    """Mutation pin over the declared fields.
+
+    Anyone who can choose ``work_units`` can recompute this digest.
+    That is intentional: v0 does not ship a mining loop, a TPM quote,
+    or a trusted-attestor signature. The issuance pipeline is the
+    trusted producer of the proof; this hash only lets tests pin that
+    a mutated claim fails closed.
+    """
     return hashlib.sha256(
         jcs.canonicalize(
             _burden_body(
@@ -259,11 +267,12 @@ def _burden_integrity(*, work_units: int, issuer_iss: str, issuer_kid: str) -> s
 class AttestationBurdenProof:
     """Structured v0 attestation-burden proof.
 
-    Declares ``work_units`` and an integrity digest over the
+    Declares ``work_units`` and a mutation-pin digest over the
     JCS-canonicalized body (``typ``, ``work_units``, issuer binding).
-    This is not a mining loop and not hardware attestation — the
-    issuance pipeline constructs the proof; the substrate verifies
-    the claim and the digest.
+    The digest is not a work witness: recomputing SHA-256 does not
+    prove cost. The issuance pipeline is the trusted producer; this
+    verifier only checks the structured claim and that the digest
+    still matches. No mining loop, no hardware attestation.
     """
 
     work_units: int
@@ -296,7 +305,13 @@ def make_attestation_proof(
     issuer_iss: str,
     issuer_kid: str,
 ) -> AttestationBurdenProof:
-    """Construct a well-formed proof. Not a miner — stamps the digest."""
+    """Stamp a well-formed proof for tests and pipeline fixtures.
+
+    Not a miner and not a work witness. Choosing a large
+    ``work_units`` and calling this helper does not demonstrate
+    cost — it only fills the mutation-pin digest so the verifier
+    can check structure and the configured minimum.
+    """
     return AttestationBurdenProof(
         work_units=work_units,
         issuer_iss=issuer_iss,
