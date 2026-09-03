@@ -199,17 +199,24 @@ each entry names the module that implements it.
   Optional `audit_sink` on `verify_session_token` / `verify_resume`
   emits one `session.verify` event per call.
 - **Sybil deterrence v0** (`envelope/sybil_deterrence.py`, Phase 3
-  Track A A1): `SybilDeterrence` enforces sliding-window quotas
-  `max_per_issuer` and `max_per_tenant` on identity issuance.
-  `InMemorySybilLedger` is the v0 backend; cluster-wide consistency
-  belongs to a distributed implementation behind the `SybilLedger`
-  ABC. `IssuerReputation` tracks a per-`(iss, kid)` score with
-  configurable decay, `reward()` / `penalize()` adjustments, and a
-  `[floor, ceiling]` clamp; the gate refuses issuance when the
-  decayed score falls below `min_reputation`. Saturation paths
-  surface distinct `SYBIL_ISSUER_QUOTA_EXCEEDED` /
-  `SYBIL_TENANT_QUOTA_EXCEEDED` / `SYBIL_REPUTATION_INSUFFICIENT`
-  reason codes.
+  Track A A1, leftover #106 burden hook): `SybilDeterrence` enforces
+  sliding-window quotas `max_per_issuer` and `max_per_tenant` on
+  identity issuance. `InMemorySybilLedger` is the v0 backend;
+  cluster-wide consistency belongs to a distributed implementation
+  behind the `SybilLedger` ABC. `IssuerReputation` tracks a
+  per-`(iss, kid)` score with configurable decay, `reward()` /
+  `penalize()` adjustments, and a `[floor, ceiling]` clamp; the
+  gate refuses issuance when the decayed score falls below
+  `min_reputation`. Optional `burden` (`AttestationBurden`) is the
+  leftover cost dial: when attached, `evaluate` requires a
+  structured `AttestationBurdenProof` whose declared `work_units`
+  meet `min_work_units` and whose JCS+sha256 integrity matches.
+  Missing, malformed, or under-threshold proofs fail closed.
+  Callers that omit the hook are unchanged. Saturation and burden
+  paths surface distinct `SYBIL_ISSUER_QUOTA_EXCEEDED` /
+  `SYBIL_TENANT_QUOTA_EXCEEDED` / `SYBIL_REPUTATION_INSUFFICIENT` /
+  `SYBIL_ATTESTATION_PROOF_MALFORMED` /
+  `SYBIL_ATTESTATION_BURDEN_INSUFFICIENT` reason codes.
 - **Eclipse resistance v0** (`envelope/eclipse_resistance.py`, Phase
   3 Track A A2): `select_neighbors()` is a freshness-first greedy
   selector that caps per-trust-domain occupancy via

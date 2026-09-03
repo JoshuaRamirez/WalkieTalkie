@@ -78,7 +78,15 @@ deliverables carry `**Landed (v0):**` annotations in
   admitted set; no digest truncation, no magic cap, no eviction.
   Operator seeds are retained as bootstrap. Callers that omit the
   gate are unchanged. See leftover #104 / `DEFERRED.md`.
-- **Proof-obligation registry** (`envelope/proof_obligations.py`): 62 invariants,
+- **Phase 3 leftover #106 — attestation burden tuning.** Optional
+  `burden` (`AttestationBurden`) on `SybilDeterrence`.
+  `evaluate(..., attestation_proof=)` verifies a structured
+  `AttestationBurdenProof` has at least `min_work_units`. Missing,
+  malformed, or under-threshold proofs fail closed. Integrity is
+  JCS+sha256 over the declared fields — not a mining loop and not
+  hardware attestation. Callers that omit the hook stay quotas +
+  reputation only. See leftover #106 / `DEFERRED.md`.
+- **Proof-obligation registry** (`envelope/proof_obligations.py`): 63 invariants,
   each pinned by a canonical test and gated by `test_every_obligation_resolves`.
 - Root `README.md`, `SECURITY.md` disclosure policy, `CHANGELOG.md`,
   `CONTRIBUTING.md`, and a `.github/pull_request_template.md`.

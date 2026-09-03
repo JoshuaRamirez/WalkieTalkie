@@ -536,6 +536,24 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
         ),
     ),
     ProofObligation(
+        name="attestation_burden_minimum_enforced",
+        phase=Phase.PHASE_3,
+        track="A",
+        statement=(
+            "When SybilDeterrence is constructed with an "
+            "AttestationBurden hook, evaluate denies issuance unless "
+            "the presented proof is well-formed, bound to the issuer, "
+            "integrity-valid, and declares at least min_work_units. "
+            "Missing, malformed, or under-threshold proofs fail "
+            "closed. Callers that omit the hook are unchanged "
+            "(quotas + reputation only)."
+        ),
+        canonical_test=(
+            "envelope.test_sybil_deterrence.AttestationBurdenTests"
+            ".test_below_min_work_units_denied"
+        ),
+    ),
+    ProofObligation(
         name="discovery_freshness_monotonic",
         phase=Phase.PHASE_3,
         track="A",
