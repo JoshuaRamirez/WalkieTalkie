@@ -541,12 +541,10 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
         track="A",
         statement=(
             "When SybilDeterrence is constructed with an "
-            "AttestationBurden hook, evaluate denies issuance unless "
-            "the presented proof is well-formed, bound to the issuer, "
-            "integrity-valid, and declares at least min_work_units. "
-            "Missing, malformed, or under-threshold proofs fail "
-            "closed. Callers that omit the hook are unchanged "
-            "(quotas + reputation only)."
+            "AttestationBurden hook, evaluate denies a well-formed, "
+            "integrity-valid, issuer-bound proof whose declared "
+            "work_units are below min_work_units "
+            "(SYBIL_ATTESTATION_BURDEN_INSUFFICIENT)."
         ),
         canonical_test=(
             "envelope.test_sybil_deterrence.AttestationBurdenTests"

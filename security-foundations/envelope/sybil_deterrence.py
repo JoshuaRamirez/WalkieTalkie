@@ -445,6 +445,13 @@ class SybilDeterrence:
         now: datetime,
         attestation_proof: AttestationBurdenProof | None = None,
     ) -> IssuanceDecision:
+        # Validate issuer_iss/issuer_kid the same way the no-hook path
+        # does (via reputation) before the optional burden check, so a
+        # programmer error still raises SybilDeterrenceError instead of
+        # being misclassified as an attestation-proof deny.
+        score = self.reputation.current_score(
+            issuer_iss, issuer_kid, now=now
+        )
         if self.burden is not None:
             burden_decision = self.burden.verify(
                 attestation_proof,
@@ -454,9 +461,6 @@ class SybilDeterrence:
             if not burden_decision.allowed:
                 return burden_decision
 
-        score = self.reputation.current_score(
-            issuer_iss, issuer_kid, now=now
-        )
         if score < self.min_reputation:
             return IssuanceDecision(
                 allowed=False,

@@ -410,6 +410,21 @@ class AttestationBurdenTests(unittest.TestCase):
         )
         self.assertEqual(decision.reason_code, "sybil_reputation_insufficient")
 
+    def test_invalid_issuer_still_raises_when_hook_attached(self):
+        gate = _gate(burden=AttestationBurden(min_work_units=1))
+        with self.assertRaisesRegex(SybilDeterrenceError, "issuer_iss"):
+            gate.evaluate(
+                issuer_iss="not-spiffe",
+                issuer_kid=_KID,
+                now=_NOW,
+            )
+        with self.assertRaisesRegex(SybilDeterrenceError, "issuer_kid"):
+            gate.evaluate(
+                issuer_iss=_ISSUER_A,
+                issuer_kid="bad kid",
+                now=_NOW,
+            )
+
     def test_negative_min_work_units_rejected(self):
         with self.assertRaisesRegex(SybilDeterrenceError, "min_work_units"):
             AttestationBurden(min_work_units=-1)
