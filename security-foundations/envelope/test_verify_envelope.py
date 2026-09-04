@@ -51,6 +51,7 @@ def mint_capability_token(
     payload_digest: str,
     now: datetime,
     ttl_seconds: int = 240,
+    resource: str | None = None,
 ) -> str:
     """Test helper that wraps CapabilityIssuer for fixture-style use."""
     from envelope.capability_issuer import CapabilityIssuer
@@ -71,6 +72,7 @@ def mint_capability_token(
         envelope_digest=payload_digest,
         jti="0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c2",
         now=now,
+        resource=resource,
     )
 
 _ISSUER_IDENTITY = "spiffe://mesh/cap-issuer-1"
@@ -133,6 +135,35 @@ class VerifyEnvelopeTests(unittest.TestCase):
     def test_valid_envelope_passes(self):
         envelope, now = self._valid_envelope()
         self._verify(envelope, now)
+
+    def test_optional_resource_round_trips_through_verify_envelope(self):
+        # Leftover #108: a schema-valid envelope MAY carry resource.
+        # A matching token claim must verify through the full pipeline.
+        now = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
+        envelope, _ = self._valid_envelope()
+        envelope["resource"] = "tool:read_file"
+        envelope["capability_token"] = mint_capability_token(
+            issuer_priv_pem=self.issuer_priv_pem,
+            issuer_kid=_ISSUER_KID,
+            iss=_ISSUER_IDENTITY,
+            sub=_SENDER,
+            aud=_RECIPIENT,
+            scope=_PURPOSE,
+            payload_digest=envelope["payload_digest"],
+            now=now,
+            resource="tool:read_file",
+        )
+        envelope["signature"] = ""
+        signing_input = canonicalize_envelope_for_signing(envelope)
+        envelope["signature"] = sign(signing_input, self.signer_priv_pem)
+        claims = verify_envelope(
+            envelope,
+            key_lookup=lambda kid: self.signer_pub_pem,
+            issuer_lookup=self.issuer_lookup,
+            replay_cache=InMemoryReplayCache(),
+            now=now,
+        )
+        self.assertEqual(claims.resource, "tool:read_file")
 
     def test_tampered_payload_fails(self):
         envelope, now = self._valid_envelope()

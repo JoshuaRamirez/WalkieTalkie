@@ -46,13 +46,16 @@ rules live in `capability_token.py`; the contract for the verifier is:
 
 - **Header** MUST set `alg: "EdDSA"`, `typ: "wt-cap+jwt"`, and a `kid` matching
   `KID_RE`. `alg=none`, `HS256`, etc. are fatal.
-- **Claims** (all required): `iss`, `sub`, `aud`, `scope`, `iat`, `nbf`, `exp`,
+- **Claims** (required): `iss`, `sub`, `aud`, `scope`, `iat`, `nbf`, `exp`,
   `jti`, `cnf.envelope_digest`. Times are NumericDate (seconds since epoch).
-- **Envelope binding** (the validator enforces all four):
+  Optional `resource` is a non-empty string.
+- **Envelope binding** (the validator enforces the four required arms;
+  `resource` only when the token claim is present):
   - `sub == envelope.sender_spiffe_id`
   - `aud == envelope.recipient_spiffe_id`
   - `scope == envelope.purpose_of_use`
   - `cnf.envelope_digest == envelope.payload_digest`
+  - `resource == envelope.resource` (only if the token carries `resource`)
 - **Time window** uses `VerificationConfig.max_clock_skew` and a separate
   `max_capability_ttl` (default 5 minutes). `iat <= nbf < exp`.
 - **Issuer trust** is a separate `IssuerTrustStore` keyed on `(iss, kid)`. The

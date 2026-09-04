@@ -91,9 +91,11 @@ deliverables carry `**Landed (v0):**` annotations in
   unchanged. When present, the claim must equal `envelope.resource`
   (the same dict `scope` binds to `purpose_of_use`). Mismatch is
   `capability_resource_mismatch`; malformed is
-  `capability_invalid_claim`. `CapabilityIssuer.issue(resource=)`
-  mints the claim; omit stays default. No action/resource ACL
-  vocabulary. See leftover #108 / `DEFERRED.md`.
+  `capability_invalid_claim`.   `CapabilityIssuer.issue(resource=)`
+  mints the claim; omit stays default. The envelope schema lists
+  `resource` as an optional property so a schema-valid envelope can
+  carry the binding. No action/resource ACL vocabulary. See leftover
+  #108 / `DEFERRED.md`.
 - **Proof-obligation registry** (`envelope/proof_obligations.py`): 64 invariants,
   each pinned by a canonical test and gated by `test_every_obligation_resolves`.
 - Root `README.md`, `SECURITY.md` disclosure policy, `CHANGELOG.md`,

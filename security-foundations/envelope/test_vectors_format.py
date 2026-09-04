@@ -49,6 +49,20 @@ class EnvelopeVectorTests(unittest.TestCase):
         self.assertEqual(payload["cnf"]["envelope_digest"], envelope["payload_digest"])
         self.assertNotIn("resource", payload)
 
+    def test_schema_allows_optional_resource(self):
+        # Leftover #108 / Codex P1: a resource-bearing token binds to
+        # envelope.resource. That field must be legal on a schema-valid
+        # envelope (optional, not required) so additionalProperties:
+        # false does not make the binding unusable.
+        schema = json.loads(
+            (pathlib.Path(__file__).resolve().parent / "schema-v0.json").read_text()
+        )
+        self.assertFalse(schema["additionalProperties"])
+        self.assertIn("resource", schema["properties"])
+        self.assertNotIn("resource", schema["required"])
+        self.assertEqual(schema["properties"]["resource"]["type"], "string")
+        self.assertEqual(schema["properties"]["resource"]["minLength"], 1)
+
 class AuditEventVectorTests(unittest.TestCase):
     def test_audit_chain_verifies(self):
         sink = JsonlAuditSink(_VECTORS_DIR / "audit-event.jsonl")

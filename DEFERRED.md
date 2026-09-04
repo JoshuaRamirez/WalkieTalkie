@@ -122,9 +122,11 @@ binds to `purpose_of_use`. Mismatch is `CAP_RESOURCE_MISMATCH`;
 malformed (empty / non-string) is `CAP_INVALID_CLAIM`.
 `CapabilityIssuer.issue(resource=)` mints the claim; omit stays
 default. Issuance policy still evaluates `(sub, aud, scope)` only —
-no action/resource ACL vocabulary. Proof obligation
-`capability_resource_claim_enforced` pins the mismatch. See leftover
-#108.
+no action/resource ACL vocabulary. The envelope schema lists
+`resource` as an optional property so a schema-valid envelope can
+carry the binding (`additionalProperties` stays `false`). Proof
+obligation `capability_resource_claim_enforced` pins the mismatch.
+See leftover #108.
 
 ### Scope narrowing in delegation (Phase 2 Track A)
 v0 requires identical `scope` at every hop. Partial-order scope

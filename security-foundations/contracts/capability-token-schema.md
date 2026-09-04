@@ -51,7 +51,7 @@ base64url(payload)`. Maximum total length: **4096 bytes**.
 
 | Claim | Constraint |
 |---|---|
-| `resource` | non-empty string — when present, MUST equal the `resource` key on the envelope dict passed to `verify_capability_token` (the same verification surface `scope` binds to `purpose_of_use`). Tokens that omit the claim remain valid. Making this claim required would need a new `typ`. |
+| `resource` | non-empty string — when present, MUST equal the optional envelope `resource` field (the same verification surface `scope` binds to `purpose_of_use`). Tokens that omit the claim remain valid. Making this claim required would need a new `typ`. The envelope schema lists `resource` as optional so a schema-valid envelope can carry the binding (`additionalProperties` stays `false`). |
 
 ### Validation order
 
