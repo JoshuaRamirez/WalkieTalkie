@@ -289,6 +289,21 @@ OBLIGATIONS: tuple[ProofObligation, ...] = (
             ".test_envelope_signing_key_cannot_sign_capability"
         ),
     ),
+    ProofObligation(
+        name="capability_resource_claim_enforced",
+        phase=Phase.PHASE_1,
+        track="C",
+        statement=(
+            "A capability token that carries an optional resource claim "
+            "is rejected unless that claim equals envelope.resource — "
+            "the same verification dict scope binds to purpose_of_use. "
+            "Tokens that omit the claim still verify (backward-compatible)."
+        ),
+        canonical_test=(
+            "envelope.test_capability_token.CapabilityTokenTests"
+            ".test_mismatching_resource_claim_denied"
+        ),
+    ),
     # ----- Phase 2 Track A delegation -----
     ProofObligation(
         name="delegation_scope_monotonicity",

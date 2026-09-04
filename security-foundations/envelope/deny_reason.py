@@ -78,6 +78,7 @@ class DenyReason(StrEnum):
     CAP_AUD_MISMATCH = "capability_aud_mismatch"
     CAP_SCOPE_MISMATCH = "capability_scope_mismatch"
     CAP_DIGEST_MISMATCH = "capability_digest_mismatch"
+    CAP_RESOURCE_MISMATCH = "capability_resource_mismatch"
 
     # --- Capability token: time / state ---
     CAP_IAT_AFTER_NBF = "capability_iat_after_nbf"

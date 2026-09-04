@@ -86,7 +86,15 @@ deliverables carry `**Landed (v0):**` annotations in
   JCS+sha256 over the declared fields — not a mining loop and not
   hardware attestation. Callers that omit the hook stay quotas +
   reputation only. See leftover #106 / `DEFERRED.md`.
-- **Proof-obligation registry** (`envelope/proof_obligations.py`): 63 invariants,
+- **Phase 1 leftover #108 — resource claim in capability tokens.**
+  Optional `resource` on `wt-cap+jwt`. Tokens that omit it verify
+  unchanged. When present, the claim must equal `envelope.resource`
+  (the same dict `scope` binds to `purpose_of_use`). Mismatch is
+  `capability_resource_mismatch`; malformed is
+  `capability_invalid_claim`. `CapabilityIssuer.issue(resource=)`
+  mints the claim; omit stays default. No action/resource ACL
+  vocabulary. See leftover #108 / `DEFERRED.md`.
+- **Proof-obligation registry** (`envelope/proof_obligations.py`): 64 invariants,
   each pinned by a canonical test and gated by `test_every_obligation_resolves`.
 - Root `README.md`, `SECURITY.md` disclosure policy, `CHANGELOG.md`,
   `CONTRIBUTING.md`, and a `.github/pull_request_template.md`.

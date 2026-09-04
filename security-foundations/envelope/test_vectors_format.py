@@ -47,6 +47,7 @@ class EnvelopeVectorTests(unittest.TestCase):
         self.assertEqual(payload["aud"], envelope["recipient_spiffe_id"])
         self.assertEqual(payload["scope"], envelope["purpose_of_use"])
         self.assertEqual(payload["cnf"]["envelope_digest"], envelope["payload_digest"])
+        self.assertNotIn("resource", payload)
 
 class AuditEventVectorTests(unittest.TestCase):
     def test_audit_chain_verifies(self):

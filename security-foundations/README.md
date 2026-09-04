@@ -26,11 +26,14 @@ each entry names the module that implements it.
 - **Capability token v0** (`envelope/capability_token.py` validator,
   `envelope/capability_issuer.py` issuer): RFC 7519 JWT with EdDSA, bound to
   the envelope via `cnf.envelope_digest` so a leaked or replayed token only
-  authorizes its specific payload. Issuer trust is a separate
+  authorizes its specific payload. Optional `resource` claim (leftover
+  #108) binds to `envelope.resource` when present; tokens that omit it
+  verify unchanged. Issuer trust is a separate
   `IssuerTrustStore` (`envelope/issuer_trust_store.py`) keyed on `(iss, kid)`,
   so envelope-signing keys cannot be used to mint tokens. `CapabilityIssuer`
   validates `iss`/`kid`/`ttl` at construction and auto-generates UUIDv7 `jti`
   values; `generate_uuidv7` is a small RFC 9562 implementation.
+  `issue(resource=)` mints the optional claim.
 - **Issuance policy v0** (`envelope/issuance_policy.py`): `IssuancePolicy`
   ABC + `AllowAllPolicy` (default) + `AllowlistPolicy` (frozen
   `(sub, aud, scope)` tuples + `max_ttl`). Policy denials raise

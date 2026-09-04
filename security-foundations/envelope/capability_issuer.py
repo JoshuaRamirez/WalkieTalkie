@@ -12,6 +12,8 @@ A real production deployment will wrap this class with an HTTP/RPC issuance
 - pluggable :class:`IssuancePolicy` (default ``AllowAllPolicy`` preserves
   pre-policy behavior; ``AllowlistPolicy`` enforces explicit (sub, aud,
   scope) tuples and a max TTL — see :mod:`issuance_policy`);
+- optional ``resource`` on :meth:`issue` (omitted by default; when set,
+  the validator binds it to ``envelope.resource``);
 - optional :class:`AuditSink` emission (``capability.issue`` event_type)
   for issuance accountability.
 
@@ -138,6 +140,7 @@ class CapabilityIssuer:
         jti: str | None = None,
         ttl: timedelta | None = None,
         now: datetime | None = None,
+        resource: str | None = None,
     ) -> str:
         if not isinstance(sub, str) or not SPIFFE_ID_RE.match(sub):
             raise ValueError(f"invalid sub: {sub!r}")
@@ -147,6 +150,8 @@ class CapabilityIssuer:
             raise ValueError("scope must be a non-empty string")
         if not isinstance(envelope_digest, str) or not HEX_SHA256_RE.match(envelope_digest):
             raise ValueError(f"invalid envelope_digest: {envelope_digest!r}")
+        if resource is not None and (not isinstance(resource, str) or not resource):
+            raise ValueError("resource must be a non-empty string")
 
         effective_ttl = ttl if ttl is not None else self.default_ttl
         if effective_ttl <= timedelta(0):
@@ -192,6 +197,8 @@ class CapabilityIssuer:
             "jti": jti,
             "cnf": {"envelope_digest": envelope_digest},
         }
+        if resource is not None:
+            payload["resource"] = resource
 
         h = _b64u(json.dumps(header, separators=(",", ":")).encode("utf-8"))
         p = _b64u(json.dumps(payload, separators=(",", ":")).encode("utf-8"))

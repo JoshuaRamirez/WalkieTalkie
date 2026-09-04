@@ -33,7 +33,7 @@ base64url(payload)`. Maximum total length: **4096 bytes**.
 | `typ` | MUST be `"wt-cap+jwt"` |
 | `kid` | matches `^[A-Za-z0-9._:-]{1,128}$` |
 
-### Payload claims (all required)
+### Payload claims (required)
 
 | Claim | Constraint |
 |---|---|
@@ -47,6 +47,12 @@ base64url(payload)`. Maximum total length: **4096 bytes**.
 | `jti` | UUIDv7 (RFC 9562) — used by the revocation list |
 | `cnf` | object containing `envelope_digest` (hex sha256) — MUST equal envelope `payload_digest` |
 
+### Payload claims (optional)
+
+| Claim | Constraint |
+|---|---|
+| `resource` | non-empty string — when present, MUST equal the `resource` key on the envelope dict passed to `verify_capability_token` (the same verification surface `scope` binds to `purpose_of_use`). Tokens that omit the claim remain valid. Making this claim required would need a new `typ`. |
+
 ### Validation order
 
 The validator performs checks in this order and the order is part of the
@@ -56,7 +62,7 @@ contract:
 2. Three base64url segments.
 3. Header well-formedness (alg, typ, kid).
 4. Claim presence and per-claim format.
-5. Envelope binding (sub, aud, scope, cnf.envelope_digest).
+5. Envelope binding (sub, aud, scope, optional resource, cnf.envelope_digest).
 6. Time window (iat ≤ nbf, nbf-skew ≤ now ≤ exp+skew, exp-nbf ≤ TTL cap).
 7. Issuer key lookup `(iss, kid) -> PEM`. Missing or expired key is fatal.
 8. EdDSA signature verification.

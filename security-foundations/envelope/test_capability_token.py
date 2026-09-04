@@ -94,6 +94,56 @@ class CapabilityTokenTests(unittest.TestCase):
         claims = self._verify(token)
         self.assertEqual(claims.iss, "spiffe://mesh/cap-issuer-1")
         self.assertEqual(claims.scope, "invoke_tool")
+        self.assertIsNone(claims.resource)
+
+    def test_absent_resource_claim_still_verifies(self):
+        # Leftover #108: omit stays valid. The envelope may even name a
+        # resource — a token that did not constrain one still verifies.
+        self.envelope["resource"] = "tool:read_file"
+        token = _make_token(private_key=self.priv)
+        claims = self._verify(token)
+        self.assertIsNone(claims.resource)
+
+    def test_matching_resource_claim_allows(self):
+        self.envelope["resource"] = "tool:read_file"
+        token = _make_token(
+            private_key=self.priv,
+            payload_overrides={"resource": "tool:read_file"},
+        )
+        claims = self._verify(token)
+        self.assertEqual(claims.resource, "tool:read_file")
+
+    def test_mismatching_resource_claim_denied(self):
+        self.envelope["resource"] = "tool:read_file"
+        token = _make_token(
+            private_key=self.priv,
+            payload_overrides={"resource": "tool:exec_sql"},
+        )
+        with self.assertRaises(EnvelopeVerificationError) as ctx:
+            self._verify(token)
+        self.assertEqual(ctx.exception.reason_code, "capability_resource_mismatch")
+        self.assertIn("resource does not match envelope resource", str(ctx.exception))
+
+    def test_resource_claim_without_envelope_resource_denied(self):
+        token = _make_token(
+            private_key=self.priv,
+            payload_overrides={"resource": "tool:read_file"},
+        )
+        with self.assertRaises(EnvelopeVerificationError) as ctx:
+            self._verify(token)
+        self.assertEqual(ctx.exception.reason_code, "capability_resource_mismatch")
+
+    def test_malformed_resource_claim_denied(self):
+        for bad in ("", 1, [], {"name": "x"}):
+            with self.subTest(resource=bad):
+                token = _make_token(
+                    private_key=self.priv,
+                    payload_overrides={"resource": bad},
+                )
+                with self.assertRaises(EnvelopeVerificationError) as ctx:
+                    self._verify(token)
+                self.assertEqual(ctx.exception.reason_code, "capability_invalid_claim")
+                self.assertIn("resource must be a non-empty string", str(ctx.exception))
 
     def test_oversized_token_rejected(self):
         token = "a" * (MAX_TOKEN_BYTES + 1)

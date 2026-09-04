@@ -47,6 +47,11 @@ Enable authenticated peer discovery and request/response execution with anti-rep
 - Capability validator middleware. **Landed (v0):** RFC 7519 JWT (EdDSA) with
   `cnf.envelope_digest` binding, separate `IssuerTrustStore`, default 5-minute
   TTL. See `security-foundations/envelope/capability_token.py`.
+  **Landed (v0, leftover #108):** optional `resource` claim. Tokens that
+  omit it verify unchanged. When present, the claim must be a non-empty
+  string and must equal `envelope.resource` (the same verification dict
+  `scope` binds to `purpose_of_use`). Mismatch is `CAP_RESOURCE_MISMATCH`.
+  `CapabilityIssuer.issue(resource=)` mints the claim; omit stays default.
 - Capability revocation API + cache invalidation channel.
   **Local revocation list landed (v0):** `RevocationList` interface with
   `InMemoryRevocationList` and `FileBackedRevocationList` in
@@ -241,6 +246,10 @@ Enable authenticated peer discovery and request/response execution with anti-rep
   purpose_of_use`, `aud does not match envelope recipient`, `revoked`).
   Revocation requires a `RevocationList` to be passed; absent that the other
   three arms still apply.
+  **Landed (v0, leftover #108):** optional `resource` is a fifth binding
+  arm. Present-and-mismatched tokens deny with
+  `capability_resource_mismatch`; tokens that omit the claim are
+  unchanged.
 - Deny on missing delegation metadata (if delegation present).
   **Not yet applicable;** delegation is a Phase 2 concern (D2.1).
 

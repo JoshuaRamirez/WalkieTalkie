@@ -98,6 +98,68 @@ class CapabilityIssuerIssueTests(unittest.TestCase):
         self.assertEqual(claims.iss, _ISS)
         self.assertEqual(claims.issuer_kid, _KID)
         self.assertEqual(claims.scope, _PURPOSE)
+        self.assertIsNone(claims.resource)
+
+    def test_round_trip_with_optional_resource(self):
+        issuer, pem = _make_issuer()
+        now = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
+        token = issuer.issue(
+            sub=_SUB,
+            aud=_AUD,
+            scope=_PURPOSE,
+            envelope_digest=_DIGEST,
+            now=now,
+            resource="tool:read_file",
+        )
+        envelope = {
+            "sender_spiffe_id": _SUB,
+            "recipient_spiffe_id": _AUD,
+            "purpose_of_use": _PURPOSE,
+            "payload_digest": _DIGEST,
+            "resource": "tool:read_file",
+        }
+
+        def _lookup(iss, kid):
+            if (iss, kid) != (_ISS, _KID):
+                raise EnvelopeVerificationError("unknown")
+            return pem
+
+        claims = verify_capability_token(
+            token,
+            envelope=envelope,
+            issuer_lookup=_lookup,
+            current=now,
+            max_clock_skew=timedelta(seconds=60),
+            max_capability_ttl=timedelta(minutes=5),
+        )
+        self.assertEqual(claims.resource, "tool:read_file")
+
+    def test_omit_resource_leaves_claim_absent(self):
+        issuer, _ = _make_issuer()
+        now = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
+        token = issuer.issue(
+            sub=_SUB, aud=_AUD, scope=_PURPOSE, envelope_digest=_DIGEST, now=now
+        )
+        import base64
+        import json
+
+        _, p, _ = token.split(".")
+        padded = p + ("=" * ((4 - len(p) % 4) % 4))
+        payload = json.loads(base64.urlsafe_b64decode(padded))
+        self.assertNotIn("resource", payload)
+
+    def test_invalid_resource_rejected(self):
+        issuer, _ = _make_issuer()
+        for bad in ("", 1):
+            with self.subTest(resource=bad):
+                with self.assertRaisesRegex(ValueError, "resource must be a non-empty string"):
+                    issuer.issue(
+                        sub=_SUB,
+                        aud=_AUD,
+                        scope=_PURPOSE,
+                        envelope_digest=_DIGEST,
+                        resource=bad,  # type: ignore[arg-type]
+                    )
 
     def test_default_ttl_used_when_no_ttl_passed(self):
         issuer, _ = _make_issuer(default_ttl=timedelta(minutes=2))

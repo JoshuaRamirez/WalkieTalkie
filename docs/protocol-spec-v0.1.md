@@ -88,7 +88,9 @@ untrusted is acted on before the signature verifies.
 JWS Compact (`<b64u(header)>.<b64u(payload)>.<b64u(sig)>`), `typ:
 "wt-cap+jwt"`, detached EdDSA, max 4096 bytes. Least-privilege scope,
 short TTL, `cnf` proof-of-possession binding to the envelope digest so a
-captured token cannot be replayed on a different envelope.
+captured token cannot be replayed on a different envelope. Optional
+`resource` claim binds to `envelope.resource` when present; omit stays
+valid.
 
 ### 3.3 Discovery record (`contracts/discovery-record-schema.md`)
 `typ: "wt-discovery-record/v0"`, signed by a discovery authority over
