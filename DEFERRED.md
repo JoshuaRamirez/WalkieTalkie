@@ -114,9 +114,19 @@ never configure `tenant_budgets` see a no-op tenant half.
 leftover #102.
 
 ### Resource claim in capability tokens (Phase 1)
-Capability tokens carry `scope` but not `resource`. Adding a
-`resource` claim later is a backward-compatible claim addition;
-the validator can begin enforcing it then.
+**Shipped.** Optional `resource` claim on `wt-cap+jwt`. Tokens that
+omit it verify unchanged (the claim is not required; no `typ` bump).
+When present, the claim must be a non-empty string and must equal
+`envelope.resource` — the same verification dict `scope` already
+binds to `purpose_of_use`. Mismatch is `CAP_RESOURCE_MISMATCH`;
+malformed (empty / non-string) is `CAP_INVALID_CLAIM`.
+`CapabilityIssuer.issue(resource=)` mints the claim; omit stays
+default. Issuance policy still evaluates `(sub, aud, scope)` only —
+no action/resource ACL vocabulary. The envelope schema lists
+`resource` as an optional property so a schema-valid envelope can
+carry the binding (`additionalProperties` stays `false`). Proof
+obligation `capability_resource_claim_enforced` pins the mismatch.
+See leftover #108.
 
 ### Scope narrowing in delegation (Phase 2 Track A)
 v0 requires identical `scope` at every hop. Partial-order scope

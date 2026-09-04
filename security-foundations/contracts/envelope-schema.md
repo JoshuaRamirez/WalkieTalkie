@@ -24,6 +24,12 @@ exact byte sequence that gets signed (RFC 8785 / JCS).
 - `payload_digest` is `hex(sha256(jcs(payload)))`.
 - `capability_token` is bound by the `cnf.envelope_digest` claim — see
   [capability-token-schema.md](./capability-token-schema.md).
+- `resource` is an optional non-empty string (`minLength` 1, `maxLength`
+  128 — same upper bound as `purpose_of_use`). When a capability token
+  carries a `resource` claim, that claim MUST equal this field. Tokens
+  that omit the claim remain valid whether or not the envelope names a
+  resource. The field is not required; `additionalProperties` stays
+  `false`.
 - `kid` matches `^[A-Za-z0-9._:-]{1,128}$`.
 - `nonce` matches `^[A-Za-z0-9._:-]{16,256}$`.
 - `message_id` is a UUIDv7.

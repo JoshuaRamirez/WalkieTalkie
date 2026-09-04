@@ -8,7 +8,7 @@ Header (all required, all checked)::
 
     {"alg": "EdDSA", "typ": "wt-cap+jwt", "kid": "<issuer kid>"}
 
-Payload claims (all required)::
+Payload claims (required)::
 
     iss   issuer SPIFFE ID
     sub   subject SPIFFE ID — must equal envelope.sender_spiffe_id
@@ -21,13 +21,20 @@ Payload claims (all required)::
     cnf   {"envelope_digest": "<hex sha256>"} — must equal
           envelope.payload_digest, binding the token to one specific payload
 
+Optional payload claims::
+
+    resource  non-empty string — when present, must equal envelope.resource
+              (the same dict ``scope`` binds to ``purpose_of_use``). Tokens
+              that omit the claim verify unchanged.
+
 Signature is detached EdDSA over the ASCII bytes
 ``base64url(header) + "." + base64url(payload)`` (JWS standard).
 
 Out of scope for v0
 -------------------
 - Token issuance API.
-- ``resource`` claim and structured action/resource binding (deferred to v1).
+- Structured action/resource ACL vocabulary (a controlled taxonomy of
+  resources). v0 binds an opaque string when the claim is present.
 - Proof-of-possession via ``cnf.jwk``. v0 is bearer; a leaked token grants the
   same authorization for at most ``max_capability_ttl`` (5 minutes by default).
 """
@@ -74,6 +81,7 @@ class CapabilityClaims:
     jti: str
     envelope_digest: str
     issuer_kid: str
+    resource: str | None = None
 
 def _err(reason_code: DenyReason, message: str) -> EnvelopeVerificationError:
     return EnvelopeVerificationError(
@@ -172,6 +180,15 @@ def _extract_claims(payload: dict[str, Any], *, issuer_kid: str) -> CapabilityCl
     if not isinstance(envelope_digest, str) or not HEX_SHA256_RE.match(envelope_digest):
         raise _err(DenyReason.CAP_INVALID_CLAIM, "cnf.envelope_digest must be hex sha256")
 
+    resource: str | None = None
+    if "resource" in payload:
+        resource = payload["resource"]
+        if not isinstance(resource, str) or not resource:
+            raise _err(
+                DenyReason.CAP_INVALID_CLAIM,
+                "resource must be a non-empty string",
+            )
+
     return CapabilityClaims(
         iss=iss,
         sub=sub,
@@ -183,6 +200,7 @@ def _extract_claims(payload: dict[str, Any], *, issuer_kid: str) -> CapabilityCl
         jti=jti,
         envelope_digest=envelope_digest,
         issuer_kid=issuer_kid,
+        resource=resource,
     )
 
 def verify_capability_token(
@@ -208,6 +226,11 @@ def verify_capability_token(
         raise _err(
             DenyReason.CAP_SCOPE_MISMATCH,
             "scope does not match envelope purpose_of_use",
+        )
+    if claims.resource is not None and claims.resource != envelope.get("resource"):
+        raise _err(
+            DenyReason.CAP_RESOURCE_MISMATCH,
+            "resource does not match envelope resource",
         )
     if claims.envelope_digest != envelope["payload_digest"]:
         raise _err(

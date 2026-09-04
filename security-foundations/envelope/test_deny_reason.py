@@ -178,6 +178,17 @@ class CapabilityTokenReasonCodeTests(unittest.TestCase):
         token = _mint_token(self.priv, "0" * 64, self.now)
         self._expect_reason(DenyReason.CAP_DIGEST_MISMATCH, lambda: self._verify(token))
 
+    def test_resource_mismatch(self):
+        token = _mint_token(
+            self.priv,
+            self.envelope["payload_digest"],
+            self.now,
+            payload_overrides={"resource": "tool:read_file"},
+        )
+        self._expect_reason(
+            DenyReason.CAP_RESOURCE_MISMATCH, lambda: self._verify(token)
+        )
+
     def test_revoked(self):
         token = _mint_token(self.priv, self.envelope["payload_digest"], self.now)
         rl = InMemoryRevocationList(["0195f66a-0e14-7f0f-a5aa-0d7f3b6f08c2"])

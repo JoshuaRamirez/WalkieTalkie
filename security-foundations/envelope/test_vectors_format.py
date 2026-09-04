@@ -23,13 +23,18 @@ _VECTORS_DIR = pathlib.Path(__file__).resolve().parent / "test-vectors"
 class EnvelopeVectorTests(unittest.TestCase):
     def test_valid_envelope_has_all_required_fields(self):
         envelope = json.loads((_VECTORS_DIR / "valid-envelope.json").read_text())
-        required = {
-            "version", "message_id", "sender_spiffe_id", "recipient_spiffe_id",
-            "issued_at", "expires_at", "nonce", "capability_token",
-            "purpose_of_use", "kid", "alg", "payload", "payload_digest",
-            "signature",
-        }
+        schema = json.loads(
+            (pathlib.Path(__file__).resolve().parent / "schema-v0.json").read_text()
+        )
+        required = set(schema["required"])
+        allowed = set(schema["properties"])
         self.assertEqual(set(envelope) & required, required)
+        extras = set(envelope) - allowed
+        self.assertFalse(extras, f"envelope has undeclared fields: {extras}")
+        # Checked-in vector omits optional resource — still schema-valid.
+        self.assertNotIn("resource", envelope)
+        self.assertIn("resource", allowed)
+        self.assertNotIn("resource", required)
         self.assertEqual(envelope["version"], "v0")
         self.assertEqual(envelope["alg"], "Ed25519")
 
@@ -47,6 +52,22 @@ class EnvelopeVectorTests(unittest.TestCase):
         self.assertEqual(payload["aud"], envelope["recipient_spiffe_id"])
         self.assertEqual(payload["scope"], envelope["purpose_of_use"])
         self.assertEqual(payload["cnf"]["envelope_digest"], envelope["payload_digest"])
+        self.assertNotIn("resource", payload)
+
+    def test_schema_allows_optional_resource(self):
+        # Leftover #108 / Codex P1: a resource-bearing token binds to
+        # envelope.resource. That field must be legal on a schema-valid
+        # envelope (optional, not required) so additionalProperties:
+        # false does not make the binding unusable.
+        schema = json.loads(
+            (pathlib.Path(__file__).resolve().parent / "schema-v0.json").read_text()
+        )
+        self.assertFalse(schema["additionalProperties"])
+        self.assertIn("resource", schema["properties"])
+        self.assertNotIn("resource", schema["required"])
+        self.assertEqual(schema["properties"]["resource"]["type"], "string")
+        self.assertEqual(schema["properties"]["resource"]["minLength"], 1)
+        self.assertEqual(schema["properties"]["resource"]["maxLength"], 128)
 
 class AuditEventVectorTests(unittest.TestCase):
     def test_audit_chain_verifies(self):

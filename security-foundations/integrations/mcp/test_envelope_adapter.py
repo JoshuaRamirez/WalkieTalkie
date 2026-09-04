@@ -279,6 +279,9 @@ class IntegrationWithVerifierTests(unittest.TestCase):
         with open(schema_path) as f:
             schema = json.load(f)
         required = set(schema["required"])
+        allowed = set(schema["properties"])
+        self.assertIn("resource", allowed)
+        self.assertNotIn("resource", required)
 
         priv = Ed25519PrivateKey.generate()
         env = sign_envelope(
@@ -292,8 +295,10 @@ class IntegrationWithVerifierTests(unittest.TestCase):
         )
         missing = required - set(env)
         extra = set(env) - required
+        undeclared = set(env) - allowed
         self.assertFalse(missing, f"adapter omitted required fields: {missing}")
         self.assertFalse(extra, f"adapter emitted unexpected fields: {extra}")
+        self.assertFalse(undeclared, f"adapter emitted undeclared fields: {undeclared}")
 
 if __name__ == "__main__":
     unittest.main()
