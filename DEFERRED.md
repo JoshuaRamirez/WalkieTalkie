@@ -50,11 +50,20 @@ obligation `independent_samplers_identical_sets_detected` pins
 the report. See leftover #98.
 
 ### Attestation burden tuning (Phase 3 Track A A1)
-Proof-of-work or hardware-attestation cost dial belongs in the
-higher-level identity-issuance flow, not the in-process substrate.
-Follow-up would add a `SybilDeterrence`-shaped hook for "verify
-this attestation proof has at least X work units" callable from
-the issuance pipeline.
+**Shipped.** Optional `burden` (`AttestationBurden`) on
+`SybilDeterrence`. `evaluate(..., attestation_proof=)` calls
+`AttestationBurden.verify` — the leftover hook for "verify this
+attestation proof has at least X work units." A structured
+`AttestationBurdenProof` declares `work_units` plus a JCS+sha256
+integrity digest over `typ` / `work_units` / the issuer binding.
+Missing, malformed, or under-threshold proofs fail closed
+(`SYBIL_ATTESTATION_PROOF_MALFORMED` /
+`SYBIL_ATTESTATION_BURDEN_INSUFFICIENT`). The sibling is also
+callable on its own from an issuance pipeline. Callers that omit
+the hook are unchanged (quotas + reputation only). No mining
+loop, no TPM/HSM, no identity minting. Proof obligation
+`attestation_burden_minimum_enforced` pins the threshold. See
+leftover #106.
 
 ### Property / fuzz tests for delegation chains (Phase 2 Track A A3)
 **Shipped.** `security-foundations/envelope/test_delegation_receipt_properties.py`

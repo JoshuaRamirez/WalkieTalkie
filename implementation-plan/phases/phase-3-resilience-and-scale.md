@@ -109,10 +109,18 @@ Transitions must follow deterministic workflow:
   wanting cluster-wide consistency swap in a distributed store
   behind the `SybilLedger` ABC.
 - Attestation burden tuning.
-  **Deferred:** the attestation cost dial (proof-of-work or
-  hardware-attestation strength) belongs in the higher-level
-  identity-issuance flow and is documented as out-of-scope for the
-  in-process v0 primitive.
+  **Landed (v0, leftover #106):** optional `burden`
+  (`AttestationBurden`) on `SybilDeterrence`.
+  `evaluate(..., attestation_proof=)` verifies a structured
+  `AttestationBurdenProof` has at least `min_work_units`. Missing,
+  malformed, or under-threshold proofs fail closed
+  (`SYBIL_ATTESTATION_PROOF_MALFORMED` /
+  `SYBIL_ATTESTATION_BURDEN_INSUFFICIENT`). Integrity is JCS+sha256
+  over `{typ, work_units, issuer_iss, issuer_kid}` — not a mining
+  loop and not hardware attestation. Callers that omit the hook
+  are unchanged (quotas + reputation only). The sibling
+  `AttestationBurden.verify` is also callable from an issuance
+  pipeline on its own.
 - Reputation hygiene and decay controls.
   **Landed (v0):** `IssuerReputation` tracks a per-`(iss, kid)`
   score with configurable `decay_per_interval` / `decay_interval`,
