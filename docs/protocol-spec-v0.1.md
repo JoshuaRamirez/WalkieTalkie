@@ -80,9 +80,11 @@ signature is EdDSA over the RFC 8785 canonicalization of the object with
 carried `capability_token` is bound to the envelope by the token's
 `cnf.envelope_digest` claim. `message_id` is UUIDv7; `sender_spiffe_id`
 and `recipient_spiffe_id` are SPIFFE IDs; `nonce` and `kid` match their
-frozen patterns. **Verification order (normative):** schema validation →
-JCS canonicalization → signature → replay/window checks. Nothing
-untrusted is acted on before the signature verifies.
+frozen patterns. Optional `resource` is a non-empty string (≤128) that
+a present capability-token `resource` claim must equal. **Verification
+order (normative):** schema validation → JCS canonicalization →
+signature → replay/window checks. Nothing untrusted is acted on before
+the signature verifies.
 
 ### 3.2 Capability token (`contracts/capability-token-schema.md`)
 JWS Compact (`<b64u(header)>.<b64u(payload)>.<b64u(sig)>`), `typ:

@@ -1,4 +1,5 @@
 import base64
+import json
 import pathlib
 import tempfile
 import unittest
@@ -138,7 +139,7 @@ class VerifyEnvelopeTests(unittest.TestCase):
 
     def test_optional_resource_round_trips_through_verify_envelope(self):
         # Leftover #108: a schema-valid envelope MAY carry resource.
-        # A matching token claim must verify through the full pipeline.
+        # A matching token claim must verify through schema + verifier.
         now = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
         envelope, _ = self._valid_envelope()
         envelope["resource"] = "tool:read_file"
@@ -156,6 +157,20 @@ class VerifyEnvelopeTests(unittest.TestCase):
         envelope["signature"] = ""
         signing_input = canonicalize_envelope_for_signing(envelope)
         envelope["signature"] = sign(signing_input, self.signer_priv_pem)
+
+        schema = json.loads(
+            (pathlib.Path(__file__).resolve().parent / "schema-v0.json").read_text()
+        )
+        allowed = set(schema["properties"])
+        required = set(schema["required"])
+        self.assertFalse(schema["additionalProperties"])
+        self.assertNotIn("resource", required)
+        self.assertFalse(set(envelope) - allowed, "envelope has undeclared fields")
+        self.assertFalse(required - set(envelope), "envelope missing required fields")
+        self.assertIsInstance(envelope["resource"], str)
+        self.assertGreaterEqual(len(envelope["resource"]), 1)
+        self.assertLessEqual(len(envelope["resource"]), 128)
+
         claims = verify_envelope(
             envelope,
             key_lookup=lambda kid: self.signer_pub_pem,
